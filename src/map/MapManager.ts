@@ -160,7 +160,7 @@ export class MapManager {
   private waypointIcon(index: number, role: 'departure' | 'destination' | 'enroute'): L.DivIcon {
     return L.divIcon({
       className: 'waypoint-icon-shell',
-      html: `<span class="waypoint-map-icon waypoint-map-icon--${role}">${index}</span>`,
+      html: `<span class="waypoint-map-icon waypoint-map-icon--${role}" data-number="${index}"></span>`,
       iconSize: [28, 34],
       iconAnchor: [14, 30],
       tooltipAnchor: [0, -4],
