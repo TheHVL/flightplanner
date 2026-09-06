@@ -7,9 +7,8 @@ import { NavigationPanel } from './components/NavigationPanel';
 import { OFPTable } from './components/OFPTable';
 
 if ('serviceWorker' in navigator) {
-  void navigator.serviceWorker
-    .register(`${import.meta.env.BASE_URL}sw.js`)
-    .catch(() => undefined);
+  const serviceWorkerUrl = new URL('sw.js', document.baseURI).toString();
+  void navigator.serviceWorker.register(serviceWorkerUrl).catch(() => undefined);
 }
 
 const root = document.querySelector<HTMLDivElement>('#app');
