@@ -8,65 +8,31 @@ import L, {
 } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import type { Waypoint } from '../types';
+import {
+  ICAO_TILE_CSS_PX,
+  vfrTilePixels,
+  type ChartDetailMode,
+} from './icaoQuality';
 
 export interface MapManagerCallbacks {
   onMapClick(lat: number, lon: number): void;
   onWaypointMoved(id: string, lat: number, lon: number): void;
 }
 
-export type ChartDetailMode = 'auto' | 'sharp' | 'fast';
+export type { ChartDetailMode } from './icaoQuality';
 
 const WEB_MERCATOR_HALF_WORLD = 20037508.342789244;
-const WEB_MERCATOR_INITIAL_RESOLUTION = 156543.03392804097;
-const VFR_SOURCE_RESOLUTION_M_PER_PX = 31.75;
-const TILE_CSS_PX = 256;
 const AVINOR_ICAO_SERVICE =
   'https://avigis.avinor.no/agsmap/rest/services/ICAO_500000_ExB/MapServer';
 const AVINOR_ICAO_EXPORT = `${AVINOR_ICAO_SERVICE}/export`;
 const AVINOR_ICAO_LAYERS = `${AVINOR_ICAO_SERVICE}/layers`;
-
-export function webMercatorTileCentreLatitudeDeg(z: number, y: number): number {
-  const n = Math.PI - (2 * Math.PI * (y + 0.5)) / 2 ** z;
-  return (180 / Math.PI) * Math.atan(Math.sinh(n));
-}
-
-export function chartDetailRatioCap(z: number, mode: ChartDetailMode): number {
-  if (mode === 'sharp') return 4;
-  if (mode === 'fast') return 1;
-  return z <= 9 ? 2 : 4;
-}
-
-export function vfrPixelRatio(
-  z: number,
-  y: number,
-  devicePixelRatio = 1,
-  mode: ChartDetailMode = 'auto',
-): number {
-  const latitudeRad = (webMercatorTileCentreLatitudeDeg(z, y) * Math.PI) / 180;
-  const cssResolutionMPerPx =
-    (WEB_MERCATOR_INITIAL_RESOLUTION * Math.cos(latitudeRad)) / 2 ** z;
-  const sourceMatchRatio = cssResolutionMPerPx / VFR_SOURCE_RESOLUTION_M_PER_PX;
-  const wantedRatio = Math.min(sourceMatchRatio, chartDetailRatioCap(z, mode));
-
-  return Math.min(4, Math.max(1, devicePixelRatio > 0 ? devicePixelRatio : 1, wantedRatio));
-}
-
-export function vfrTilePixels(
-  z: number,
-  y: number,
-  devicePixelRatio = 1,
-  mode: ChartDetailMode = 'auto',
-): number {
-  const requested = TILE_CSS_PX * vfrPixelRatio(z, y, devicePixelRatio, mode);
-  return Math.ceil(requested / 8) * 8;
-}
 
 class AvinorIcaoLayer extends L.GridLayer {
   private detailMode: ChartDetailMode = 'auto';
 
   constructor(options?: GridLayerOptions) {
     super({
-      tileSize: TILE_CSS_PX,
+      tileSize: ICAO_TILE_CSS_PX,
       maxZoom: 18,
       maxNativeZoom: 11,
       minZoom: 4,
