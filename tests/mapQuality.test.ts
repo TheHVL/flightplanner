@@ -3,7 +3,7 @@ import {
   chartDetailRatioCap,
   vfrPixelRatio,
   vfrTilePixels,
-} from '../src/map/MapManager';
+} from '../src/map/icaoQuality';
 
 function tileYForLatitude(latitudeDeg: number, zoom: number): number {
   const latitudeRad = (latitudeDeg * Math.PI) / 180;
