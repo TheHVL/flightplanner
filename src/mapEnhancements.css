@@ -44,9 +44,17 @@ body.map-overlay-open { overflow: hidden; }
 
 .map-expand-button:hover { background: #f1f5f9; }
 
-/* Larger by default for route planning on desktop. */
+/* Keep the chart flush with the OFP even when the left-side planning panels are taller. */
+.map-column {
+  display: flex;
+  flex-direction: column;
+}
+
+.map-column .map-toolbar { flex: 0 0 54px; }
 .map {
-  height: clamp(650px, 72vh, 900px);
+  flex: 1 1 auto;
+  min-height: clamp(650px, 72vh, 900px);
+  height: auto;
 }
 
 .map-column--expanded {
@@ -69,11 +77,12 @@ body.map-overlay-open { overflow: hidden; }
 }
 
 @media (max-width: 900px) {
-  .map { height: max(520px, 64vh); }
+  .map { flex: 0 0 auto; min-height: 0; height: max(520px, 64vh); }
   .map-toolbar-right { gap: 8px; }
   .chart-detail-control span { display: none; }
   .map-expand-button { padding: 6px 8px; }
   .map-column--expanded { inset: 4px; }
+  .map-column--expanded .map { flex: 1 1 auto; min-height: 0; height: auto; }
   .map-column--expanded .map-note { display: none; }
 }
 
