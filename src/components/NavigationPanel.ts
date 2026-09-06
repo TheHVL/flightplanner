@@ -1,4 +1,5 @@
 import type { FlightPlanStore, NavigationSettings } from '../flightplan/FlightPlanStore';
+import { roundVariationDeg } from '../navigation/magneticVariation';
 
 export class NavigationPanel {
   constructor(
@@ -22,7 +23,7 @@ export class NavigationPanel {
         ${this.numberField('tasKt', 'Manual cruise TAS', settings.tasKt, 'kt', 1, 40, 250)}
         ${this.numberField('windFromDeg', 'Wind from', settings.windFromDeg, '°T', 1, 0, 359)}
         ${this.numberField('windSpeedKt', 'Wind speed', settings.windSpeedKt, 'kt', 1, 0, 150)}
-        ${this.numberField('variationDegEast', 'Manual variation', Math.round(settings.variationDegEast), '° E(+)/W(-)', 1, -30, 30, settings.automaticVariation)}
+        ${this.numberField('variationDegEast', 'Manual variation', roundVariationDeg(settings.variationDegEast), '° E(+)/W(-)', 1, -30, 30, settings.automaticVariation)}
       </div>
       <label class="nav-toggle">
         <input type="checkbox" data-nav-boolean="automaticVariation" ${settings.automaticVariation ? 'checked' : ''} />
@@ -71,6 +72,8 @@ export class NavigationPanel {
     const value = Number(input.value);
     if (!Number.isFinite(value)) return;
 
-    this.store.updateNavigationSettings({ [field]: field === 'variationDegEast' ? Math.round(value) : value });
+    this.store.updateNavigationSettings({
+      [field]: field === 'variationDegEast' ? roundVariationDeg(value) : value,
+    });
   }
 }
