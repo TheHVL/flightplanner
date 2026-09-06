@@ -7,7 +7,7 @@ import L, {
   type Polyline,
 } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import type { Waypoint } from '../types';
+import type { Coordinate, Waypoint } from '../types';
 import {
   ICAO_TILE_CSS_PX,
   vfrTilePixels,
@@ -97,6 +97,8 @@ export class MapManager {
   private readonly resizeObserver?: ResizeObserver;
   private readonly icaoLayer: AvinorIcaoLayer;
   private routeLine: Polyline;
+  private tocMarker: Marker | null = null;
+  private todMarker: Marker | null = null;
   private chartEdition: string | null = null;
 
   constructor(element: HTMLElement, callbacks: MapManagerCallbacks) {
@@ -218,6 +220,39 @@ export class MapManager {
     this.routeLine.setLatLngs(waypoints.map((waypoint) => [waypoint.lat, waypoint.lon]));
   }
 
+  renderVerticalProfileMarkers(toc: Coordinate | null, tod: Coordinate | null): void {
+    this.tocMarker = this.updateVerticalMarker(this.tocMarker, toc, 'TOC', 'Top of climb', 'toc');
+    this.todMarker = this.updateVerticalMarker(this.todMarker, tod, 'TOD', 'Top of descent', 'tod');
+  }
+
+  private updateVerticalMarker(
+    marker: Marker | null,
+    coordinate: Coordinate | null,
+    label: string,
+    title: string,
+    role: 'toc' | 'tod',
+  ): Marker | null {
+    if (!coordinate) {
+      marker?.remove();
+      return null;
+    }
+
+    if (!marker) {
+      marker = L.marker([coordinate.lat, coordinate.lon], {
+        keyboard: false,
+        interactive: false,
+        zIndexOffset: 700,
+        icon: this.verticalProfileIcon(label, role),
+      }).addTo(this.map);
+      marker.bindTooltip(title, { direction: 'top', offset: [0, -10] });
+      return marker;
+    }
+
+    marker.setLatLng([coordinate.lat, coordinate.lon]);
+    marker.setIcon(this.verticalProfileIcon(label, role));
+    return marker;
+  }
+
   private requestChartEdition(): void {
     const callbackName = `__flightplannerIcaoEdition_${Date.now()}_${Math.floor(Math.random() * 1_000_000)}`;
     const script = document.createElement('script');
@@ -257,6 +292,15 @@ export class MapManager {
       iconSize: [28, 34],
       iconAnchor: [14, 30],
       tooltipAnchor: [0, -4],
+    });
+  }
+
+  private verticalProfileIcon(label: string, role: 'toc' | 'tod'): L.DivIcon {
+    return L.divIcon({
+      className: 'vertical-map-icon-shell',
+      html: `<span class="vertical-map-icon vertical-map-icon--${role}">${label}</span>`,
+      iconSize: [46, 26],
+      iconAnchor: [23, 13],
     });
   }
 }
