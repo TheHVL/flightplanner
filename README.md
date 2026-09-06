@@ -25,13 +25,17 @@ npm run build
 
 ## Architecture
 
-The project keeps navigation mathematics, route state, map rendering, aircraft performance, weather, AIP data, magnetic variation, and flight-plan presentation in separate modules. UI code must not own aviation calculations.
+The project keeps navigation mathematics, route state, map rendering, aircraft performance, weather, AIP data, magnetic variation, and flight-plan presentation in separate modules. UI code does not own aviation calculations.
+
+## Map sources
+
+Kartverket/Norgeskart is configured from Kartverket's official public WMTS cache service. The Avinor ICAO 1:500 000 integration is architecturally supported but disabled by default until appropriate chart reuse rights are confirmed. See `docs/map-sources.md` and `.env.example`.
 
 ## Delivery phases
 
 1. Foundation, map, route editing, great-circle distance/track, basic OFP table
 2. Magnetic variation, wind triangle, manual wind, TAS/GS/WCA/headings
-3. Kartverket and Norway ICAO 1:500 000 map layers
+3. Kartverket and Norway ICAO 1:500 000 map layer architecture
 4. C182T POH cruise database and interpolation
 5. Weather API and iterative time/wind solution
 6. TOC/TOD and vertical profile
