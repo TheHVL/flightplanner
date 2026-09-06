@@ -3,6 +3,7 @@ import { FlightPlanStore } from './flightplan/FlightPlanStore';
 import { MapManager } from './map/MapManager';
 import { RoutePanel } from './components/RoutePanel';
 import { OFPTable } from './components/OFPTable';
+import { PlanningPanel } from './components/PlanningPanel';
 
 const root = document.querySelector<HTMLDivElement>('#app');
 if (!root) throw new Error('Missing #app root element.');
@@ -17,8 +18,10 @@ root.innerHTML = `
           <div class="brand-subtitle">VFR · NORWAY · TRAINING</div>
         </div>
       </div>
-      <div class="phase-chip"><span></span> PHASE 1 · ROUTE FOUNDATION</div>
+      <div class="phase-chip"><span></span> PHASE 2 · NAVIGATION</div>
     </header>
+
+    <section id="planning-panel" class="planning-panel panel"></section>
 
     <main class="workspace">
       <aside id="route-panel" class="route-panel panel"></aside>
@@ -28,7 +31,7 @@ root.innerHTML = `
             <span class="toolbar-label">MAP</span>
             <strong>Planning chart</strong>
           </div>
-          <div class="map-note">Temporary Phase 1 basemap · authoritative Norwegian layers follow in Phase 3</div>
+          <div class="map-note">Temporary basemap · authoritative Norwegian layers follow in Phase 3</div>
         </div>
         <div id="map" class="map"></div>
       </section>
@@ -41,10 +44,12 @@ root.innerHTML = `
 const routeElement = document.querySelector<HTMLElement>('#route-panel');
 const mapElement = document.querySelector<HTMLElement>('#map');
 const tableElement = document.querySelector<HTMLElement>('#ofp-table');
-if (!routeElement || !mapElement || !tableElement) throw new Error('Failed to mount Flightplanner UI.');
+const planningElement = document.querySelector<HTMLElement>('#planning-panel');
+if (!routeElement || !mapElement || !tableElement || !planningElement) throw new Error('Failed to mount Flightplanner UI.');
 
 const store = new FlightPlanStore();
 const routePanel = new RoutePanel(routeElement, store);
+const planningPanel = new PlanningPanel(planningElement, store);
 const ofpTable = new OFPTable(tableElement, store);
 const mapManager = new MapManager(mapElement, {
   onMapClick: (lat, lon) => store.addWaypoint({ lat, lon }),
@@ -54,6 +59,7 @@ const mapManager = new MapManager(mapElement, {
 const render = () => {
   const waypoints = store.getWaypoints();
   routePanel.render();
+  planningPanel.render();
   ofpTable.render();
   mapManager.renderRoute(waypoints, (id, lat, lon) => store.updateWaypoint(id, { lat, lon }));
 };
