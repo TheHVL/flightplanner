@@ -17,12 +17,12 @@ export class NavigationPanel {
           <h2>Navigation inputs</h2>
         </div>
       </div>
-      <p class="hint">Wind triangle calculations now use automatic WMM2025 magnetic variation per leg. You can switch to a manual variation override when needed.</p>
+      <p class="hint">Wind triangle calculations use WMM2025 magnetic variation per leg, rounded to the nearest whole degree for the OFP. You can switch to a manual whole-degree variation override when needed.</p>
       <div class="nav-input-grid">
         ${this.numberField('tasKt', 'Manual cruise TAS', settings.tasKt, 'kt', 1, 40, 250)}
         ${this.numberField('windFromDeg', 'Wind from', settings.windFromDeg, '°T', 1, 0, 359)}
         ${this.numberField('windSpeedKt', 'Wind speed', settings.windSpeedKt, 'kt', 1, 0, 150)}
-        ${this.numberField('variationDegEast', 'Manual variation', settings.variationDegEast, '° E(+)/W(-)', 0.1, -30, 30, settings.automaticVariation)}
+        ${this.numberField('variationDegEast', 'Manual variation', Math.round(settings.variationDegEast), '° E(+)/W(-)', 1, -30, 30, settings.automaticVariation)}
       </div>
       <label class="nav-toggle">
         <input type="checkbox" data-nav-boolean="automaticVariation" ${settings.automaticVariation ? 'checked' : ''} />
@@ -71,6 +71,6 @@ export class NavigationPanel {
     const value = Number(input.value);
     if (!Number.isFinite(value)) return;
 
-    this.store.updateNavigationSettings({ [field]: value });
+    this.store.updateNavigationSettings({ [field]: field === 'variationDegEast' ? Math.round(value) : value });
   }
 }
