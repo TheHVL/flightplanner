@@ -18,7 +18,7 @@ root.innerHTML = `
           <div class="brand-subtitle">VFR · NORWAY · TRAINING</div>
         </div>
       </div>
-      <div class="phase-chip"><span></span> PHASE 2 · NAVIGATION & WIND</div>
+      <div class="phase-chip"><span></span> PHASE 3 · NORWEGIAN MAPS</div>
     </header>
 
     <main class="workspace">
@@ -32,7 +32,7 @@ root.innerHTML = `
             <span class="toolbar-label">MAP</span>
             <strong>Planning chart</strong>
           </div>
-          <div class="map-note">Temporary basemap · authoritative Norwegian layers follow in Phase 3</div>
+          <div class="map-note">Switch between Kartverket Norgeskart and Avinor ICAO 1:500 000 using the layer control on the map.</div>
         </div>
         <div id="map" class="map"></div>
       </section>
