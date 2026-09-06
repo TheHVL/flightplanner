@@ -31,7 +31,7 @@ root.innerHTML = `
           <div class="brand-subtitle">VFR · NORWAY · TRAINING</div>
         </div>
       </div>
-      <div class="phase-chip"><span></span> PHASE 6 · AUTOMATIC VERTICAL PROFILE</div>
+      <div class="phase-chip"><span></span> PHASE 7 · AIP &amp; CIRCUITS</div>
     </header>
 
     <main class="workspace">
