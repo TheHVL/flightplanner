@@ -216,11 +216,6 @@ export class MapManager {
     });
 
     this.routeLine.setLatLngs(waypoints.map((waypoint) => [waypoint.lat, waypoint.lon]));
-
-    if (waypoints.length > 1) {
-      const bounds = L.latLngBounds(waypoints.map((waypoint) => [waypoint.lat, waypoint.lon]));
-      this.map.fitBounds(bounds, { padding: [48, 48], maxZoom: 10 });
-    }
   }
 
   private requestChartEdition(): void {
