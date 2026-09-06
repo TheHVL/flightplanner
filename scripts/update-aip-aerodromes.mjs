@@ -95,11 +95,21 @@ function parseAerodromePage(icao, html, sourceUrl) {
 
 async function resolveCurrentIssue() {
   const history = await fetchText(AIP_HOME);
-  const match = history.text.match(/href=["']([^"']+\/\d{4}-\d{2}-\d{2}-AIRAC\/html\/index-(?:en-GB|no-NO)\.html[^"']*)["']/i);
-  if (!match) throw new Error('Could not identify the current Avinor AIP issue from the AIP history page.');
-  const issueUrl = new URL(match[1], history.url);
-  const effectiveDate = issueUrl.pathname.match(/\/(\d{4}-\d{2}-\d{2})-AIRAC\//)?.[1] ?? '';
-  const issueRoot = new URL('./', issueUrl);
+
+  // Avinor redirects AIP_HOME to the current issue history page. The exact href
+  // format has changed over time, so avoid depending on an absolute/relative href
+  // shape. The current issue's AIRAC directory is the first YYYY-MM-DD-AIRAC token
+  // on the history page, where the current edition is presented before the next one.
+  const airacDates = [...history.text.matchAll(/(\d{4}-\d{2}-\d{2})-AIRAC/gi)]
+    .map((match) => match[1])
+    .filter((value, index, values) => values.indexOf(value) === index);
+  const effectiveDate = airacDates[0];
+  if (!effectiveDate) {
+    throw new Error('Could not identify the current Avinor AIP AIRAC date from the AIP history page.');
+  }
+
+  const issueRoot = new URL(`./${effectiveDate}-AIRAC/html/`, history.url);
+  const issueUrl = new URL('index-en-GB.html', issueRoot);
   return { issueUrl: issueUrl.toString(), issueRoot, effectiveDate };
 }
 
