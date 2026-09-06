@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+  schedule:
+    - cron: '17 4 * * 4'
 
 permissions:
   contents: read
@@ -28,6 +30,10 @@ jobs:
 
       - name: Install dependencies
         run: npm install
+
+      - name: Refresh Avinor AIP aerodrome data
+        run: npm run aip:update
+        continue-on-error: true
 
       - name: Run unit tests
         run: npm test
