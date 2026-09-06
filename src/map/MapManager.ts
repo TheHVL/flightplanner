@@ -19,6 +19,13 @@ export interface MapManagerCallbacks {
   onWaypointMoved(id: string, lat: number, lon: number): void;
 }
 
+export interface VerticalProfileMapMarker {
+  id: string;
+  type: 'TOC' | 'TOD';
+  coordinate: Coordinate;
+  title: string;
+}
+
 export type { ChartDetailMode } from './icaoQuality';
 
 const WEB_MERCATOR_HALF_WORLD = 20037508.342789244;
@@ -94,11 +101,10 @@ interface ArcGisLayerMetadata {
 export class MapManager {
   private readonly map: LeafletMap;
   private readonly markers = new Map<string, Marker>();
+  private readonly verticalMarkers = new Map<string, Marker>();
   private readonly resizeObserver?: ResizeObserver;
   private readonly icaoLayer: AvinorIcaoLayer;
   private routeLine: Polyline;
-  private tocMarker: Marker | null = null;
-  private todMarker: Marker | null = null;
   private chartEdition: string | null = null;
 
   constructor(element: HTMLElement, callbacks: MapManagerCallbacks) {
@@ -220,37 +226,32 @@ export class MapManager {
     this.routeLine.setLatLngs(waypoints.map((waypoint) => [waypoint.lat, waypoint.lon]));
   }
 
-  renderVerticalProfileMarkers(toc: Coordinate | null, tod: Coordinate | null): void {
-    this.tocMarker = this.updateVerticalMarker(this.tocMarker, toc, 'TOC', 'Top of climb', 'toc');
-    this.todMarker = this.updateVerticalMarker(this.todMarker, tod, 'TOD', 'Top of descent', 'tod');
-  }
-
-  private updateVerticalMarker(
-    marker: Marker | null,
-    coordinate: Coordinate | null,
-    label: string,
-    title: string,
-    role: 'toc' | 'tod',
-  ): Marker | null {
-    if (!coordinate) {
-      marker?.remove();
-      return null;
+  renderVerticalProfileMarkers(markers: VerticalProfileMapMarker[]): void {
+    const activeIds = new Set(markers.map((marker) => marker.id));
+    for (const [id, marker] of this.verticalMarkers) {
+      if (!activeIds.has(id)) {
+        marker.remove();
+        this.verticalMarkers.delete(id);
+      }
     }
 
-    if (!marker) {
-      marker = L.marker([coordinate.lat, coordinate.lon], {
-        keyboard: false,
-        interactive: false,
-        zIndexOffset: 700,
-        icon: this.verticalProfileIcon(label, role),
-      }).addTo(this.map);
-      marker.bindTooltip(title, { direction: 'top', offset: [0, -10] });
-      return marker;
+    for (const item of markers) {
+      let marker = this.verticalMarkers.get(item.id);
+      const role = item.type.toLowerCase() as 'toc' | 'tod';
+      if (!marker) {
+        marker = L.marker([item.coordinate.lat, item.coordinate.lon], {
+          keyboard: false,
+          interactive: false,
+          zIndexOffset: 700,
+          icon: this.verticalProfileIcon(item.type, role),
+        }).addTo(this.map);
+        this.verticalMarkers.set(item.id, marker);
+      }
+      marker.setLatLng([item.coordinate.lat, item.coordinate.lon]);
+      marker.setIcon(this.verticalProfileIcon(item.type, role));
+      marker.unbindTooltip();
+      marker.bindTooltip(item.title, { direction: 'top', offset: [0, -10] });
     }
-
-    marker.setLatLng([coordinate.lat, coordinate.lon]);
-    marker.setIcon(this.verticalProfileIcon(label, role));
-    return marker;
   }
 
   private requestChartEdition(): void {

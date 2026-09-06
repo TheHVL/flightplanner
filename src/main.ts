@@ -11,7 +11,7 @@ import { PerformancePanel } from './components/PerformancePanel';
 import { WeatherPanel } from './components/WeatherPanel';
 import { VerticalProfilePanel } from './components/VerticalProfilePanel';
 import { OFPTable } from './components/OFPTable';
-import { calculateVerticalProfile } from './navigation/verticalProfile';
+import { calculateRouteVerticalProfile } from './navigation/verticalProfile';
 
 if ('serviceWorker' in navigator) {
   const serviceWorkerUrl = new URL('sw.js', document.baseURI).toString();
@@ -31,7 +31,7 @@ root.innerHTML = `
           <div class="brand-subtitle">VFR · NORWAY · TRAINING</div>
         </div>
       </div>
-      <div class="phase-chip"><span></span> PHASE 6 · VERTICAL PROFILE</div>
+      <div class="phase-chip"><span></span> PHASE 6 · AUTOMATIC VERTICAL PROFILE</div>
     </header>
 
     <main class="workspace">
@@ -221,30 +221,30 @@ verticalProfilePanel.render();
 
 const renderVerticalProfileMarkers = () => {
   const legs = store.getLegs();
-  const firstLeg = legs[0];
-  const lastLeg = legs[legs.length - 1];
-  if (!firstLeg || !lastLeg) {
-    mapManager.renderVerticalProfileMarkers(null, null);
-    return;
-  }
-
-  const initialPlannedAltitudeFt = store.getPlannedAltitudeFt(firstLeg.from.id, firstLeg.to.id);
-  const finalPlannedAltitudeFt = store.getPlannedAltitudeFt(lastLeg.from.id, lastLeg.to.id);
-  if (initialPlannedAltitudeFt === null || finalPlannedAltitudeFt === null) {
-    mapManager.renderVerticalProfileMarkers(null, null);
+  if (legs.length === 0) {
+    mapManager.renderVerticalProfileMarkers([]);
     return;
   }
 
   try {
-    const result = calculateVerticalProfile({
+    const result = calculateRouteVerticalProfile({
       legs,
+      plannedAltitudesFt: legs.map((leg) => store.getPlannedAltitudeFt(leg.from.id, leg.to.id)),
+      waypointConstraints: store.getVerticalWaypointConstraints(),
       ...store.getVerticalProfileSettings(),
-      initialPlannedAltitudeFt,
-      finalPlannedAltitudeFt,
     });
-    mapManager.renderVerticalProfileMarkers(result.tocCoordinate, result.todCoordinate);
+    mapManager.renderVerticalProfileMarkers(
+      result.events
+        .filter((event) => event.onRoute && event.coordinate !== null)
+        .map((event) => ({
+          id: event.id,
+          type: event.type,
+          coordinate: event.coordinate!,
+          title: `${event.type}: ${event.distanceFromWaypointNm.toFixed(1)} NM ${event.position} ${event.waypointName}, ${Math.round(event.altitudeFromFt)} → ${Math.round(event.altitudeToFt)} ft`,
+        })),
+    );
   } catch {
-    mapManager.renderVerticalProfileMarkers(null, null);
+    mapManager.renderVerticalProfileMarkers([]);
   }
 };
 

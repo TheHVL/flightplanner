@@ -33,6 +33,267 @@ export interface VerticalProfileResult {
   todCoordinate: Coordinate | null;
 }
 
+export type VerticalWaypointMode = 'auto' | 'airport' | 'none';
+
+export interface VerticalWaypointConstraint {
+  waypointId: string;
+  mode: VerticalWaypointMode;
+  elevationFt: number | null;
+}
+
+export type VerticalEventType = 'TOC' | 'TOD';
+export type VerticalEventReason = 'departure' | 'arrival' | 'pl-change' | 'airport';
+
+export interface RouteVerticalEvent {
+  id: string;
+  type: VerticalEventType;
+  reason: VerticalEventReason;
+  waypointId: string;
+  waypointName: string;
+  position: 'before' | 'after';
+  altitudeFromFt: number;
+  altitudeToFt: number;
+  altitudeChangeFt: number;
+  timeMin: number;
+  distanceNm: number;
+  routeDistanceNm: number;
+  distanceFromWaypointNm: number;
+  onRoute: boolean;
+  coordinate: Coordinate | null;
+}
+
+export interface RouteVerticalProfileInput {
+  legs: RouteLeg[];
+  plannedAltitudesFt: Array<number | null>;
+  waypointConstraints: VerticalWaypointConstraint[];
+  departureElevationFt: number;
+  destinationElevationFt: number;
+  climbRateFpm: number;
+  descentRateFpm: number;
+  climbGroundSpeedKt: number;
+  descentGroundSpeedKt: number;
+}
+
+export interface RouteVerticalProfileResult {
+  routeDistanceNm: number;
+  events: RouteVerticalEvent[];
+  levelDistanceNm: number;
+  verticalDistanceNm: number;
+  overlapDistanceNm: number;
+  profilesOverlap: boolean;
+  warnings: string[];
+}
+
+interface VerticalInterval {
+  startNm: number;
+  endNm: number;
+}
+
+export function calculateRouteVerticalProfile(input: RouteVerticalProfileInput): RouteVerticalProfileResult {
+  const {
+    legs,
+    plannedAltitudesFt,
+    waypointConstraints,
+    departureElevationFt,
+    destinationElevationFt,
+    climbRateFpm,
+    descentRateFpm,
+    climbGroundSpeedKt,
+    descentGroundSpeedKt,
+  } = input;
+
+  if (legs.length === 0) throw new Error('Add at least two waypoints before calculating TOC/TOD.');
+  if (plannedAltitudesFt.length !== legs.length) {
+    throw new Error('Planned altitude data does not match the number of route legs.');
+  }
+  validateFiniteNonNegative(departureElevationFt, 'Departure elevation');
+  validateFiniteNonNegative(destinationElevationFt, 'Destination elevation');
+  validatePositive(climbRateFpm, 'Climb rate');
+  validatePositive(descentRateFpm, 'Descent rate');
+  validatePositive(climbGroundSpeedKt, 'Climb groundspeed');
+  validatePositive(descentGroundSpeedKt, 'Descent groundspeed');
+
+  plannedAltitudesFt.forEach((altitude, index) => {
+    if (altitude !== null) validateFiniteNonNegative(altitude, `Leg ${index + 1} planned altitude`);
+  });
+
+  const routeDistanceNm = totalRouteDistanceNm(legs);
+  const waypointDistancesNm = cumulativeWaypointDistances(legs);
+  const constraints = new Map(waypointConstraints.map((constraint) => [constraint.waypointId, constraint]));
+  const events: RouteVerticalEvent[] = [];
+  const intervals: VerticalInterval[] = [];
+  const warnings: string[] = [];
+
+  const waypointAt = (index: number) => index === 0 ? legs[0].from : legs[index - 1].to;
+
+  const addClimb = (
+    anchorIndex: number,
+    altitudeFromFt: number,
+    altitudeToFt: number,
+    reason: VerticalEventReason,
+  ) => {
+    const altitudeChangeFt = altitudeToFt - altitudeFromFt;
+    if (altitudeChangeFt <= 0) return;
+    const timeMin = altitudeChangeFt / climbRateFpm;
+    const distanceNm = climbGroundSpeedKt * timeMin / 60;
+    const anchorDistanceNm = waypointDistancesNm[anchorIndex];
+    const routeEventDistanceNm = anchorDistanceNm + distanceNm;
+    const waypoint = waypointAt(anchorIndex);
+    const onRoute = routeEventDistanceNm >= 0 && routeEventDistanceNm <= routeDistanceNm;
+    const event: RouteVerticalEvent = {
+      id: `toc-${waypoint.id}-${events.length}`,
+      type: 'TOC',
+      reason,
+      waypointId: waypoint.id,
+      waypointName: waypoint.name,
+      position: 'after',
+      altitudeFromFt,
+      altitudeToFt,
+      altitudeChangeFt,
+      timeMin,
+      distanceNm,
+      routeDistanceNm: routeEventDistanceNm,
+      distanceFromWaypointNm: distanceNm,
+      onRoute,
+      coordinate: onRoute ? routeCoordinateAtDistance(legs, routeEventDistanceNm) : null,
+    };
+    events.push(event);
+    intervals.push({ startNm: anchorDistanceNm, endNm: routeEventDistanceNm });
+    if (!onRoute) warnings.push(`TOC after ${waypoint.name} falls beyond the plotted route.`);
+  };
+
+  const addDescent = (
+    anchorIndex: number,
+    altitudeFromFt: number,
+    altitudeToFt: number,
+    reason: VerticalEventReason,
+  ) => {
+    const altitudeChangeFt = altitudeFromFt - altitudeToFt;
+    if (altitudeChangeFt <= 0) return;
+    const timeMin = altitudeChangeFt / descentRateFpm;
+    const distanceNm = descentGroundSpeedKt * timeMin / 60;
+    const anchorDistanceNm = waypointDistancesNm[anchorIndex];
+    const routeEventDistanceNm = anchorDistanceNm - distanceNm;
+    const waypoint = waypointAt(anchorIndex);
+    const onRoute = routeEventDistanceNm >= 0 && routeEventDistanceNm <= routeDistanceNm;
+    const event: RouteVerticalEvent = {
+      id: `tod-${waypoint.id}-${events.length}`,
+      type: 'TOD',
+      reason,
+      waypointId: waypoint.id,
+      waypointName: waypoint.name,
+      position: 'before',
+      altitudeFromFt,
+      altitudeToFt,
+      altitudeChangeFt,
+      timeMin,
+      distanceNm,
+      routeDistanceNm: routeEventDistanceNm,
+      distanceFromWaypointNm: distanceNm,
+      onRoute,
+      coordinate: onRoute ? routeCoordinateAtDistance(legs, routeEventDistanceNm) : null,
+    };
+    events.push(event);
+    intervals.push({ startNm: routeEventDistanceNm, endNm: anchorDistanceNm });
+    if (!onRoute) warnings.push(`TOD before ${waypoint.name} falls before the plotted route starts.`);
+  };
+
+  const firstPlannedAltitudeFt = plannedAltitudesFt[0];
+  if (firstPlannedAltitudeFt === null) {
+    warnings.push(`Enter PL for ${legs[0].from.name} → ${legs[0].to.name} to calculate the departure climb.`);
+  } else if (firstPlannedAltitudeFt > departureElevationFt) {
+    addClimb(0, departureElevationFt, firstPlannedAltitudeFt, 'departure');
+  } else if (firstPlannedAltitudeFt < departureElevationFt) {
+    warnings.push('The first-leg PL is below the departure elevation. No automatic departure climb was created.');
+  }
+
+  for (let waypointIndex = 1; waypointIndex < legs.length; waypointIndex += 1) {
+    const waypoint = waypointAt(waypointIndex);
+    const inboundAltitudeFt = plannedAltitudesFt[waypointIndex - 1];
+    const outboundAltitudeFt = plannedAltitudesFt[waypointIndex];
+    const constraint = constraints.get(waypoint.id) ?? { waypointId: waypoint.id, mode: 'auto' as const, elevationFt: null };
+
+    if (constraint.mode === 'none') continue;
+
+    if (constraint.mode === 'airport') {
+      if (constraint.elevationFt === null) {
+        warnings.push(`Enter field elevation for ${waypoint.name} to calculate its touch-and-go/landing profile.`);
+        continue;
+      }
+      validateFiniteNonNegative(constraint.elevationFt, `${waypoint.name} field elevation`);
+
+      if (inboundAltitudeFt !== null) {
+        if (inboundAltitudeFt > constraint.elevationFt) {
+          addDescent(waypointIndex, inboundAltitudeFt, constraint.elevationFt, 'airport');
+        } else if (inboundAltitudeFt < constraint.elevationFt) {
+          warnings.push(`${waypoint.name} inbound PL is below its field elevation.`);
+        }
+      } else {
+        warnings.push(`Enter inbound PL before ${waypoint.name} to calculate its TOD.`);
+      }
+
+      if (outboundAltitudeFt !== null) {
+        if (outboundAltitudeFt > constraint.elevationFt) {
+          addClimb(waypointIndex, constraint.elevationFt, outboundAltitudeFt, 'airport');
+        } else if (outboundAltitudeFt < constraint.elevationFt) {
+          warnings.push(`${waypoint.name} outbound PL is below its field elevation.`);
+        }
+      } else {
+        warnings.push(`Enter outbound PL after ${waypoint.name} to calculate its TOC.`);
+      }
+      continue;
+    }
+
+    if (inboundAltitudeFt === null || outboundAltitudeFt === null) {
+      warnings.push(`Enter PL on both sides of ${waypoint.name} to calculate its automatic altitude transition.`);
+      continue;
+    }
+
+    if (outboundAltitudeFt > inboundAltitudeFt) {
+      addClimb(waypointIndex, inboundAltitudeFt, outboundAltitudeFt, 'pl-change');
+    } else if (outboundAltitudeFt < inboundAltitudeFt) {
+      addDescent(waypointIndex, inboundAltitudeFt, outboundAltitudeFt, 'pl-change');
+    }
+  }
+
+  const finalPlannedAltitudeFt = plannedAltitudesFt[plannedAltitudesFt.length - 1];
+  const destinationIndex = legs.length;
+  if (finalPlannedAltitudeFt === null) {
+    warnings.push(`Enter PL for ${legs[legs.length - 1].from.name} → ${legs[legs.length - 1].to.name} to calculate arrival TOD.`);
+  } else if (finalPlannedAltitudeFt > destinationElevationFt) {
+    addDescent(destinationIndex, finalPlannedAltitudeFt, destinationElevationFt, 'arrival');
+  } else if (finalPlannedAltitudeFt < destinationElevationFt) {
+    warnings.push('The final-leg PL is below the destination elevation. No automatic arrival descent was created.');
+  }
+
+  events.sort((a, b) => a.routeDistanceNm - b.routeDistanceNm || a.type.localeCompare(b.type));
+
+  const clippedIntervals = intervals
+    .map((interval) => ({
+      startNm: Math.max(0, Math.min(routeDistanceNm, Math.min(interval.startNm, interval.endNm))),
+      endNm: Math.max(0, Math.min(routeDistanceNm, Math.max(interval.startNm, interval.endNm))),
+    }))
+    .filter((interval) => interval.endNm > interval.startNm);
+
+  const totalVerticalDistanceNm = clippedIntervals.reduce((sum, interval) => sum + interval.endNm - interval.startNm, 0);
+  const unionDistanceNm = intervalUnionDistance(clippedIntervals);
+  const overlapDistanceNm = Math.max(0, totalVerticalDistanceNm - unionDistanceNm);
+  const profilesOverlap = overlapDistanceNm > 1e-6;
+  if (profilesOverlap) {
+    warnings.push(`Vertical profiles overlap by ${roundHalfNm(overlapDistanceNm)} NM. Review PL, vertical rates, groundspeeds, or airport constraints.`);
+  }
+
+  return {
+    routeDistanceNm,
+    events,
+    levelDistanceNm: Math.max(0, routeDistanceNm - unionDistanceNm),
+    verticalDistanceNm: unionDistanceNm,
+    overlapDistanceNm,
+    profilesOverlap,
+    warnings: unique(warnings),
+  };
+}
+
 export function calculateVerticalProfile(input: VerticalProfileInput): VerticalProfileResult {
   const {
     legs,
@@ -87,8 +348,8 @@ export function calculateVerticalProfile(input: VerticalProfileInput): VerticalP
     overlapDistanceNm,
     tocOnRoute,
     todOnRoute,
-    tocCoordinate: tocOnRoute ? routeCoordinateAtDistance(legs, tocDistanceFromDepartureNm) : null,
-    todCoordinate: todOnRoute ? routeCoordinateAtDistance(legs, todDistanceFromDepartureNm) : null,
+    tocCoordinate: climbAltitudeGainFt > 0 && tocOnRoute ? routeCoordinateAtDistance(legs, tocDistanceFromDepartureNm) : null,
+    todCoordinate: descentAltitudeLossFt > 0 && todOnRoute ? routeCoordinateAtDistance(legs, todDistanceFromDepartureNm) : null,
   };
 }
 
@@ -109,6 +370,35 @@ export function routeCoordinateAtDistance(legs: RouteLeg[], distanceFromDepartur
 
   const last = legs[legs.length - 1].to;
   return { lat: last.lat, lon: last.lon };
+}
+
+function cumulativeWaypointDistances(legs: RouteLeg[]): number[] {
+  const distances = [0];
+  let accumulated = 0;
+  for (const leg of legs) {
+    accumulated += leg.distanceNm;
+    distances.push(accumulated);
+  }
+  return distances;
+}
+
+function intervalUnionDistance(intervals: VerticalInterval[]): number {
+  if (intervals.length === 0) return 0;
+  const sorted = [...intervals].sort((a, b) => a.startNm - b.startNm || a.endNm - b.endNm);
+  let union = 0;
+  let currentStart = sorted[0].startNm;
+  let currentEnd = sorted[0].endNm;
+
+  for (const interval of sorted.slice(1)) {
+    if (interval.startNm <= currentEnd) {
+      currentEnd = Math.max(currentEnd, interval.endNm);
+    } else {
+      union += currentEnd - currentStart;
+      currentStart = interval.startNm;
+      currentEnd = interval.endNm;
+    }
+  }
+  return union + currentEnd - currentStart;
 }
 
 function interpolateGreatCircle(a: Coordinate, b: Coordinate, fraction: number): Coordinate {
@@ -148,4 +438,12 @@ function validatePositive(value: number, label: string): void {
 
 function validateFiniteNonNegative(value: number, label: string): void {
   if (!Number.isFinite(value) || value < 0) throw new Error(`${label} cannot be negative.`);
+}
+
+function unique(values: string[]): string[] {
+  return [...new Set(values)];
+}
+
+function roundHalfNm(value: number): string {
+  return (Math.round(value * 2) / 2).toFixed(1);
 }
