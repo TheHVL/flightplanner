@@ -1,10 +1,25 @@
 import type { Coordinate, RouteLeg, Waypoint } from '../types';
 import { calculateRouteLegs } from '../navigation/geodesy';
+import type { NavigationAssumptions } from '../navigation/NavigationCalculator';
+
+export interface PlanningSettings extends NavigationAssumptions {
+  plannedAltitudeFt: number;
+}
 
 type Listener = () => void;
 
+const DEFAULT_SETTINGS: PlanningSettings = {
+  tasKt: 125,
+  windFromDegTrue: 240,
+  windSpeedKt: 15,
+  variationDegEastPositive: 6,
+  fuelFlowGph: 12.5,
+  plannedAltitudeFt: 4500,
+};
+
 export class FlightPlanStore {
   private waypoints: Waypoint[] = [];
+  private settings: PlanningSettings = { ...DEFAULT_SETTINGS };
   private listeners = new Set<Listener>();
 
   getWaypoints(): Waypoint[] {
@@ -13,6 +28,15 @@ export class FlightPlanStore {
 
   getLegs(): RouteLeg[] {
     return calculateRouteLegs(this.waypoints);
+  }
+
+  getSettings(): PlanningSettings {
+    return { ...this.settings };
+  }
+
+  updateSettings(patch: Partial<PlanningSettings>): void {
+    this.settings = { ...this.settings, ...patch };
+    this.emit();
   }
 
   subscribe(listener: Listener): () => void {
