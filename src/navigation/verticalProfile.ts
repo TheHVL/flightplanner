@@ -33,7 +33,7 @@ export interface VerticalProfileResult {
   todCoordinate: Coordinate | null;
 }
 
-export type VerticalWaypointMode = 'auto' | 'airport' | 'none';
+export type VerticalWaypointMode = 'auto' | 'airport' | 'circuits' | 'none';
 
 export interface VerticalWaypointConstraint {
   waypointId: string;
@@ -160,9 +160,12 @@ export function calculateRouteVerticalProfile(input: RouteVerticalProfileInput):
     events.push(event);
     intervals.push({ startNm: anchorDistanceNm, endNm: routeEventDistanceNm });
     if (!onRoute) warnings.push(`TOC after ${waypoint.name} falls beyond the plotted route.`);
+    if (reason === 'pl-change' && anchorIndex < legs.length && distanceNm > legs[anchorIndex].distanceNm) {
+      warnings.push(`The selected climb cannot reach ${Math.round(altitudeToFt)} ft before ${legs[anchorIndex].to.name}; it needs ${roundHalfNm(distanceNm - legs[anchorIndex].distanceNm)} NM more.`);
+    }
   };
 
-  const addDescent = (
+  const addDescentBefore = (
     anchorIndex: number,
     altitudeFromFt: number,
     altitudeToFt: number,
@@ -198,6 +201,52 @@ export function calculateRouteVerticalProfile(input: RouteVerticalProfileInput):
     if (!onRoute) warnings.push(`TOD before ${waypoint.name} falls before the plotted route starts.`);
   };
 
+  // A PL reduction belongs to the outbound leg. The ideal TOD is calculated backwards
+  // from the next waypoint, but is never allowed to move before the waypoint where the
+  // lower outbound PL begins. If the selected descent cannot fit in the leg we start at
+  // that waypoint and warn that the target altitude cannot be reached by the next point.
+  const addPlChangeDescent = (
+    anchorIndex: number,
+    altitudeFromFt: number,
+    altitudeToFt: number,
+  ) => {
+    if (anchorIndex >= legs.length) return;
+    const altitudeChangeFt = altitudeFromFt - altitudeToFt;
+    if (altitudeChangeFt <= 0) return;
+    const timeMin = altitudeChangeFt / descentRateFpm;
+    const distanceNm = descentGroundSpeedKt * timeMin / 60;
+    const anchorDistanceNm = waypointDistancesNm[anchorIndex];
+    const nextWaypointDistanceNm = waypointDistancesNm[anchorIndex + 1];
+    const idealTodDistanceNm = nextWaypointDistanceNm - distanceNm;
+    const routeEventDistanceNm = Math.max(anchorDistanceNm, idealTodDistanceNm);
+    const profileEndDistanceNm = routeEventDistanceNm + distanceNm;
+    const waypoint = waypointAt(anchorIndex);
+    const onRoute = routeEventDistanceNm >= 0 && routeEventDistanceNm <= routeDistanceNm;
+
+    events.push({
+      id: `tod-${waypoint.id}-${events.length}`,
+      type: 'TOD',
+      reason: 'pl-change',
+      waypointId: waypoint.id,
+      waypointName: waypoint.name,
+      position: 'after',
+      altitudeFromFt,
+      altitudeToFt,
+      altitudeChangeFt,
+      timeMin,
+      distanceNm,
+      routeDistanceNm: routeEventDistanceNm,
+      distanceFromWaypointNm: Math.max(0, routeEventDistanceNm - anchorDistanceNm),
+      onRoute,
+      coordinate: onRoute ? routeCoordinateAtDistance(legs, routeEventDistanceNm) : null,
+    });
+    intervals.push({ startNm: routeEventDistanceNm, endNm: profileEndDistanceNm });
+
+    if (distanceNm > legs[anchorIndex].distanceNm) {
+      warnings.push(`The selected descent from ${waypoint.name} cannot reach ${Math.round(altitudeToFt)} ft by ${legs[anchorIndex].to.name}; it needs ${roundHalfNm(distanceNm - legs[anchorIndex].distanceNm)} NM more. TOD has been held at/after ${waypoint.name}, never before it.`);
+    }
+  };
+
   const firstPlannedAltitudeFt = plannedAltitudesFt[0];
   if (firstPlannedAltitudeFt === null) {
     warnings.push(`Enter PL for ${legs[0].from.name} → ${legs[0].to.name} to calculate the departure climb.`);
@@ -215,16 +264,16 @@ export function calculateRouteVerticalProfile(input: RouteVerticalProfileInput):
 
     if (constraint.mode === 'none') continue;
 
-    if (constraint.mode === 'airport') {
+    if (constraint.mode === 'airport' || constraint.mode === 'circuits') {
       if (constraint.elevationFt === null) {
-        warnings.push(`Enter field elevation for ${waypoint.name} to calculate its touch-and-go/landing profile.`);
+        warnings.push(`Enter field elevation for ${waypoint.name} to calculate its airport profile.`);
         continue;
       }
       validateFiniteNonNegative(constraint.elevationFt, `${waypoint.name} field elevation`);
 
       if (inboundAltitudeFt !== null) {
         if (inboundAltitudeFt > constraint.elevationFt) {
-          addDescent(waypointIndex, inboundAltitudeFt, constraint.elevationFt, 'airport');
+          addDescentBefore(waypointIndex, inboundAltitudeFt, constraint.elevationFt, 'airport');
         } else if (inboundAltitudeFt < constraint.elevationFt) {
           warnings.push(`${waypoint.name} inbound PL is below its field elevation.`);
         }
@@ -252,7 +301,7 @@ export function calculateRouteVerticalProfile(input: RouteVerticalProfileInput):
     if (outboundAltitudeFt > inboundAltitudeFt) {
       addClimb(waypointIndex, inboundAltitudeFt, outboundAltitudeFt, 'pl-change');
     } else if (outboundAltitudeFt < inboundAltitudeFt) {
-      addDescent(waypointIndex, inboundAltitudeFt, outboundAltitudeFt, 'pl-change');
+      addPlChangeDescent(waypointIndex, inboundAltitudeFt, outboundAltitudeFt);
     }
   }
 
@@ -261,7 +310,7 @@ export function calculateRouteVerticalProfile(input: RouteVerticalProfileInput):
   if (finalPlannedAltitudeFt === null) {
     warnings.push(`Enter PL for ${legs[legs.length - 1].from.name} → ${legs[legs.length - 1].to.name} to calculate arrival TOD.`);
   } else if (finalPlannedAltitudeFt > destinationElevationFt) {
-    addDescent(destinationIndex, finalPlannedAltitudeFt, destinationElevationFt, 'arrival');
+    addDescentBefore(destinationIndex, finalPlannedAltitudeFt, destinationElevationFt, 'arrival');
   } else if (finalPlannedAltitudeFt < destinationElevationFt) {
     warnings.push('The final-leg PL is below the destination elevation. No automatic arrival descent was created.');
   }
