@@ -33,6 +33,13 @@ export interface VerticalProfileSettings {
   descentGroundSpeedKt: number;
 }
 
+export type WaypointVerticalMode = 'auto' | 'airport' | 'none';
+
+export interface WaypointVerticalConstraint {
+  mode: WaypointVerticalMode;
+  elevationFt: number | null;
+}
+
 export interface LegWeatherForecast {
   fromId: string;
   toId: string;
@@ -82,6 +89,7 @@ export class FlightPlanStore {
   private verticalProfileSettings: VerticalProfileSettings = { ...DEFAULT_VERTICAL_PROFILE_SETTINGS };
   private plannedAltitudesFt = new Map<string, number>();
   private weatherForecasts = new Map<string, LegWeatherForecast>();
+  private verticalWaypointConstraints = new Map<string, WaypointVerticalConstraint>();
   private listeners = new Set<Listener>();
 
   getWaypoints(): Waypoint[] {
@@ -106,6 +114,17 @@ export class FlightPlanStore {
 
   getVerticalProfileSettings(): VerticalProfileSettings {
     return { ...this.verticalProfileSettings };
+  }
+
+  getWaypointVerticalConstraint(waypointId: string): WaypointVerticalConstraint {
+    const constraint = this.verticalWaypointConstraints.get(waypointId);
+    return constraint ? { ...constraint } : { mode: 'auto', elevationFt: null };
+  }
+
+  getVerticalWaypointConstraints(): Array<{ waypointId: string } & WaypointVerticalConstraint> {
+    return this.waypoints
+      .slice(1, -1)
+      .map((waypoint) => ({ waypointId: waypoint.id, ...this.getWaypointVerticalConstraint(waypoint.id) }));
   }
 
   getPlannedAltitudeFt(fromId: string, toId: string): number | null {
@@ -151,6 +170,26 @@ export class FlightPlanStore {
       return;
     }
     this.verticalProfileSettings = next;
+    this.emit();
+  }
+
+  setWaypointVerticalConstraint(
+    waypointId: string,
+    mode: WaypointVerticalMode,
+    elevationFt: number | null,
+  ): void {
+    if (!this.waypoints.some((waypoint) => waypoint.id === waypointId)) return;
+    if (mode !== 'auto' && mode !== 'airport' && mode !== 'none') return;
+    if (elevationFt !== null && (!Number.isFinite(elevationFt) || elevationFt < 0 || elevationFt > 20000)) return;
+
+    if (mode === 'auto' && elevationFt === null) {
+      this.verticalWaypointConstraints.delete(waypointId);
+    } else {
+      this.verticalWaypointConstraints.set(waypointId, {
+        mode,
+        elevationFt: mode === 'airport' ? (elevationFt === null ? null : Math.round(elevationFt)) : null,
+      });
+    }
     this.emit();
   }
 
@@ -210,6 +249,7 @@ export class FlightPlanStore {
 
   removeWaypoint(id: string): void {
     this.waypoints = this.waypoints.filter((waypoint) => waypoint.id !== id);
+    this.verticalWaypointConstraints.delete(id);
     this.retainCurrentLegSettings();
     this.emit();
   }
@@ -236,6 +276,7 @@ export class FlightPlanStore {
     this.waypoints = [];
     this.plannedAltitudesFt.clear();
     this.weatherForecasts.clear();
+    this.verticalWaypointConstraints.clear();
     this.emit();
   }
 
@@ -255,6 +296,12 @@ export class FlightPlanStore {
     for (const key of this.weatherForecasts.keys()) {
       if (!activeKeys.has(key)) {
         this.weatherForecasts.delete(key);
+      }
+    }
+    const activeWaypointIds = new Set(this.waypoints.map((waypoint) => waypoint.id));
+    for (const waypointId of this.verticalWaypointConstraints.keys()) {
+      if (!activeWaypointIds.has(waypointId)) {
+        this.verticalWaypointConstraints.delete(waypointId);
       }
     }
   }
