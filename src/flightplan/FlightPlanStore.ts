@@ -27,17 +27,22 @@ export interface WeatherSettings {
 export interface VerticalProfileSettings {
   departureElevationFt: number;
   destinationElevationFt: number;
+  departureIcaoCode: string;
+  destinationIcaoCode: string;
   climbRateFpm: number;
   descentRateFpm: number;
   climbGroundSpeedKt: number;
   descentGroundSpeedKt: number;
 }
 
-export type WaypointVerticalMode = 'auto' | 'airport' | 'none';
+export type WaypointVerticalMode = 'auto' | 'airport' | 'circuits' | 'none';
 
 export interface WaypointVerticalConstraint {
   mode: WaypointVerticalMode;
   elevationFt: number | null;
+  icaoCode: string;
+  circuitCount: number;
+  minutesPerCircuit: number;
 }
 
 export interface LegWeatherForecast {
@@ -75,10 +80,20 @@ const DEFAULT_WEATHER_SETTINGS: WeatherSettings = {
 const DEFAULT_VERTICAL_PROFILE_SETTINGS: VerticalProfileSettings = {
   departureElevationFt: 0,
   destinationElevationFt: 0,
+  departureIcaoCode: '',
+  destinationIcaoCode: '',
   climbRateFpm: 700,
   descentRateFpm: 500,
   climbGroundSpeedKt: 90,
   descentGroundSpeedKt: 120,
+};
+
+const DEFAULT_WAYPOINT_VERTICAL_CONSTRAINT: WaypointVerticalConstraint = {
+  mode: 'auto',
+  elevationFt: null,
+  icaoCode: '',
+  circuitCount: 1,
+  minutesPerCircuit: 6,
 };
 
 export class FlightPlanStore {
@@ -90,6 +105,7 @@ export class FlightPlanStore {
   private plannedAltitudesFt = new Map<string, number>();
   private weatherForecasts = new Map<string, LegWeatherForecast>();
   private verticalWaypointConstraints = new Map<string, WaypointVerticalConstraint>();
+  private automaticWaypointIds = new Set<string>();
   private listeners = new Set<Listener>();
 
   getWaypoints(): Waypoint[] {
@@ -118,13 +134,23 @@ export class FlightPlanStore {
 
   getWaypointVerticalConstraint(waypointId: string): WaypointVerticalConstraint {
     const constraint = this.verticalWaypointConstraints.get(waypointId);
-    return constraint ? { ...constraint } : { mode: 'auto', elevationFt: null };
+    return constraint ? { ...constraint } : { ...DEFAULT_WAYPOINT_VERTICAL_CONSTRAINT };
   }
 
   getVerticalWaypointConstraints(): Array<{ waypointId: string } & WaypointVerticalConstraint> {
     return this.waypoints
       .slice(1, -1)
       .map((waypoint) => ({ waypointId: waypoint.id, ...this.getWaypointVerticalConstraint(waypoint.id) }));
+  }
+
+  getWaypointActivityMinutes(waypointId: string): number {
+    const constraint = this.getWaypointVerticalConstraint(waypointId);
+    if (constraint.mode !== 'circuits') return 0;
+    return constraint.circuitCount * constraint.minutesPerCircuit;
+  }
+
+  getTotalWaypointActivityMinutes(): number {
+    return this.waypoints.reduce((sum, waypoint) => sum + this.getWaypointActivityMinutes(waypoint.id), 0);
   }
 
   getPlannedAltitudeFt(fromId: string, toId: string): number | null {
@@ -158,7 +184,16 @@ export class FlightPlanStore {
   }
 
   updateVerticalProfileSettings(patch: Partial<VerticalProfileSettings>): void {
-    const next = { ...this.verticalProfileSettings, ...patch };
+    const next: VerticalProfileSettings = {
+      ...this.verticalProfileSettings,
+      ...patch,
+      departureIcaoCode: patch.departureIcaoCode === undefined
+        ? this.verticalProfileSettings.departureIcaoCode
+        : normalizeIcao(patch.departureIcaoCode),
+      destinationIcaoCode: patch.destinationIcaoCode === undefined
+        ? this.verticalProfileSettings.destinationIcaoCode
+        : normalizeIcao(patch.destinationIcaoCode),
+    };
     if (
       !Number.isFinite(next.departureElevationFt) || next.departureElevationFt < 0 || next.departureElevationFt > 20000 ||
       !Number.isFinite(next.destinationElevationFt) || next.destinationElevationFt < 0 || next.destinationElevationFt > 20000 ||
@@ -175,20 +210,29 @@ export class FlightPlanStore {
 
   setWaypointVerticalConstraint(
     waypointId: string,
-    mode: WaypointVerticalMode,
-    elevationFt: number | null,
+    patch: Partial<WaypointVerticalConstraint>,
   ): void {
     if (!this.waypoints.some((waypoint) => waypoint.id === waypointId)) return;
-    if (mode !== 'auto' && mode !== 'airport' && mode !== 'none') return;
-    if (elevationFt !== null && (!Number.isFinite(elevationFt) || elevationFt < 0 || elevationFt > 20000)) return;
+    const existing = this.getWaypointVerticalConstraint(waypointId);
+    const next: WaypointVerticalConstraint = {
+      ...existing,
+      ...patch,
+      icaoCode: patch.icaoCode === undefined ? existing.icaoCode : normalizeIcao(patch.icaoCode),
+    };
 
-    if (mode === 'auto' && elevationFt === null) {
+    if (!['auto', 'airport', 'circuits', 'none'].includes(next.mode)) return;
+    if (next.elevationFt !== null && (!Number.isFinite(next.elevationFt) || next.elevationFt < 0 || next.elevationFt > 20000)) return;
+    if (!Number.isFinite(next.circuitCount) || next.circuitCount < 1 || next.circuitCount > 20) return;
+    if (!Number.isFinite(next.minutesPerCircuit) || next.minutesPerCircuit < 1 || next.minutesPerCircuit > 30) return;
+
+    next.elevationFt = next.elevationFt === null ? null : Math.round(next.elevationFt);
+    next.circuitCount = Math.round(next.circuitCount);
+    next.minutesPerCircuit = Math.round(next.minutesPerCircuit * 2) / 2;
+
+    if (next.mode === 'auto' && next.elevationFt === null && next.icaoCode === '') {
       this.verticalWaypointConstraints.delete(waypointId);
     } else {
-      this.verticalWaypointConstraints.set(waypointId, {
-        mode,
-        elevationFt: mode === 'airport' ? (elevationFt === null ? null : Math.round(elevationFt)) : null,
-      });
+      this.verticalWaypointConstraints.set(waypointId, next);
     }
     this.emit();
   }
@@ -227,19 +271,24 @@ export class FlightPlanStore {
   }
 
   addWaypoint(coordinate: Coordinate, name?: string): Waypoint {
+    const id = crypto.randomUUID();
+    const hasCustomName = Boolean(name?.trim());
     const waypoint: Waypoint = {
-      id: crypto.randomUUID(),
-      name: name?.trim() || `WP${String(this.waypoints.length + 1).padStart(2, '0')}`,
+      id,
+      name: hasCustomName ? name!.trim() : '',
       ...coordinate,
     };
 
+    if (!hasCustomName) this.automaticWaypointIds.add(id);
     this.waypoints = [...this.waypoints, waypoint];
+    this.renumberAutomaticWaypointNames();
     this.weatherForecasts.clear();
     this.emit();
-    return { ...waypoint };
+    return { ...this.waypoints[this.waypoints.length - 1] };
   }
 
   updateWaypoint(id: string, patch: Partial<Omit<Waypoint, 'id'>>): void {
+    if (patch.name !== undefined) this.automaticWaypointIds.delete(id);
     this.waypoints = this.waypoints.map((waypoint) =>
       waypoint.id === id ? { ...waypoint, ...patch } : waypoint,
     );
@@ -249,7 +298,9 @@ export class FlightPlanStore {
 
   removeWaypoint(id: string): void {
     this.waypoints = this.waypoints.filter((waypoint) => waypoint.id !== id);
+    this.automaticWaypointIds.delete(id);
     this.verticalWaypointConstraints.delete(id);
+    this.renumberAutomaticWaypointNames();
     this.retainCurrentLegSettings();
     this.emit();
   }
@@ -265,6 +316,7 @@ export class FlightPlanStore {
     const reordered = [...this.waypoints];
     [reordered[index], reordered[nextIndex]] = [reordered[nextIndex], reordered[index]];
     this.waypoints = reordered;
+    this.renumberAutomaticWaypointNames();
     this.retainCurrentLegSettings();
     this.emit();
   }
@@ -274,10 +326,19 @@ export class FlightPlanStore {
       return;
     }
     this.waypoints = [];
+    this.automaticWaypointIds.clear();
     this.plannedAltitudesFt.clear();
     this.weatherForecasts.clear();
     this.verticalWaypointConstraints.clear();
     this.emit();
+  }
+
+  private renumberAutomaticWaypointNames(): void {
+    this.waypoints = this.waypoints.map((waypoint, index) =>
+      this.automaticWaypointIds.has(waypoint.id)
+        ? { ...waypoint, name: `WP${String(index + 1).padStart(2, '0')}` }
+        : waypoint,
+    );
   }
 
   private legKey(fromId: string, toId: string): string {
@@ -309,6 +370,10 @@ export class FlightPlanStore {
   private emit(): void {
     this.listeners.forEach((listener) => listener());
   }
+}
+
+function normalizeIcao(value: string): string {
+  return value.trim().toUpperCase().replace(/[^A-Z]/g, '').slice(0, 4);
 }
 
 function nextWholeUtcHour(): string {
