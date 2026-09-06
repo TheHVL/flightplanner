@@ -31,4 +31,31 @@ describe('FlightPlanStore', () => {
     expect(after).toBeLessThan(before);
     expect(after).toBeCloseTo(before / 2, 6);
   });
+
+  it('stores planned altitude separately for each route leg', () => {
+    const store = new FlightPlanStore();
+    const a = store.addWaypoint({ lat: 69, lon: 18 }, 'A');
+    const b = store.addWaypoint({ lat: 69.5, lon: 19 }, 'B');
+    const c = store.addWaypoint({ lat: 70, lon: 20 }, 'C');
+
+    store.setPlannedAltitudeFt(a.id, b.id, 3500);
+    store.setPlannedAltitudeFt(b.id, c.id, 5500);
+
+    expect(store.getPlannedAltitudeFt(a.id, b.id)).toBe(3500);
+    expect(store.getPlannedAltitudeFt(b.id, c.id)).toBe(5500);
+  });
+
+  it('removes obsolete leg altitude settings after route changes', () => {
+    const store = new FlightPlanStore();
+    const a = store.addWaypoint({ lat: 69, lon: 18 }, 'A');
+    const b = store.addWaypoint({ lat: 69.5, lon: 19 }, 'B');
+    const c = store.addWaypoint({ lat: 70, lon: 20 }, 'C');
+
+    store.setPlannedAltitudeFt(a.id, b.id, 3500);
+    store.setPlannedAltitudeFt(b.id, c.id, 5500);
+    store.removeWaypoint(b.id);
+
+    expect(store.getPlannedAltitudeFt(a.id, b.id)).toBeNull();
+    expect(store.getPlannedAltitudeFt(b.id, c.id)).toBeNull();
+  });
 });
