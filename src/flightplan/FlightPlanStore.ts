@@ -24,6 +24,15 @@ export interface WeatherSettings {
   departureTimeUtc: string;
 }
 
+export interface VerticalProfileSettings {
+  departureElevationFt: number;
+  destinationElevationFt: number;
+  climbRateFpm: number;
+  descentRateFpm: number;
+  climbGroundSpeedKt: number;
+  descentGroundSpeedKt: number;
+}
+
 export interface LegWeatherForecast {
   fromId: string;
   toId: string;
@@ -56,11 +65,21 @@ const DEFAULT_WEATHER_SETTINGS: WeatherSettings = {
   departureTimeUtc: nextWholeUtcHour(),
 };
 
+const DEFAULT_VERTICAL_PROFILE_SETTINGS: VerticalProfileSettings = {
+  departureElevationFt: 0,
+  destinationElevationFt: 0,
+  climbRateFpm: 700,
+  descentRateFpm: 500,
+  climbGroundSpeedKt: 90,
+  descentGroundSpeedKt: 120,
+};
+
 export class FlightPlanStore {
   private waypoints: Waypoint[] = [];
   private navigationSettings: NavigationSettings = { ...DEFAULT_NAVIGATION_SETTINGS };
   private performanceSettings: PerformanceSettings = { ...DEFAULT_PERFORMANCE_SETTINGS };
   private weatherSettings: WeatherSettings = { ...DEFAULT_WEATHER_SETTINGS };
+  private verticalProfileSettings: VerticalProfileSettings = { ...DEFAULT_VERTICAL_PROFILE_SETTINGS };
   private plannedAltitudesFt = new Map<string, number>();
   private weatherForecasts = new Map<string, LegWeatherForecast>();
   private listeners = new Set<Listener>();
@@ -83,6 +102,10 @@ export class FlightPlanStore {
 
   getWeatherSettings(): WeatherSettings {
     return { ...this.weatherSettings };
+  }
+
+  getVerticalProfileSettings(): VerticalProfileSettings {
+    return { ...this.verticalProfileSettings };
   }
 
   getPlannedAltitudeFt(fromId: string, toId: string): number | null {
@@ -112,6 +135,22 @@ export class FlightPlanStore {
 
   updateWeatherSettings(patch: Partial<WeatherSettings>): void {
     this.weatherSettings = { ...this.weatherSettings, ...patch };
+    this.emit();
+  }
+
+  updateVerticalProfileSettings(patch: Partial<VerticalProfileSettings>): void {
+    const next = { ...this.verticalProfileSettings, ...patch };
+    if (
+      !Number.isFinite(next.departureElevationFt) || next.departureElevationFt < 0 || next.departureElevationFt > 20000 ||
+      !Number.isFinite(next.destinationElevationFt) || next.destinationElevationFt < 0 || next.destinationElevationFt > 20000 ||
+      !Number.isFinite(next.climbRateFpm) || next.climbRateFpm <= 0 || next.climbRateFpm > 5000 ||
+      !Number.isFinite(next.descentRateFpm) || next.descentRateFpm <= 0 || next.descentRateFpm > 5000 ||
+      !Number.isFinite(next.climbGroundSpeedKt) || next.climbGroundSpeedKt <= 0 || next.climbGroundSpeedKt > 300 ||
+      !Number.isFinite(next.descentGroundSpeedKt) || next.descentGroundSpeedKt <= 0 || next.descentGroundSpeedKt > 300
+    ) {
+      return;
+    }
+    this.verticalProfileSettings = next;
     this.emit();
   }
 
