@@ -1,11 +1,13 @@
 import './styles.css';
 import './mapEnhancements.css';
 import './phase4.css';
+import './phase5.css';
 import { FlightPlanStore } from './flightplan/FlightPlanStore';
 import { MapManager, type ChartDetailMode } from './map/MapManager';
 import { RoutePanel } from './components/RoutePanel';
 import { NavigationPanel } from './components/NavigationPanel';
 import { PerformancePanel } from './components/PerformancePanel';
+import { WeatherPanel } from './components/WeatherPanel';
 import { OFPTable } from './components/OFPTable';
 
 if ('serviceWorker' in navigator) {
@@ -26,7 +28,7 @@ root.innerHTML = `
           <div class="brand-subtitle">VFR · NORWAY · TRAINING</div>
         </div>
       </div>
-      <div class="phase-chip"><span></span> PHASE 4 · CRUISE PERFORMANCE</div>
+      <div class="phase-chip"><span></span> PHASE 5 · WEATHER PREVIEW</div>
     </header>
 
     <main class="workspace">
@@ -34,6 +36,7 @@ root.innerHTML = `
         <section id="route-panel" class="route-panel panel"></section>
         <section id="navigation-panel" class="navigation-panel panel"></section>
         <section id="performance-panel" class="performance-panel panel"></section>
+        <section id="weather-panel" class="weather-panel panel"></section>
       </aside>
       <section id="map-column" class="map-column">
         <div class="map-toolbar">
@@ -65,6 +68,7 @@ root.innerHTML = `
 const routeElement = document.querySelector<HTMLElement>('#route-panel');
 const navigationElement = document.querySelector<HTMLElement>('#navigation-panel');
 const performanceElement = document.querySelector<HTMLElement>('#performance-panel');
+const weatherElement = document.querySelector<HTMLElement>('#weather-panel');
 const mapElement = document.querySelector<HTMLElement>('#map');
 const mapColumn = document.querySelector<HTMLElement>('#map-column');
 const mapExpandButton = document.querySelector<HTMLButtonElement>('#map-expand');
@@ -74,6 +78,7 @@ if (
   !routeElement ||
   !navigationElement ||
   !performanceElement ||
+  !weatherElement ||
   !mapElement ||
   !mapColumn ||
   !mapExpandButton ||
@@ -87,6 +92,7 @@ const store = new FlightPlanStore();
 const routePanel = new RoutePanel(routeElement, store);
 const navigationPanel = new NavigationPanel(navigationElement, store);
 const performancePanel = new PerformancePanel(performanceElement, store);
+const weatherPanel = new WeatherPanel(weatherElement, store);
 const ofpTable = new OFPTable(tableElement, store);
 const mapManager = new MapManager(mapElement, {
   onMapClick: (lat, lon) => store.addWaypoint({ lat, lon }),
@@ -126,6 +132,7 @@ document.addEventListener('keydown', (event) => {
 
 navigationPanel.render();
 performancePanel.render();
+weatherPanel.render();
 
 const render = () => {
   const waypoints = store.getWaypoints();
