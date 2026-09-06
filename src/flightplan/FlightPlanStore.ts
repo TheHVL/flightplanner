@@ -19,6 +19,22 @@ export interface PerformanceSettings {
   manifoldPressureInHg: number;
 }
 
+export interface WeatherSettings {
+  useForecastWinds: boolean;
+  departureTimeUtc: string;
+}
+
+export interface LegWeatherForecast {
+  fromId: string;
+  toId: string;
+  altitudeFt: number;
+  validTimeUtc: string;
+  windFromDeg: number;
+  windSpeedKt: number;
+  temperatureC: number;
+  source: string;
+}
+
 const DEFAULT_NAVIGATION_SETTINGS: NavigationSettings = {
   tasKt: 130,
   windFromDeg: 0,
@@ -35,11 +51,18 @@ const DEFAULT_PERFORMANCE_SETTINGS: PerformanceSettings = {
   manifoldPressureInHg: 23,
 };
 
+const DEFAULT_WEATHER_SETTINGS: WeatherSettings = {
+  useForecastWinds: false,
+  departureTimeUtc: nextWholeUtcHour(),
+};
+
 export class FlightPlanStore {
   private waypoints: Waypoint[] = [];
   private navigationSettings: NavigationSettings = { ...DEFAULT_NAVIGATION_SETTINGS };
   private performanceSettings: PerformanceSettings = { ...DEFAULT_PERFORMANCE_SETTINGS };
+  private weatherSettings: WeatherSettings = { ...DEFAULT_WEATHER_SETTINGS };
   private plannedAltitudesFt = new Map<string, number>();
+  private weatherForecasts = new Map<string, LegWeatherForecast>();
   private listeners = new Set<Listener>();
 
   getWaypoints(): Waypoint[] {
@@ -58,8 +81,23 @@ export class FlightPlanStore {
     return { ...this.performanceSettings };
   }
 
+  getWeatherSettings(): WeatherSettings {
+    return { ...this.weatherSettings };
+  }
+
   getPlannedAltitudeFt(fromId: string, toId: string): number | null {
     return this.plannedAltitudesFt.get(this.legKey(fromId, toId)) ?? null;
+  }
+
+  getLegWeatherForecast(fromId: string, toId: string): LegWeatherForecast | null {
+    const forecast = this.weatherForecasts.get(this.legKey(fromId, toId));
+    return forecast ? { ...forecast } : null;
+  }
+
+  getWeatherForecasts(): LegWeatherForecast[] {
+    return this.getLegs()
+      .map((leg) => this.getLegWeatherForecast(leg.from.id, leg.to.id))
+      .filter((forecast): forecast is LegWeatherForecast => forecast !== null);
   }
 
   updateNavigationSettings(patch: Partial<NavigationSettings>): void {
@@ -69,6 +107,25 @@ export class FlightPlanStore {
 
   updatePerformanceSettings(patch: Partial<PerformanceSettings>): void {
     this.performanceSettings = { ...this.performanceSettings, ...patch };
+    this.emit();
+  }
+
+  updateWeatherSettings(patch: Partial<WeatherSettings>): void {
+    this.weatherSettings = { ...this.weatherSettings, ...patch };
+    this.emit();
+  }
+
+  setRouteWeatherForecasts(forecasts: LegWeatherForecast[]): void {
+    this.weatherForecasts.clear();
+    for (const forecast of forecasts) {
+      this.weatherForecasts.set(this.legKey(forecast.fromId, forecast.toId), { ...forecast });
+    }
+    this.emit();
+  }
+
+  clearWeatherForecasts(): void {
+    if (this.weatherForecasts.size === 0) return;
+    this.weatherForecasts.clear();
     this.emit();
   }
 
@@ -82,6 +139,7 @@ export class FlightPlanStore {
       }
       this.plannedAltitudesFt.set(key, Math.round(altitudeFt));
     }
+    this.weatherForecasts.delete(key);
     this.emit();
   }
 
@@ -98,6 +156,7 @@ export class FlightPlanStore {
     };
 
     this.waypoints = [...this.waypoints, waypoint];
+    this.weatherForecasts.clear();
     this.emit();
     return { ...waypoint };
   }
@@ -106,6 +165,7 @@ export class FlightPlanStore {
     this.waypoints = this.waypoints.map((waypoint) =>
       waypoint.id === id ? { ...waypoint, ...patch } : waypoint,
     );
+    this.weatherForecasts.clear();
     this.emit();
   }
 
@@ -136,6 +196,7 @@ export class FlightPlanStore {
     }
     this.waypoints = [];
     this.plannedAltitudesFt.clear();
+    this.weatherForecasts.clear();
     this.emit();
   }
 
@@ -152,9 +213,21 @@ export class FlightPlanStore {
         this.plannedAltitudesFt.delete(key);
       }
     }
+    for (const key of this.weatherForecasts.keys()) {
+      if (!activeKeys.has(key)) {
+        this.weatherForecasts.delete(key);
+      }
+    }
   }
 
   private emit(): void {
     this.listeners.forEach((listener) => listener());
   }
+}
+
+function nextWholeUtcHour(): string {
+  const date = new Date();
+  date.setUTCMinutes(0, 0, 0);
+  date.setUTCHours(date.getUTCHours() + 1);
+  return date.toISOString().slice(0, 16);
 }
