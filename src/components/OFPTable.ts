@@ -28,6 +28,7 @@ export class OFPTable {
     const legs = this.store.getLegs();
     const settings = this.store.getNavigationSettings();
     const performanceSettings = this.store.getPerformanceSettings();
+    const weatherSettings = this.store.getWeatherSettings();
     const totalDistance = totalRouteDistanceNm(legs);
 
     let cruisePerformance: CruisePerformanceResult | null = null;
@@ -47,6 +48,7 @@ export class OFPTable {
       const row = this.legRow(
         leg,
         settings,
+        weatherSettings.useForecastWinds,
         cruisePerformance,
         performanceError,
         accumulatedDistanceNm,
@@ -120,6 +122,7 @@ export class OFPTable {
   private legRow(
     leg: ReturnType<FlightPlanStore['getLegs']>[number],
     settings: ReturnType<FlightPlanStore['getNavigationSettings']>,
+    useForecastWinds: boolean,
     cruisePerformance: CruisePerformanceResult | null,
     performanceError: string | null,
     accumulatedDistanceBeforeNm: number,
@@ -137,12 +140,16 @@ export class OFPTable {
         ? automaticVariationForLeg(leg).variationDegEast
         : settings.variationDegEast;
       const variationDegEast = roundVariationDeg(rawVariationDegEast);
+      const forecast = this.store.getLegWeatherForecast(leg.from.id, leg.to.id);
+      const forecastActive = useForecastWinds && forecast !== null;
+      const windFromDeg = forecastActive ? forecast.windFromDeg : settings.windFromDeg;
+      const windSpeedKt = forecastActive ? forecast.windSpeedKt : settings.windSpeedKt;
 
       const wind = solveWindTriangle({
         trueTrackDeg: leg.trueTrackDeg,
         tasKt,
-        windFromDeg: settings.windFromDeg,
-        windSpeedKt: settings.windSpeedKt,
+        windFromDeg,
+        windSpeedKt,
       });
       const magneticTrack = trueToMagnetic(leg.trueTrackDeg, variationDegEast);
       const magneticHeading = trueToMagnetic(wind.trueHeadingDeg, variationDegEast);
@@ -154,6 +161,9 @@ export class OFPTable {
       const accumulatedFuelGal = accumulatedFuelBeforeGal + legFuelGal;
       const variationLabel = `${Math.abs(variationDegEast)}°${variationDegEast >= 0 ? 'E' : 'W'}`;
       const plannedAltitudeFt = this.store.getPlannedAltitudeFt(leg.from.id, leg.to.id);
+      const windTitle = forecastActive
+        ? `${forecast.source}; ${Math.round(forecast.altitudeFt)} ft; ${new Date(forecast.validTimeUtc).toISOString().slice(11, 16)}Z; OAT ${forecast.temperatureC.toFixed(1)}°C`
+        : 'Manual wind input';
 
       return {
         fuelGal: legFuelGal,
@@ -162,10 +172,10 @@ export class OFPTable {
         <tr>
           <td><strong>${leg.from.name}</strong></td>
           <td class="calculated">${tasKt.toFixed(0)}</td>
-          <td class="calculated">${leg.trueTrackDeg.toFixed(1)}°</td>
+          <td class="calculated">${this.headingLabel(leg.trueTrackDeg)}</td>
           <td class="calculated" title="${settings.automaticVariation ? `WMM2025 at leg midpoint: ${rawVariationDegEast.toFixed(2)}°, rounded for OFP` : 'Manual variation override'}">${variationLabel}</td>
-          <td class="calculated">${magneticTrack.toFixed(1)}°</td>
-          <td class="calculated">${String(Math.round(settings.windFromDeg)).padStart(3, '0')}/${settings.windSpeedKt.toFixed(0)}</td>
+          <td class="calculated">${this.headingLabel(magneticTrack)}</td>
+          <td class="calculated" title="${windTitle}">${this.headingLabel(windFromDeg)}/${Math.round(windSpeedKt)}</td>
           <td class="calculated">${this.signed(wind.wcaDeg)}°</td>
           <td class="calculated" title="Accumulated distance from departure">${accumulatedDistanceNm.toFixed(1)}</td>
           <td class="calculated" title="Accumulated time from departure">${this.formatMinutes(accumulatedTimeMinutes)}</td>
@@ -190,7 +200,7 @@ export class OFPTable {
               value="${plannedAltitudeFt ?? ''}"
             />
           </td>
-          <td class="calculated">${magneticHeading.toFixed(1)}°</td>
+          <td class="calculated">${this.headingLabel(magneticHeading)}</td>
           <td class="calculated">${wind.groundSpeedKt.toFixed(0)}</td>
           <td class="calculated" title="Distance for this leg">${leg.distanceNm.toFixed(1)}</td>
           <td class="calculated" title="Time for this leg">${this.formatMinutes(timeMinutes)}</td>
@@ -226,6 +236,11 @@ export class OFPTable {
     const altitudeFt = Number(input.value);
     if (!Number.isFinite(altitudeFt)) return;
     this.store.setPlannedAltitudeFt(fromId, toId, altitudeFt);
+  }
+
+  private headingLabel(value: number): string {
+    const rounded = ((Math.round(value) % 360) + 360) % 360;
+    return `${String(rounded).padStart(3, '0')}°`;
   }
 
   private signed(value: number): string {
