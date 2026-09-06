@@ -1,10 +1,16 @@
 import './styles.css';
 import './mapEnhancements.css';
 import { FlightPlanStore } from './flightplan/FlightPlanStore';
-import { MapManager } from './map/MapManager';
+import { MapManager, type ChartDetailMode } from './map/MapManager';
 import { RoutePanel } from './components/RoutePanel';
 import { NavigationPanel } from './components/NavigationPanel';
 import { OFPTable } from './components/OFPTable';
+
+if ('serviceWorker' in navigator) {
+  void navigator.serviceWorker
+    .register(`${import.meta.env.BASE_URL}sw.js`)
+    .catch(() => undefined);
+}
 
 const root = document.querySelector<HTMLDivElement>('#app');
 if (!root) throw new Error('Missing #app root element.');
@@ -35,6 +41,14 @@ root.innerHTML = `
           </div>
           <div class="map-toolbar-right">
             <div class="map-note">Switch between Kartverket Norgeskart and Avinor ICAO 1:500 000 using the layer control on the map.</div>
+            <label class="chart-detail-control">
+              <span>ICAO detail</span>
+              <select id="chart-detail" aria-label="ICAO chart detail">
+                <option value="auto">Auto</option>
+                <option value="sharp">Sharp</option>
+                <option value="fast">Fast</option>
+              </select>
+            </label>
             <button id="map-expand" class="map-expand-button" type="button" aria-pressed="false">⛶ Expand map</button>
           </div>
         </div>
@@ -51,8 +65,17 @@ const navigationElement = document.querySelector<HTMLElement>('#navigation-panel
 const mapElement = document.querySelector<HTMLElement>('#map');
 const mapColumn = document.querySelector<HTMLElement>('#map-column');
 const mapExpandButton = document.querySelector<HTMLButtonElement>('#map-expand');
+const chartDetailSelect = document.querySelector<HTMLSelectElement>('#chart-detail');
 const tableElement = document.querySelector<HTMLElement>('#ofp-table');
-if (!routeElement || !navigationElement || !mapElement || !mapColumn || !mapExpandButton || !tableElement) {
+if (
+  !routeElement ||
+  !navigationElement ||
+  !mapElement ||
+  !mapColumn ||
+  !mapExpandButton ||
+  !chartDetailSelect ||
+  !tableElement
+) {
   throw new Error('Failed to mount Flightplanner UI.');
 }
 
@@ -63,6 +86,19 @@ const ofpTable = new OFPTable(tableElement, store);
 const mapManager = new MapManager(mapElement, {
   onMapClick: (lat, lon) => store.addWaypoint({ lat, lon }),
   onWaypointMoved: (id, lat, lon) => store.updateWaypoint(id, { lat, lon }),
+});
+
+const isChartDetailMode = (value: string | null): value is ChartDetailMode =>
+  value === 'auto' || value === 'sharp' || value === 'fast';
+const savedDetailMode = localStorage.getItem('flightplanner-icao-detail');
+const initialDetailMode: ChartDetailMode = isChartDetailMode(savedDetailMode) ? savedDetailMode : 'auto';
+chartDetailSelect.value = initialDetailMode;
+mapManager.setChartDetail(initialDetailMode);
+chartDetailSelect.addEventListener('change', () => {
+  const mode = chartDetailSelect.value;
+  if (!isChartDetailMode(mode)) return;
+  localStorage.setItem('flightplanner-icao-detail', mode);
+  mapManager.setChartDetail(mode);
 });
 
 const setMapExpanded = (expanded: boolean) => {
