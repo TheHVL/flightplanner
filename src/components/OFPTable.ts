@@ -69,7 +69,7 @@ export class OFPTable {
         </div>
         <div class="route-total">
           <span>Total route</span>
-          <strong>${totalDistance.toFixed(1)} NM</strong>
+          <strong title="Exact calculated distance: ${totalDistance.toFixed(2)} NM">${this.distanceLabel(totalDistance)} NM</strong>
         </div>
       </div>
       <div class="table-scroll">
@@ -114,6 +114,7 @@ export class OFPTable {
       <div class="table-legend">
         <span><i class="dot calculated-dot"></i> Calculated</span>
         <span><i class="dot pending-dot"></i> Added in later phases</span>
+        <span>Distances shown to nearest 0.5 NM · headings/WCA shown to whole degrees</span>
         <span>Fuel INT = this leg, Fuel ACC = accumulated cruise fuel used</span>
       </div>
     `;
@@ -176,8 +177,8 @@ export class OFPTable {
           <td class="calculated" title="${settings.automaticVariation ? `WMM2025 at leg midpoint: ${rawVariationDegEast.toFixed(2)}°, rounded for OFP` : 'Manual variation override'}">${variationLabel}</td>
           <td class="calculated">${this.headingLabel(magneticTrack)}</td>
           <td class="calculated" title="${windTitle}">${this.headingLabel(windFromDeg)}/${Math.round(windSpeedKt)}</td>
-          <td class="calculated">${this.signed(wind.wcaDeg)}°</td>
-          <td class="calculated" title="Accumulated distance from departure">${accumulatedDistanceNm.toFixed(1)}</td>
+          <td class="calculated" title="Exact WCA: ${wind.wcaDeg.toFixed(2)}°">${this.signedDegrees(wind.wcaDeg)}</td>
+          <td class="calculated" title="Exact accumulated distance: ${accumulatedDistanceNm.toFixed(2)} NM">${this.distanceLabel(accumulatedDistanceNm)}</td>
           <td class="calculated" title="Accumulated time from departure">${this.formatMinutes(accumulatedTimeMinutes)}</td>
           ${fuelFlowGph === null
             ? '<td class="pending">—</td><td class="pending">—</td><td class="pending">—</td>'
@@ -202,7 +203,7 @@ export class OFPTable {
           </td>
           <td class="calculated">${this.headingLabel(magneticHeading)}</td>
           <td class="calculated">${wind.groundSpeedKt.toFixed(0)}</td>
-          <td class="calculated" title="Distance for this leg">${leg.distanceNm.toFixed(1)}</td>
+          <td class="calculated" title="Exact leg distance: ${leg.distanceNm.toFixed(2)} NM">${this.distanceLabel(leg.distanceNm)}</td>
           <td class="calculated" title="Time for this leg">${this.formatMinutes(timeMinutes)}</td>
           <td class="pending">—</td>
           <td class="pending">—</td>
@@ -243,8 +244,13 @@ export class OFPTable {
     return `${String(rounded).padStart(3, '0')}°`;
   }
 
-  private signed(value: number): string {
-    return `${value >= 0 ? '+' : ''}${value.toFixed(1)}`;
+  private signedDegrees(value: number): string {
+    const rounded = Math.sign(value) * Math.round(Math.abs(value));
+    return `${rounded > 0 ? '+' : ''}${rounded}°`;
+  }
+
+  private distanceLabel(valueNm: number): string {
+    return (Math.round(valueNm * 2) / 2).toFixed(1);
   }
 
   private formatMinutes(minutes: number): string {
