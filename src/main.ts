@@ -1,4 +1,5 @@
 import './styles.css';
+import './mapEnhancements.css';
 import { FlightPlanStore } from './flightplan/FlightPlanStore';
 import { MapManager } from './map/MapManager';
 import { RoutePanel } from './components/RoutePanel';
