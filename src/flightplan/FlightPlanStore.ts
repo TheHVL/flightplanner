@@ -3,8 +3,23 @@ import { calculateRouteLegs } from '../navigation/geodesy';
 
 type Listener = () => void;
 
+export interface NavigationSettings {
+  tasKt: number;
+  windFromDeg: number;
+  windSpeedKt: number;
+  variationDegEast: number;
+}
+
+const DEFAULT_NAVIGATION_SETTINGS: NavigationSettings = {
+  tasKt: 130,
+  windFromDeg: 0,
+  windSpeedKt: 0,
+  variationDegEast: 7,
+};
+
 export class FlightPlanStore {
   private waypoints: Waypoint[] = [];
+  private navigationSettings: NavigationSettings = { ...DEFAULT_NAVIGATION_SETTINGS };
   private listeners = new Set<Listener>();
 
   getWaypoints(): Waypoint[] {
@@ -13,6 +28,15 @@ export class FlightPlanStore {
 
   getLegs(): RouteLeg[] {
     return calculateRouteLegs(this.waypoints);
+  }
+
+  getNavigationSettings(): NavigationSettings {
+    return { ...this.navigationSettings };
+  }
+
+  updateNavigationSettings(patch: Partial<NavigationSettings>): void {
+    this.navigationSettings = { ...this.navigationSettings, ...patch };
+    this.emit();
   }
 
   subscribe(listener: Listener): () => void {
