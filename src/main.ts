@@ -2,13 +2,16 @@ import './styles.css';
 import './mapEnhancements.css';
 import './phase4.css';
 import './phase5.css';
+import './phase6.css';
 import { FlightPlanStore } from './flightplan/FlightPlanStore';
 import { MapManager, type ChartDetailMode } from './map/MapManager';
 import { RoutePanel } from './components/RoutePanel';
 import { NavigationPanel } from './components/NavigationPanel';
 import { PerformancePanel } from './components/PerformancePanel';
 import { WeatherPanel } from './components/WeatherPanel';
+import { VerticalProfilePanel } from './components/VerticalProfilePanel';
 import { OFPTable } from './components/OFPTable';
+import { calculateVerticalProfile } from './navigation/verticalProfile';
 
 if ('serviceWorker' in navigator) {
   const serviceWorkerUrl = new URL('sw.js', document.baseURI).toString();
@@ -28,7 +31,7 @@ root.innerHTML = `
           <div class="brand-subtitle">VFR · NORWAY · TRAINING</div>
         </div>
       </div>
-      <div class="phase-chip"><span></span> PHASE 5 · WEATHER PREVIEW</div>
+      <div class="phase-chip"><span></span> PHASE 6 · VERTICAL PROFILE</div>
     </header>
 
     <main class="workspace">
@@ -37,6 +40,7 @@ root.innerHTML = `
         <section id="navigation-panel" class="navigation-panel panel"></section>
         <section id="performance-panel" class="performance-panel panel"></section>
         <section id="weather-panel" class="weather-panel panel"></section>
+        <section id="vertical-profile-panel" class="vertical-profile-panel panel"></section>
       </aside>
       <section id="map-column" class="map-column">
         <div class="map-toolbar">
@@ -81,6 +85,7 @@ const routeElement = document.querySelector<HTMLElement>('#route-panel');
 const navigationElement = document.querySelector<HTMLElement>('#navigation-panel');
 const performanceElement = document.querySelector<HTMLElement>('#performance-panel');
 const weatherElement = document.querySelector<HTMLElement>('#weather-panel');
+const verticalProfileElement = document.querySelector<HTMLElement>('#vertical-profile-panel');
 const mapElement = document.querySelector<HTMLElement>('#map');
 const mapColumn = document.querySelector<HTMLElement>('#map-column');
 const mapExpandButton = document.querySelector<HTMLButtonElement>('#map-expand');
@@ -93,6 +98,7 @@ if (
   !navigationElement ||
   !performanceElement ||
   !weatherElement ||
+  !verticalProfileElement ||
   !mapElement ||
   !mapColumn ||
   !mapExpandButton ||
@@ -108,6 +114,7 @@ const routePanel = new RoutePanel(routeElement, store);
 const navigationPanel = new NavigationPanel(navigationElement, store);
 const performancePanel = new PerformancePanel(performanceElement, store);
 const weatherPanel = new WeatherPanel(weatherElement, store);
+const verticalProfilePanel = new VerticalProfilePanel(verticalProfileElement, store);
 const ofpTable = new OFPTable(tableElement, store);
 const mapManager = new MapManager(mapElement, {
   onMapClick: (lat, lon) => store.addWaypoint({ lat, lon }),
@@ -210,12 +217,43 @@ document.addEventListener('keydown', (event) => {
 navigationPanel.render();
 performancePanel.render();
 weatherPanel.render();
+verticalProfilePanel.render();
+
+const renderVerticalProfileMarkers = () => {
+  const legs = store.getLegs();
+  const firstLeg = legs[0];
+  const lastLeg = legs[legs.length - 1];
+  if (!firstLeg || !lastLeg) {
+    mapManager.renderVerticalProfileMarkers(null, null);
+    return;
+  }
+
+  const initialPlannedAltitudeFt = store.getPlannedAltitudeFt(firstLeg.from.id, firstLeg.to.id);
+  const finalPlannedAltitudeFt = store.getPlannedAltitudeFt(lastLeg.from.id, lastLeg.to.id);
+  if (initialPlannedAltitudeFt === null || finalPlannedAltitudeFt === null) {
+    mapManager.renderVerticalProfileMarkers(null, null);
+    return;
+  }
+
+  try {
+    const result = calculateVerticalProfile({
+      legs,
+      ...store.getVerticalProfileSettings(),
+      initialPlannedAltitudeFt,
+      finalPlannedAltitudeFt,
+    });
+    mapManager.renderVerticalProfileMarkers(result.tocCoordinate, result.todCoordinate);
+  } catch {
+    mapManager.renderVerticalProfileMarkers(null, null);
+  }
+};
 
 const render = () => {
   const waypoints = store.getWaypoints();
   routePanel.render();
   ofpTable.render();
   mapManager.renderRoute(waypoints, (id, lat, lon) => store.updateWaypoint(id, { lat, lon }));
+  renderVerticalProfileMarkers();
 };
 
 store.subscribe(render);
