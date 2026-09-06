@@ -48,8 +48,53 @@
   white-space: nowrap;
 }
 
+.vertical-aip-endpoint-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 66px 74px;
+  gap: 7px;
+  align-items: center;
+  margin: 0 16px 8px;
+  padding: 9px 10px;
+  border: 1px solid #d7e1eb;
+  border-radius: 7px;
+  background: #f8fbff;
+}
+.vertical-aip-endpoint-row > div { min-width: 0; }
+.vertical-aip-endpoint-row strong { display: block; color: #253b59; font-size: 9px; }
+.vertical-aip-endpoint-row > div > span { display: block; margin-top: 2px; color: #758299; font-size: 8px; }
+.vertical-aip-code {
+  width: 100%;
+  min-width: 0;
+  padding: 6px 7px;
+  border: 1px solid #c9d3df;
+  border-radius: 5px;
+  background: #fff;
+  color: #1e314e;
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+.vertical-aip-button {
+  padding: 6px 7px;
+  border: 1px solid #9eb8dc;
+  border-radius: 5px;
+  background: #edf5ff;
+  color: #275993;
+  font-size: 8px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+.vertical-aip-button:hover:not(:disabled) { background: #dfeeff; }
+.vertical-aip-button:disabled { opacity: 0.65; }
+.vertical-aip-status {
+  grid-column: 1 / -1;
+  color: #66758a;
+  font-size: 8px;
+  line-height: 1.35;
+}
+
 .vertical-waypoint-section {
-  margin: 0 16px 14px;
+  margin: 14px 16px;
   border: 1px solid #d8e1eb;
   border-radius: 7px;
   overflow: hidden;
@@ -67,7 +112,7 @@
 .vertical-waypoint-list { display: grid; }
 .vertical-waypoint-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 112px;
+  grid-template-columns: minmax(0, 1fr) 122px;
   gap: 8px;
   align-items: center;
   padding: 9px 10px;
@@ -96,8 +141,17 @@
   font-size: 9px;
   font-weight: 800;
 }
+.vertical-airport-tools {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 68px 76px minmax(90px, 1fr);
+  gap: 7px;
+  align-items: center;
+  padding: 8px;
+  border-radius: 6px;
+  background: #f7faff;
+}
 .vertical-airport-elevation {
-  grid-column: 2;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
@@ -117,6 +171,54 @@
   font-weight: 800;
 }
 .vertical-airport-elevation span { padding: 0 6px; color: #7b8797; font-size: 8px; }
+.vertical-airport-tools .vertical-aip-status { grid-column: 1 / -1; }
+
+.vertical-circuit-controls {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 8px;
+  align-items: end;
+  padding: 8px;
+  border-radius: 6px;
+  background: #f4f9f4;
+}
+.vertical-circuit-controls label > span {
+  display: block;
+  margin-bottom: 4px;
+  color: #6d7a70;
+  font-size: 7px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+.vertical-circuit-controls input {
+  width: 100%;
+  min-width: 0;
+  padding: 6px 7px;
+  border: 1px solid #c9d3df;
+  border-radius: 5px;
+  color: #1e314e;
+  font-size: 10px;
+  font-weight: 800;
+}
+.vertical-circuit-controls > strong {
+  padding: 7px 8px;
+  border-radius: 5px;
+  background: #e1f0e3;
+  color: #35653d;
+  font-size: 9px;
+  white-space: nowrap;
+}
+.vertical-circuit-total {
+  margin: 0 16px 12px;
+  padding: 9px 10px;
+  border: 1px solid #c8dfcb;
+  border-radius: 6px;
+  background: #f1f8f2;
+  color: #49694e;
+  font-size: 9px;
+  line-height: 1.4;
+}
 
 .vertical-overview {
   display: grid;
@@ -246,5 +348,10 @@
 @media (max-width: 480px) {
   .vertical-input-grid { grid-template-columns: 1fr; }
   .vertical-overview { grid-template-columns: 1fr; }
-  .vertical-waypoint-row { grid-template-columns: minmax(0, 1fr) 104px; }
+  .vertical-waypoint-row { grid-template-columns: minmax(0, 1fr) 112px; }
+  .vertical-aip-endpoint-row { grid-template-columns: minmax(0, 1fr) 64px; }
+  .vertical-aip-endpoint-row .vertical-aip-button { grid-column: 2; }
+  .vertical-airport-tools { grid-template-columns: 64px 74px minmax(84px, 1fr); }
+  .vertical-circuit-controls { grid-template-columns: 1fr 1fr; }
+  .vertical-circuit-controls > strong { grid-column: 1 / -1; text-align: center; }
 }
