@@ -1,12 +1,22 @@
 import { describe, expect, it } from 'vitest';
 import { calculateRouteLegs } from '../src/navigation/geodesy';
 import {
+  calculateRouteVerticalProfile,
   calculateVerticalProfile,
   routeCoordinateAtDistance,
 } from '../src/navigation/verticalProfile';
 import type { Waypoint } from '../src/types';
 
 const waypoint = (id: string, lat: number, lon: number): Waypoint => ({ id, name: id, lat, lon });
+
+const automaticSettings = {
+  departureElevationFt: 0,
+  destinationElevationFt: 0,
+  climbRateFpm: 600,
+  descentRateFpm: 500,
+  climbGroundSpeedKt: 60,
+  descentGroundSpeedKt: 60,
+};
 
 describe('vertical profile', () => {
   it('calculates TOC and TOD from vertical speed and groundspeed', () => {
@@ -74,5 +84,70 @@ describe('vertical profile', () => {
     expect(point).not.toBeNull();
     expect(point?.lat).toBeCloseTo(0, 6);
     expect(point?.lon).toBeCloseTo(1.5, 5);
+  });
+
+  it('automatically creates transitions whenever successive PL values go up or down', () => {
+    const legs = calculateRouteLegs([
+      waypoint('A', 0, 0),
+      waypoint('B', 0, 1),
+      waypoint('C', 0, 2),
+      waypoint('D', 0, 3),
+    ]);
+
+    const result = calculateRouteVerticalProfile({
+      legs,
+      plannedAltitudesFt: [3000, 6000, 4000],
+      waypointConstraints: [],
+      ...automaticSettings,
+    });
+
+    expect(result.events.map((event) => [event.type, event.reason, event.waypointName])).toEqual([
+      ['TOC', 'departure', 'A'],
+      ['TOC', 'pl-change', 'B'],
+      ['TOD', 'pl-change', 'C'],
+      ['TOD', 'arrival', 'D'],
+    ]);
+    expect(result.events[1].distanceFromWaypointNm).toBeCloseTo(5, 8);
+    expect(result.events[2].distanceFromWaypointNm).toBeCloseTo(4, 8);
+  });
+
+  it('creates both TOD and TOC around an intermediate airport touch-and-go', () => {
+    const legs = calculateRouteLegs([
+      waypoint('A', 0, 0),
+      waypoint('B', 0, 1),
+      waypoint('C', 0, 2),
+    ]);
+
+    const result = calculateRouteVerticalProfile({
+      legs,
+      plannedAltitudesFt: [5000, 5000],
+      waypointConstraints: [{ waypointId: 'B', mode: 'airport', elevationFt: 500 }],
+      ...automaticSettings,
+    });
+
+    const airportEvents = result.events.filter((event) => event.reason === 'airport');
+    expect(airportEvents).toHaveLength(2);
+    expect(airportEvents.map((event) => event.type)).toEqual(['TOD', 'TOC']);
+    expect(airportEvents[0].waypointName).toBe('B');
+    expect(airportEvents[0].distanceFromWaypointNm).toBeCloseTo(9, 8);
+    expect(airportEvents[1].distanceFromWaypointNm).toBeCloseTo(7.5, 8);
+  });
+
+  it('does not create a zero-distance TOD marker at the final waypoint', () => {
+    const legs = calculateRouteLegs([
+      waypoint('A', 0, 0),
+      waypoint('B', 0, 1),
+    ]);
+
+    const result = calculateRouteVerticalProfile({
+      legs,
+      plannedAltitudesFt: [1000],
+      waypointConstraints: [],
+      ...automaticSettings,
+      destinationElevationFt: 1000,
+    });
+
+    expect(result.events.some((event) => event.reason === 'arrival')).toBe(false);
+    expect(result.events.map((event) => event.type)).toEqual(['TOC']);
   });
 });
