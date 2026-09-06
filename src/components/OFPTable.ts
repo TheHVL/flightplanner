@@ -1,6 +1,11 @@
 import type { FlightPlanStore } from '../flightplan/FlightPlanStore';
 import { totalRouteDistanceNm } from '../navigation/geodesy';
+import { automaticVariationForLeg } from '../navigation/magneticVariation';
 import { solveWindTriangle, trueToMagnetic } from '../navigation/wind';
+import {
+  calculateCruisePerformance,
+  type CruisePerformanceResult,
+} from '../performance/cruisePerformance';
 
 export class OFPTable {
   constructor(
@@ -11,7 +16,31 @@ export class OFPTable {
   render(): void {
     const legs = this.store.getLegs();
     const settings = this.store.getNavigationSettings();
+    const performanceSettings = this.store.getPerformanceSettings();
     const totalDistance = totalRouteDistanceNm(legs);
+
+    let cruisePerformance: CruisePerformanceResult | null = null;
+    let performanceError: string | null = null;
+    if (performanceSettings.usePohPerformance) {
+      try {
+        cruisePerformance = calculateCruisePerformance(performanceSettings);
+      } catch (error) {
+        performanceError = error instanceof Error ? error.message : 'POH cruise calculation failed.';
+      }
+    }
+
+    let accumulatedFuelGal = 0;
+    const rows = legs.map((leg) => {
+      const row = this.legRow(
+        leg,
+        settings,
+        cruisePerformance,
+        performanceError,
+        accumulatedFuelGal,
+      );
+      accumulatedFuelGal += row.fuelGal;
+      return row.html;
+    });
 
     this.element.innerHTML = `
       <div class="ofp-heading">
@@ -32,7 +61,7 @@ export class OFPTable {
             </tr>
           </thead>
           <tbody>
-            ${legs.length === 0 ? '<tr><td colspan="21" class="table-empty">Add at least two waypoints to calculate a leg.</td></tr>' : legs.map((leg) => this.legRow(leg, settings)).join('')}
+            ${legs.length === 0 ? '<tr><td colspan="21" class="table-empty">Add at least two waypoints to calculate a leg.</td></tr>' : rows.join('')}
           </tbody>
         </table>
       </div>
@@ -43,34 +72,52 @@ export class OFPTable {
   private legRow(
     leg: ReturnType<FlightPlanStore['getLegs']>[number],
     settings: ReturnType<FlightPlanStore['getNavigationSettings']>,
-  ): string {
+    cruisePerformance: CruisePerformanceResult | null,
+    performanceError: string | null,
+    accumulatedFuelBeforeGal: number,
+  ): { html: string; fuelGal: number } {
     try {
+      if (performanceError) {
+        throw new Error(`POH performance: ${performanceError}`);
+      }
+
+      const tasKt = cruisePerformance?.ktas ?? settings.tasKt;
+      const fuelFlowGph = cruisePerformance?.fuelFlowGph ?? null;
+      const variationDegEast = settings.automaticVariation
+        ? automaticVariationForLeg(leg).variationDegEast
+        : settings.variationDegEast;
+
       const wind = solveWindTriangle({
         trueTrackDeg: leg.trueTrackDeg,
-        tasKt: settings.tasKt,
+        tasKt,
         windFromDeg: settings.windFromDeg,
         windSpeedKt: settings.windSpeedKt,
       });
-      const magneticTrack = trueToMagnetic(leg.trueTrackDeg, settings.variationDegEast);
-      const magneticHeading = trueToMagnetic(wind.trueHeadingDeg, settings.variationDegEast);
-      const timeMinutes = (leg.distanceNm / wind.groundSpeedKt) * 60;
-      const variationLabel = `${Math.abs(settings.variationDegEast).toFixed(1)}°${settings.variationDegEast >= 0 ? 'E' : 'W'}`;
+      const magneticTrack = trueToMagnetic(leg.trueTrackDeg, variationDegEast);
+      const magneticHeading = trueToMagnetic(wind.trueHeadingDeg, variationDegEast);
+      const timeHours = leg.distanceNm / wind.groundSpeedKt;
+      const timeMinutes = timeHours * 60;
+      const legFuelGal = fuelFlowGph === null ? 0 : fuelFlowGph * timeHours;
+      const accumulatedFuelGal = accumulatedFuelBeforeGal + legFuelGal;
+      const variationLabel = `${Math.abs(variationDegEast).toFixed(1)}°${variationDegEast >= 0 ? 'E' : 'W'}`;
 
-      return `
+      return {
+        fuelGal: legFuelGal,
+        html: `
         <tr>
           <td><strong>${leg.from.name}</strong></td>
           <td><strong>${leg.to.name}</strong></td>
-          <td class="calculated">${settings.tasKt.toFixed(0)}</td>
+          <td class="calculated">${tasKt.toFixed(0)}</td>
           <td class="calculated">${leg.trueTrackDeg.toFixed(1)}°</td>
-          <td class="calculated">${variationLabel}</td>
+          <td class="calculated" title="${settings.automaticVariation ? 'WMM2025 at leg midpoint' : 'Manual variation override'}">${variationLabel}</td>
           <td class="calculated">${magneticTrack.toFixed(1)}°</td>
           <td class="calculated">${String(Math.round(settings.windFromDeg)).padStart(3, '0')}/${settings.windSpeedKt.toFixed(0)}</td>
           <td class="calculated">${this.signed(wind.wcaDeg)}°</td>
           <td class="calculated">${leg.distanceNm.toFixed(1)}</td>
           <td class="calculated">${this.formatMinutes(timeMinutes)}</td>
-          <td class="pending">—</td>
-          <td class="pending">—</td>
-          <td class="pending">—</td>
+          ${fuelFlowGph === null
+            ? '<td class="pending">—</td><td class="pending">—</td><td class="pending">—</td>'
+            : `<td class="calculated">${fuelFlowGph.toFixed(1)}</td><td class="calculated">${legFuelGal.toFixed(2)}</td><td class="calculated">${accumulatedFuelGal.toFixed(2)}</td>`}
           <td class="pending">—</td>
           <td class="pending">—</td>
           <td class="pending">—</td>
@@ -79,10 +126,14 @@ export class OFPTable {
           <td class="calculated">${wind.groundSpeedKt.toFixed(0)}</td>
           <td class="pending">—</td>
           <td class="pending">—</td>
-        </tr>`;
+        </tr>`,
+      };
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Navigation calculation failed.';
-      return `<tr><td><strong>${leg.from.name}</strong></td><td><strong>${leg.to.name}</strong></td><td colspan="19" class="calculation-error">${message}</td></tr>`;
+      return {
+        fuelGal: 0,
+        html: `<tr><td><strong>${leg.from.name}</strong></td><td><strong>${leg.to.name}</strong></td><td colspan="19" class="calculation-error">${message}</td></tr>`,
+      };
     }
   }
 
