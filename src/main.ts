@@ -59,10 +59,11 @@ const mapManager = new MapManager(mapElement, {
   onWaypointMoved: (id, lat, lon) => store.updateWaypoint(id, { lat, lon }),
 });
 
+navigationPanel.render();
+
 const render = () => {
   const waypoints = store.getWaypoints();
   routePanel.render();
-  navigationPanel.render();
   ofpTable.render();
   mapManager.renderRoute(waypoints, (id, lat, lon) => store.updateWaypoint(id, { lat, lon }));
 };
