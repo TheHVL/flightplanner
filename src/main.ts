@@ -1,5 +1,6 @@
 import './styles.css';
 import './mapEnhancements.css';
+import './phase4.css';
 import { FlightPlanStore } from './flightplan/FlightPlanStore';
 import { MapManager, type ChartDetailMode } from './map/MapManager';
 import { RoutePanel } from './components/RoutePanel';
