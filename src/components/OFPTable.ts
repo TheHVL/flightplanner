@@ -30,6 +30,7 @@ export class OFPTable {
     const performanceSettings = this.store.getPerformanceSettings();
     const weatherSettings = this.store.getWeatherSettings();
     const totalDistance = totalRouteDistanceNm(legs);
+    const totalCircuitMinutes = this.store.getTotalWaypointActivityMinutes();
 
     let cruisePerformance: CruisePerformanceResult | null = null;
     let performanceError: string | null = null;
@@ -44,7 +45,9 @@ export class OFPTable {
     let accumulatedDistanceNm = 0;
     let accumulatedTimeMinutes = 0;
     let accumulatedFuelGal = 0;
-    const rows = legs.map((leg) => {
+    const rows = legs.map((leg, index) => {
+      const waypointActivityMinutes = index > 0 ? this.store.getWaypointActivityMinutes(leg.from.id) : 0;
+      accumulatedTimeMinutes += waypointActivityMinutes;
       const row = this.legRow(
         leg,
         settings,
@@ -54,6 +57,7 @@ export class OFPTable {
         accumulatedDistanceNm,
         accumulatedTimeMinutes,
         accumulatedFuelGal,
+        waypointActivityMinutes,
       );
       accumulatedDistanceNm += leg.distanceNm;
       accumulatedTimeMinutes += row.timeMinutes;
@@ -96,7 +100,7 @@ export class OFPTable {
             <tr class="ofp-subhead-row">
               <th>DIR/VEL</th><th>WCA</th>
               <th title="Accumulated route distance from departure">DIST</th>
-              <th title="Accumulated route time from departure">TIME</th>
+              <th title="Accumulated flight time from departure, including configured circuit/pattern allowances">TIME</th>
               <th title="Fuel flow in US gallons per hour">FF<br><span class="ofp-unit">GPH</span></th>
               <th title="Fuel used on this leg">INT<br><span class="ofp-unit">GAL</span></th>
               <th title="Accumulated cruise fuel used">ACC<br><span class="ofp-unit">GAL</span></th>
@@ -116,6 +120,7 @@ export class OFPTable {
         <span><i class="dot pending-dot"></i> Added in later phases</span>
         <span>Distances shown to nearest 0.5 NM · headings/WCA shown to whole degrees</span>
         <span>Fuel INT = this leg, Fuel ACC = accumulated cruise fuel used</span>
+        ${totalCircuitMinutes > 0 ? `<span>Circuit/pattern allowance in ACC TIME: +${this.formatActivityMinutes(totalCircuitMinutes)}. Circuit fuel is not yet included.</span>` : ''}
       </div>
     `;
   }
@@ -129,6 +134,7 @@ export class OFPTable {
     accumulatedDistanceBeforeNm: number,
     accumulatedTimeBeforeMinutes: number,
     accumulatedFuelBeforeGal: number,
+    waypointActivityMinutes: number,
   ): LegRowResult {
     try {
       if (performanceError) {
@@ -165,6 +171,9 @@ export class OFPTable {
       const windTitle = forecastActive
         ? `${forecast.source}; ${Math.round(forecast.altitudeFt)} ft; ${new Date(forecast.validTimeUtc).toISOString().slice(11, 16)}Z; OAT ${forecast.temperatureC.toFixed(1)}°C`
         : 'Manual wind input';
+      const accumulatedTimeTitle = waypointActivityMinutes > 0
+        ? `Accumulated time from departure; includes +${this.formatActivityMinutes(waypointActivityMinutes)} circuit/pattern allowance at ${leg.from.name}`
+        : 'Accumulated time from departure';
 
       return {
         fuelGal: legFuelGal,
@@ -179,7 +188,7 @@ export class OFPTable {
           <td class="calculated" title="${windTitle}">${this.headingLabel(windFromDeg)}/${Math.round(windSpeedKt)}</td>
           <td class="calculated" title="Exact WCA: ${wind.wcaDeg.toFixed(2)}°">${this.signedDegrees(wind.wcaDeg)}</td>
           <td class="calculated" title="Exact accumulated distance: ${accumulatedDistanceNm.toFixed(2)} NM">${this.distanceLabel(accumulatedDistanceNm)}</td>
-          <td class="calculated" title="Accumulated time from departure">${this.formatMinutes(accumulatedTimeMinutes)}</td>
+          <td class="calculated" title="${accumulatedTimeTitle}">${this.formatMinutes(accumulatedTimeMinutes)}</td>
           ${fuelFlowGph === null
             ? '<td class="pending">—</td><td class="pending">—</td><td class="pending">—</td>'
             : `<td class="calculated" title="Fuel flow, US gal/hour">${fuelFlowGph.toFixed(1)}</td><td class="calculated" title="Fuel used on this leg, US gal">${legFuelGal.toFixed(2)}</td><td class="calculated" title="Accumulated cruise fuel used, US gal">${accumulatedFuelGal.toFixed(2)}</td>`}
@@ -204,7 +213,7 @@ export class OFPTable {
           <td class="calculated">${this.headingLabel(magneticHeading)}</td>
           <td class="calculated">${wind.groundSpeedKt.toFixed(0)}</td>
           <td class="calculated" title="Exact leg distance: ${leg.distanceNm.toFixed(2)} NM">${this.distanceLabel(leg.distanceNm)}</td>
-          <td class="calculated" title="Time for this leg">${this.formatMinutes(timeMinutes)}</td>
+          <td class="calculated" title="Time for this leg only; circuit/pattern time is added separately to accumulated time">${this.formatMinutes(timeMinutes)}</td>
           <td class="pending">—</td>
           <td class="pending">—</td>
           <td class="pending">—</td>
@@ -261,5 +270,9 @@ export class OFPTable {
     return hours > 0
       ? `${hours}:${String(mins).padStart(2, '0')}`
       : `${mins}:${String(secs).padStart(2, '0')}`;
+  }
+
+  private formatActivityMinutes(minutes: number): string {
+    return Number.isInteger(minutes) ? `${minutes} min` : `${minutes.toFixed(1)} min`;
   }
 }

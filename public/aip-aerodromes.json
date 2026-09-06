@@ -1,0 +1,80 @@
+{
+  "source": "Avinor AIP Norway",
+  "effectiveDate": "2026-06-11",
+  "generatedAt": "2026-09-06T21:35:00Z",
+  "issueUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/index-en-GB.html",
+  "aerodromes": [
+    {
+      "icao": "ENTC",
+      "name": "TROMSØ / Langnes",
+      "elevationFt": 32,
+      "lat": 69.681389,
+      "lon": 18.917778,
+      "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-AD-2.ENTC-en-GB.html"
+    },
+    {
+      "icao": "ENDU",
+      "name": "BARDUFOSS",
+      "elevationFt": 254,
+      "lat": 69.055833,
+      "lon": 18.540278,
+      "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-AD-2.ENDU-en-GB.html"
+    },
+    {
+      "icao": "ENAN",
+      "name": "ANDØYA / Andenes",
+      "elevationFt": 30,
+      "lat": 69.2925,
+      "lon": 16.144167,
+      "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-AD-2.ENAN-en-GB.html"
+    },
+    {
+      "icao": "ENEV",
+      "name": "HARSTAD/NARVIK / Evenes",
+      "elevationFt": 85,
+      "lat": 68.488889,
+      "lon": 16.678333,
+      "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-AD-2.ENEV-en-GB.html"
+    },
+    {
+      "icao": "ENAT",
+      "name": "ALTA",
+      "elevationFt": 10,
+      "lat": 69.976111,
+      "lon": 23.371667,
+      "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-AD-2.ENAT-en-GB.html"
+    },
+    {
+      "icao": "ENNA",
+      "name": "LAKSELV / Banak",
+      "elevationFt": 26,
+      "lat": 70.066667,
+      "lon": 24.973889,
+      "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-AD-2.ENNA-en-GB.html"
+    },
+    {
+      "icao": "ENBV",
+      "name": "BERLEVÅG",
+      "elevationFt": 43,
+      "lat": 70.871389,
+      "lon": 29.034167,
+      "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-AD-2.ENBV-en-GB.html"
+    },
+    {
+      "icao": "ENGM",
+      "name": "OSLO / Gardermoen",
+      "elevationFt": 682,
+      "lat": 60.202778,
+      "lon": 11.083889,
+      "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-AD-2.ENGM-en-GB.html"
+    },
+    {
+      "icao": "ENBL",
+      "name": "FØRDE / Bringeland",
+      "elevationFt": 1045,
+      "lat": 61.391111,
+      "lon": 5.756944,
+      "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/154/2026-06-11-AIRAC/html/eAIP/EN-AD-2.ENBL-en-GB.html"
+    }
+  ]
+}

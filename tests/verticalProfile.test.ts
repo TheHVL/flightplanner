@@ -101,14 +101,51 @@ describe('vertical profile', () => {
       ...automaticSettings,
     });
 
-    expect(result.events.map((event) => [event.type, event.reason, event.waypointName])).toEqual([
+    const eventKeys = result.events.map((event) => [event.type, event.reason, event.waypointName]);
+    expect(eventKeys).toHaveLength(4);
+    expect(eventKeys).toEqual(expect.arrayContaining([
       ['TOC', 'departure', 'A'],
       ['TOC', 'pl-change', 'B'],
       ['TOD', 'pl-change', 'C'],
       ['TOD', 'arrival', 'D'],
+    ]));
+
+    const climbAtB = result.events.find((event) => event.type === 'TOC' && event.waypointName === 'B');
+    const descentAtC = result.events.find((event) => event.type === 'TOD' && event.reason === 'pl-change' && event.waypointName === 'C');
+    expect(climbAtB?.distanceFromWaypointNm).toBeCloseTo(5, 8);
+    expect(descentAtC?.position).toBe('after');
+    expect(descentAtC?.routeDistanceNm).toBeGreaterThanOrEqual(
+      legs[0].distanceNm + legs[1].distanceNm,
+    );
+  });
+
+  it('never starts a lower outbound PL descent before the waypoint where that PL begins', () => {
+    const legs = calculateRouteLegs([
+      waypoint('WP02', 0, 0),
+      waypoint('WP03', 0, 1),
+      waypoint('WP04', 0, 2),
     ]);
-    expect(result.events[1].distanceFromWaypointNm).toBeCloseTo(5, 8);
-    expect(result.events[2].distanceFromWaypointNm).toBeCloseTo(4, 8);
+    const wp03DistanceNm = legs[0].distanceNm;
+
+    const result = calculateRouteVerticalProfile({
+      legs,
+      plannedAltitudesFt: [2500, 500],
+      waypointConstraints: [],
+      departureElevationFt: 2500,
+      destinationElevationFt: 500,
+      climbRateFpm: 600,
+      descentRateFpm: 100,
+      climbGroundSpeedKt: 60,
+      descentGroundSpeedKt: 200,
+    });
+
+    const plTod = result.events.find((event) => event.type === 'TOD' && event.reason === 'pl-change');
+    expect(plTod).toBeDefined();
+    expect(plTod?.waypointName).toBe('WP03');
+    expect(plTod?.position).toBe('after');
+    expect(plTod?.routeDistanceNm).toBeCloseTo(wp03DistanceNm, 8);
+    expect(plTod?.routeDistanceNm).toBeGreaterThanOrEqual(wp03DistanceNm);
+    expect(result.warnings.some((warning) => warning.includes('never before it'))).toBe(true);
   });
 
   it('creates both TOD and TOC around an intermediate airport touch-and-go', () => {
@@ -131,6 +168,23 @@ describe('vertical profile', () => {
     expect(airportEvents[0].waypointName).toBe('B');
     expect(airportEvents[0].distanceFromWaypointNm).toBeCloseTo(9, 8);
     expect(airportEvents[1].distanceFromWaypointNm).toBeCloseTo(7.5, 8);
+  });
+
+  it('treats circuit airports as airport vertical constraints', () => {
+    const legs = calculateRouteLegs([
+      waypoint('A', 0, 0),
+      waypoint('B', 0, 1),
+      waypoint('C', 0, 2),
+    ]);
+
+    const result = calculateRouteVerticalProfile({
+      legs,
+      plannedAltitudesFt: [4000, 4000],
+      waypointConstraints: [{ waypointId: 'B', mode: 'circuits', elevationFt: 500 }],
+      ...automaticSettings,
+    });
+
+    expect(result.events.filter((event) => event.reason === 'airport').map((event) => event.type)).toEqual(['TOD', 'TOC']);
   });
 
   it('does not create a zero-distance TOD marker at the final waypoint', () => {
