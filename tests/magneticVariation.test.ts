@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { automaticVariationForLeg, routeLegMidpoint } from '../src/navigation/magneticVariation';
+import {
+  automaticVariationForLeg,
+  roundVariationDeg,
+  routeLegMidpoint,
+} from '../src/navigation/magneticVariation';
 import type { RouteLeg } from '../src/types';
 
 const leg: RouteLeg = {
@@ -24,5 +28,12 @@ describe('automatic magnetic variation', () => {
     expect(Number.isFinite(result.variationDegEast)).toBe(true);
     expect(result.variationDegEast).toBeGreaterThan(0);
     expect(result.variationDegEast).toBeLessThan(30);
+  });
+
+  it('rounds east and west variation to whole degrees symmetrically', () => {
+    expect(roundVariationDeg(7.4)).toBe(7);
+    expect(roundVariationDeg(7.5)).toBe(8);
+    expect(roundVariationDeg(-7.4)).toBe(-7);
+    expect(roundVariationDeg(-7.5)).toBe(-8);
   });
 });
