@@ -4,6 +4,7 @@ import { FlightPlanStore } from './flightplan/FlightPlanStore';
 import { MapManager, type ChartDetailMode } from './map/MapManager';
 import { RoutePanel } from './components/RoutePanel';
 import { NavigationPanel } from './components/NavigationPanel';
+import { PerformancePanel } from './components/PerformancePanel';
 import { OFPTable } from './components/OFPTable';
 
 if ('serviceWorker' in navigator) {
@@ -24,13 +25,14 @@ root.innerHTML = `
           <div class="brand-subtitle">VFR · NORWAY · TRAINING</div>
         </div>
       </div>
-      <div class="phase-chip"><span></span> PHASE 3 · NORWEGIAN MAPS</div>
+      <div class="phase-chip"><span></span> PHASE 4 · CRUISE PERFORMANCE</div>
     </header>
 
     <main class="workspace">
       <aside class="left-column">
         <section id="route-panel" class="route-panel panel"></section>
         <section id="navigation-panel" class="navigation-panel panel"></section>
+        <section id="performance-panel" class="performance-panel panel"></section>
       </aside>
       <section id="map-column" class="map-column">
         <div class="map-toolbar">
@@ -61,6 +63,7 @@ root.innerHTML = `
 
 const routeElement = document.querySelector<HTMLElement>('#route-panel');
 const navigationElement = document.querySelector<HTMLElement>('#navigation-panel');
+const performanceElement = document.querySelector<HTMLElement>('#performance-panel');
 const mapElement = document.querySelector<HTMLElement>('#map');
 const mapColumn = document.querySelector<HTMLElement>('#map-column');
 const mapExpandButton = document.querySelector<HTMLButtonElement>('#map-expand');
@@ -69,6 +72,7 @@ const tableElement = document.querySelector<HTMLElement>('#ofp-table');
 if (
   !routeElement ||
   !navigationElement ||
+  !performanceElement ||
   !mapElement ||
   !mapColumn ||
   !mapExpandButton ||
@@ -81,6 +85,7 @@ if (
 const store = new FlightPlanStore();
 const routePanel = new RoutePanel(routeElement, store);
 const navigationPanel = new NavigationPanel(navigationElement, store);
+const performancePanel = new PerformancePanel(performanceElement, store);
 const ofpTable = new OFPTable(tableElement, store);
 const mapManager = new MapManager(mapElement, {
   onMapClick: (lat, lon) => store.addWaypoint({ lat, lon }),
@@ -119,6 +124,7 @@ document.addEventListener('keydown', (event) => {
 });
 
 navigationPanel.render();
+performancePanel.render();
 
 const render = () => {
   const waypoints = store.getWaypoints();
