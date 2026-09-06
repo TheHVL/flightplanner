@@ -40,6 +40,10 @@ export function automaticVariationForLeg(
   };
 }
 
+export function roundVariationDeg(value: number): number {
+  return value < 0 ? -Math.round(Math.abs(value)) : Math.round(value);
+}
+
 function normalizeLongitude(value: number): number {
   return ((value + 540) % 360) - 180;
 }
