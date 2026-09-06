@@ -44,18 +44,64 @@ body.map-overlay-open { overflow: hidden; }
 
 .map-expand-button:hover { background: #f1f5f9; }
 
-/* Keep the chart flush with the OFP even when the left-side planning panels are taller. */
+/* Desktop workspace height is user adjustable. The sidebar scrolls inside it so it cannot push the OFP down. */
+.workspace {
+  height: var(--workspace-height, 680px);
+  min-height: 480px;
+  align-items: stretch;
+}
+
+.left-column {
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding-right: 3px;
+}
+
 .map-column {
   display: flex;
   flex-direction: column;
+  height: 100%;
+  min-height: 0;
 }
 
 .map-column .map-toolbar { flex: 0 0 54px; }
 .map {
   flex: 1 1 auto;
-  min-height: clamp(650px, 72vh, 900px);
+  min-height: 0;
   height: auto;
 }
+
+.map-resize-handle {
+  position: relative;
+  flex: 0 0 14px;
+  display: grid;
+  place-items: center;
+  border-top: 1px solid #c7d0db;
+  background: #f4f7fa;
+  cursor: ns-resize;
+  touch-action: none;
+  user-select: none;
+}
+
+.map-resize-handle::before {
+  content: '';
+  width: 48px;
+  height: 4px;
+  border-radius: 999px;
+  background: #9aa8b8;
+}
+
+.map-resize-handle:hover,
+.map-resize-handle:focus-visible {
+  background: #e9eff6;
+  outline: none;
+}
+
+.map-resize-handle:focus-visible::before { background: #356db5; }
+body.map-resizing { cursor: ns-resize; user-select: none; }
 
 .map-column--expanded {
   position: fixed;
@@ -71,13 +117,17 @@ body.map-overlay-open { overflow: hidden; }
 .map-column--expanded .map-toolbar { flex: 0 0 54px; }
 .map-column--expanded .map { flex: 1 1 auto; min-height: 0; height: auto; max-height: none; }
 .map-column--expanded .map-note { display: block; }
+.map-column--expanded .map-resize-handle { display: none; }
 
 @media (max-width: 1100px) {
   .map-note { display: none; }
 }
 
 @media (max-width: 900px) {
+  .workspace { height: auto; min-height: 0; }
+  .left-column { height: auto; overflow: visible; padding-right: 0; }
   .map { flex: 0 0 auto; min-height: 0; height: max(520px, 64vh); }
+  .map-resize-handle { display: none; }
   .map-toolbar-right { gap: 8px; }
   .chart-detail-control span { display: none; }
   .map-expand-button { padding: 6px 8px; }

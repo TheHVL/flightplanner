@@ -58,6 +58,17 @@ root.innerHTML = `
           </div>
         </div>
         <div id="map" class="map"></div>
+        <div
+          id="map-resize-handle"
+          class="map-resize-handle"
+          role="separator"
+          tabindex="0"
+          aria-orientation="horizontal"
+          aria-label="Resize map and planning workspace"
+          aria-valuemin="480"
+          aria-valuemax="1000"
+          title="Drag up or down to resize the map. Double-click to reset."
+        ></div>
       </section>
     </main>
 
@@ -65,6 +76,7 @@ root.innerHTML = `
   </div>
 `;
 
+const workspace = document.querySelector<HTMLElement>('.workspace');
 const routeElement = document.querySelector<HTMLElement>('#route-panel');
 const navigationElement = document.querySelector<HTMLElement>('#navigation-panel');
 const performanceElement = document.querySelector<HTMLElement>('#performance-panel');
@@ -72,9 +84,11 @@ const weatherElement = document.querySelector<HTMLElement>('#weather-panel');
 const mapElement = document.querySelector<HTMLElement>('#map');
 const mapColumn = document.querySelector<HTMLElement>('#map-column');
 const mapExpandButton = document.querySelector<HTMLButtonElement>('#map-expand');
+const mapResizeHandle = document.querySelector<HTMLElement>('#map-resize-handle');
 const chartDetailSelect = document.querySelector<HTMLSelectElement>('#chart-detail');
 const tableElement = document.querySelector<HTMLElement>('#ofp-table');
 if (
+  !workspace ||
   !routeElement ||
   !navigationElement ||
   !performanceElement ||
@@ -82,6 +96,7 @@ if (
   !mapElement ||
   !mapColumn ||
   !mapExpandButton ||
+  !mapResizeHandle ||
   !chartDetailSelect ||
   !tableElement
 ) {
@@ -110,6 +125,68 @@ chartDetailSelect.addEventListener('change', () => {
   if (!isChartDetailMode(mode)) return;
   localStorage.setItem('flightplanner-icao-detail', mode);
   mapManager.setChartDetail(mode);
+});
+
+const MIN_WORKSPACE_HEIGHT = 480;
+const MAX_WORKSPACE_HEIGHT = 1000;
+const defaultWorkspaceHeight = Math.min(700, Math.max(560, window.innerHeight - 180));
+const savedWorkspaceHeight = Number(localStorage.getItem('flightplanner-workspace-height'));
+
+const setWorkspaceHeight = (height: number, persist = false) => {
+  const clamped = Math.round(Math.min(MAX_WORKSPACE_HEIGHT, Math.max(MIN_WORKSPACE_HEIGHT, height)));
+  workspace.style.setProperty('--workspace-height', `${clamped}px`);
+  mapResizeHandle.setAttribute('aria-valuenow', String(clamped));
+  if (persist) {
+    localStorage.setItem('flightplanner-workspace-height', String(clamped));
+  }
+  window.requestAnimationFrame(() => mapManager.invalidateSize());
+};
+
+setWorkspaceHeight(Number.isFinite(savedWorkspaceHeight) && savedWorkspaceHeight > 0 ? savedWorkspaceHeight : defaultWorkspaceHeight);
+
+let resizePointerId: number | null = null;
+let resizeStartY = 0;
+let resizeStartHeight = 0;
+
+const finishMapResize = () => {
+  if (resizePointerId === null) return;
+  resizePointerId = null;
+  document.body.classList.remove('map-resizing');
+  const currentHeight = workspace.getBoundingClientRect().height;
+  setWorkspaceHeight(currentHeight, true);
+};
+
+mapResizeHandle.addEventListener('pointerdown', (event) => {
+  if (window.matchMedia('(max-width: 900px)').matches) return;
+  resizePointerId = event.pointerId;
+  resizeStartY = event.clientY;
+  resizeStartHeight = workspace.getBoundingClientRect().height;
+  mapResizeHandle.setPointerCapture(event.pointerId);
+  document.body.classList.add('map-resizing');
+  event.preventDefault();
+});
+
+mapResizeHandle.addEventListener('pointermove', (event) => {
+  if (resizePointerId !== event.pointerId) return;
+  setWorkspaceHeight(resizeStartHeight + event.clientY - resizeStartY);
+});
+
+mapResizeHandle.addEventListener('pointerup', (event) => {
+  if (resizePointerId !== event.pointerId) return;
+  if (mapResizeHandle.hasPointerCapture(event.pointerId)) {
+    mapResizeHandle.releasePointerCapture(event.pointerId);
+  }
+  finishMapResize();
+});
+
+mapResizeHandle.addEventListener('pointercancel', finishMapResize);
+mapResizeHandle.addEventListener('dblclick', () => setWorkspaceHeight(defaultWorkspaceHeight, true));
+mapResizeHandle.addEventListener('keydown', (event) => {
+  if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
+  event.preventDefault();
+  const currentHeight = workspace.getBoundingClientRect().height;
+  const delta = event.key === 'ArrowUp' ? -20 : 20;
+  setWorkspaceHeight(currentHeight + delta, true);
 });
 
 const setMapExpanded = (expanded: boolean) => {
