@@ -39,6 +39,7 @@ export class FlightPlanStore {
   private waypoints: Waypoint[] = [];
   private navigationSettings: NavigationSettings = { ...DEFAULT_NAVIGATION_SETTINGS };
   private performanceSettings: PerformanceSettings = { ...DEFAULT_PERFORMANCE_SETTINGS };
+  private plannedAltitudesFt = new Map<string, number>();
   private listeners = new Set<Listener>();
 
   getWaypoints(): Waypoint[] {
@@ -57,6 +58,10 @@ export class FlightPlanStore {
     return { ...this.performanceSettings };
   }
 
+  getPlannedAltitudeFt(fromId: string, toId: string): number | null {
+    return this.plannedAltitudesFt.get(this.legKey(fromId, toId)) ?? null;
+  }
+
   updateNavigationSettings(patch: Partial<NavigationSettings>): void {
     this.navigationSettings = { ...this.navigationSettings, ...patch };
     this.emit();
@@ -64,6 +69,19 @@ export class FlightPlanStore {
 
   updatePerformanceSettings(patch: Partial<PerformanceSettings>): void {
     this.performanceSettings = { ...this.performanceSettings, ...patch };
+    this.emit();
+  }
+
+  setPlannedAltitudeFt(fromId: string, toId: string, altitudeFt: number | null): void {
+    const key = this.legKey(fromId, toId);
+    if (altitudeFt === null) {
+      this.plannedAltitudesFt.delete(key);
+    } else {
+      if (!Number.isFinite(altitudeFt) || altitudeFt < 0 || altitudeFt > 30000) {
+        return;
+      }
+      this.plannedAltitudesFt.set(key, Math.round(altitudeFt));
+    }
     this.emit();
   }
 
@@ -93,6 +111,7 @@ export class FlightPlanStore {
 
   removeWaypoint(id: string): void {
     this.waypoints = this.waypoints.filter((waypoint) => waypoint.id !== id);
+    this.retainCurrentLegSettings();
     this.emit();
   }
 
@@ -107,6 +126,7 @@ export class FlightPlanStore {
     const reordered = [...this.waypoints];
     [reordered[index], reordered[nextIndex]] = [reordered[nextIndex], reordered[index]];
     this.waypoints = reordered;
+    this.retainCurrentLegSettings();
     this.emit();
   }
 
@@ -115,7 +135,23 @@ export class FlightPlanStore {
       return;
     }
     this.waypoints = [];
+    this.plannedAltitudesFt.clear();
     this.emit();
+  }
+
+  private legKey(fromId: string, toId: string): string {
+    return `${fromId}->${toId}`;
+  }
+
+  private retainCurrentLegSettings(): void {
+    const activeKeys = new Set(
+      this.getLegs().map((leg) => this.legKey(leg.from.id, leg.to.id)),
+    );
+    for (const key of this.plannedAltitudesFt.keys()) {
+      if (!activeKeys.has(key)) {
+        this.plannedAltitudesFt.delete(key);
+      }
+    }
   }
 
   private emit(): void {
