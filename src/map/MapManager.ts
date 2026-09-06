@@ -14,43 +14,74 @@ export interface MapManagerCallbacks {
   onWaypointMoved(id: string, lat: number, lon: number): void;
 }
 
+export type ChartDetailMode = 'auto' | 'sharp' | 'fast';
+
 const WEB_MERCATOR_HALF_WORLD = 20037508.342789244;
 const WEB_MERCATOR_INITIAL_RESOLUTION = 156543.03392804097;
 const VFR_SOURCE_RESOLUTION_M_PER_PX = 31.75;
 const TILE_CSS_PX = 256;
-const AVINOR_ICAO_EXPORT =
-  'https://avigis.avinor.no/agsmap/rest/services/ICAO_500000_ExB/MapServer/export';
+const AVINOR_ICAO_SERVICE =
+  'https://avigis.avinor.no/agsmap/rest/services/ICAO_500000_ExB/MapServer';
+const AVINOR_ICAO_EXPORT = `${AVINOR_ICAO_SERVICE}/export`;
+const AVINOR_ICAO_LAYERS = `${AVINOR_ICAO_SERVICE}/layers`;
 
 export function webMercatorTileCentreLatitudeDeg(z: number, y: number): number {
   const n = Math.PI - (2 * Math.PI * (y + 0.5)) / 2 ** z;
   return (180 / Math.PI) * Math.atan(Math.sinh(n));
 }
 
-export function vfrPixelRatio(z: number, y: number, devicePixelRatio = 1): number {
+export function chartDetailRatioCap(z: number, mode: ChartDetailMode): number {
+  if (mode === 'sharp') return 4;
+  if (mode === 'fast') return 1;
+  return z <= 9 ? 2 : 4;
+}
+
+export function vfrPixelRatio(
+  z: number,
+  y: number,
+  devicePixelRatio = 1,
+  mode: ChartDetailMode = 'auto',
+): number {
   const latitudeRad = (webMercatorTileCentreLatitudeDeg(z, y) * Math.PI) / 180;
   const cssResolutionMPerPx =
     (WEB_MERCATOR_INITIAL_RESOLUTION * Math.cos(latitudeRad)) / 2 ** z;
   const sourceMatchRatio = cssResolutionMPerPx / VFR_SOURCE_RESOLUTION_M_PER_PX;
+  const wantedRatio = Math.min(sourceMatchRatio, chartDetailRatioCap(z, mode));
 
-  return Math.min(4, Math.max(1, devicePixelRatio, sourceMatchRatio));
+  return Math.min(4, Math.max(1, devicePixelRatio > 0 ? devicePixelRatio : 1, wantedRatio));
 }
 
-export function vfrTilePixels(z: number, y: number, devicePixelRatio = 1): number {
-  const requested = TILE_CSS_PX * vfrPixelRatio(z, y, devicePixelRatio);
+export function vfrTilePixels(
+  z: number,
+  y: number,
+  devicePixelRatio = 1,
+  mode: ChartDetailMode = 'auto',
+): number {
+  const requested = TILE_CSS_PX * vfrPixelRatio(z, y, devicePixelRatio, mode);
   return Math.ceil(requested / 8) * 8;
 }
 
 class AvinorIcaoLayer extends L.GridLayer {
+  private detailMode: ChartDetailMode = 'auto';
+
   constructor(options?: GridLayerOptions) {
     super({
       tileSize: TILE_CSS_PX,
-      maxZoom: 13,
+      maxZoom: 18,
+      maxNativeZoom: 11,
       minZoom: 4,
+      noWrap: true,
       keepBuffer: 4,
       updateWhenIdle: true,
       updateWhenZooming: false,
       ...options,
     });
+  }
+
+  setDetailMode(mode: ChartDetailMode): void {
+    if (this.detailMode === mode) return;
+    this.detailMode = mode;
+    this.redraw();
   }
 
   createTile(coords: Coords, done: DoneCallback): HTMLElement {
@@ -65,7 +96,12 @@ class AvinorIcaoLayer extends L.GridLayer {
     const maxX = minX + span;
     const maxY = WEB_MERCATOR_HALF_WORLD - coords.y * span;
     const minY = maxY - span;
-    const rasterPixels = vfrTilePixels(coords.z, coords.y, window.devicePixelRatio || 1);
+    const rasterPixels = vfrTilePixels(
+      coords.z,
+      coords.y,
+      window.devicePixelRatio || 1,
+      this.detailMode,
+    );
 
     const params = new URLSearchParams({
       bbox: `${minX},${minY},${maxX},${maxY}`,
@@ -85,33 +121,44 @@ class AvinorIcaoLayer extends L.GridLayer {
   }
 }
 
+interface ArcGisLayerMetadata {
+  layers?: Array<{ name?: string }>;
+}
+
 export class MapManager {
   private readonly map: LeafletMap;
   private readonly markers = new Map<string, Marker>();
   private readonly resizeObserver?: ResizeObserver;
+  private readonly icaoLayer: AvinorIcaoLayer;
   private routeLine: Polyline;
+  private chartEdition: string | null = null;
 
   constructor(element: HTMLElement, callbacks: MapManagerCallbacks) {
     this.map = L.map(element, {
       zoomControl: true,
       attributionControl: true,
+      maxBounds: [[-90, -180], [90, 180]],
+      maxBoundsViscosity: 1,
+      worldCopyJump: false,
     }).setView([69.6492, 18.9553], 7);
 
     const kartverket = L.tileLayer(
       'https://cache.kartverket.no/v1/wmts/1.0.0/topo/default/webmercator/{z}/{y}/{x}.png',
       {
         maxZoom: 19,
+        noWrap: true,
         keepBuffer: 4,
         attribution: '&copy; Kartverket',
       },
     );
 
-    const icao = new AvinorIcaoLayer({
+    this.icaoLayer = new AvinorIcaoLayer({
       attribution: 'Norway Aeronautical Chart ICAO 1:500 000 &copy; Avinor',
     });
 
     const openStreetMap = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
+      noWrap: true,
       keepBuffer: 4,
       attribution: '&copy; OpenStreetMap contributors',
     });
@@ -121,7 +168,7 @@ export class MapManager {
       .layers(
         {
           'Norgeskart · Kartverket': kartverket,
-          'ICAO 1:500 000 · Avinor': icao,
+          'ICAO 1:500 000 · Avinor': this.icaoLayer,
           'OpenStreetMap · fallback': openStreetMap,
         },
         undefined,
@@ -144,11 +191,20 @@ export class MapManager {
       this.resizeObserver.observe(element);
     }
 
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.addEventListener('controllerchange', () => this.reportChartEdition());
+    }
+    this.requestChartEdition();
+
     window.setTimeout(() => this.invalidateSize(), 0);
   }
 
   invalidateSize(): void {
     this.map.invalidateSize({ pan: false, animate: false });
+  }
+
+  setChartDetail(mode: ChartDetailMode): void {
+    this.icaoLayer.setDetailMode(mode);
   }
 
   renderRoute(waypoints: Waypoint[], onMoved: MapManagerCallbacks['onWaypointMoved']): void {
@@ -199,6 +255,38 @@ export class MapManager {
       const bounds = L.latLngBounds(waypoints.map((waypoint) => [waypoint.lat, waypoint.lon]));
       this.map.fitBounds(bounds, { padding: [48, 48], maxZoom: 10 });
     }
+  }
+
+  private requestChartEdition(): void {
+    const callbackName = `__flightplannerIcaoEdition_${Date.now()}_${Math.floor(Math.random() * 1_000_000)}`;
+    const script = document.createElement('script');
+    const globalWindow = window as unknown as Record<string, unknown>;
+
+    const cleanup = () => {
+      delete globalWindow[callbackName];
+      script.remove();
+    };
+
+    globalWindow[callbackName] = (metadata: ArcGisLayerMetadata) => {
+      const edition = metadata.layers?.[0]?.name?.trim();
+      if (edition) {
+        this.chartEdition = edition;
+        this.reportChartEdition();
+      }
+      cleanup();
+    };
+
+    script.src = `${AVINOR_ICAO_LAYERS}?f=json&callback=${encodeURIComponent(callbackName)}`;
+    script.onerror = cleanup;
+    document.head.appendChild(script);
+  }
+
+  private reportChartEdition(): void {
+    if (!this.chartEdition || !('serviceWorker' in navigator)) return;
+    navigator.serviceWorker.controller?.postMessage({
+      type: 'chart-edition',
+      edition: this.chartEdition,
+    });
   }
 
   private waypointIcon(index: number, role: 'departure' | 'destination' | 'enroute'): L.DivIcon {
