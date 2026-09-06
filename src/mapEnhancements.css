@@ -1,0 +1,56 @@
+body.map-overlay-open { overflow: hidden; }
+
+.map-toolbar-right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  min-width: 0;
+}
+
+.map-expand-button {
+  flex: 0 0 auto;
+  padding: 7px 10px;
+  border: 1px solid #c9d3df;
+  border-radius: 6px;
+  background: #fff;
+  color: #35445a;
+  font-size: 10px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.map-expand-button:hover { background: #f1f5f9; }
+
+/* Larger by default for route planning on desktop. */
+.map {
+  height: clamp(650px, 72vh, 900px);
+}
+
+.map-column--expanded {
+  position: fixed;
+  inset: 10px;
+  z-index: 2000;
+  display: flex;
+  flex-direction: column;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 18px 60px rgb(4 14 28 / 38%);
+}
+
+.map-column--expanded .map-toolbar { flex: 0 0 54px; }
+.map-column--expanded .map { flex: 1 1 auto; min-height: 0; height: auto; max-height: none; }
+.map-column--expanded .map-note { display: block; }
+
+@media (max-width: 900px) {
+  .map { height: max(520px, 64vh); }
+  .map-toolbar-right { gap: 8px; }
+  .map-expand-button { padding: 6px 8px; }
+  .map-column--expanded { inset: 4px; }
+  .map-column--expanded .map-note { display: none; }
+}
+
+@media (max-width: 560px) {
+  .map-toolbar { padding: 0 9px; }
+  .map-expand-button { font-size: 9px; }
+}
