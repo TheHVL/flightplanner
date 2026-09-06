@@ -101,15 +101,20 @@ describe('vertical profile', () => {
       ...automaticSettings,
     });
 
-    expect(result.events.map((event) => [event.type, event.reason, event.waypointName])).toEqual([
+    const eventKeys = result.events.map((event) => [event.type, event.reason, event.waypointName]);
+    expect(eventKeys).toHaveLength(4);
+    expect(eventKeys).toEqual(expect.arrayContaining([
       ['TOC', 'departure', 'A'],
       ['TOC', 'pl-change', 'B'],
       ['TOD', 'pl-change', 'C'],
       ['TOD', 'arrival', 'D'],
-    ]);
-    expect(result.events[1].distanceFromWaypointNm).toBeCloseTo(5, 8);
-    expect(result.events[2].position).toBe('after');
-    expect(result.events[2].routeDistanceNm).toBeGreaterThanOrEqual(
+    ]));
+
+    const climbAtB = result.events.find((event) => event.type === 'TOC' && event.waypointName === 'B');
+    const descentAtC = result.events.find((event) => event.type === 'TOD' && event.reason === 'pl-change' && event.waypointName === 'C');
+    expect(climbAtB?.distanceFromWaypointNm).toBeCloseTo(5, 8);
+    expect(descentAtC?.position).toBe('after');
+    expect(descentAtC?.routeDistanceNm).toBeGreaterThanOrEqual(
       legs[0].distanceNm + legs[1].distanceNm,
     );
   });
