@@ -1,17 +1,28 @@
 import type { FlightPlanStore } from '../flightplan/FlightPlanStore';
 import { totalRouteDistanceNm } from '../navigation/geodesy';
-import { automaticVariationForLeg } from '../navigation/magneticVariation';
+import {
+  automaticVariationForLeg,
+  roundVariationDeg,
+} from '../navigation/magneticVariation';
 import { solveWindTriangle, trueToMagnetic } from '../navigation/wind';
 import {
   calculateCruisePerformance,
   type CruisePerformanceResult,
 } from '../performance/cruisePerformance';
 
+interface LegRowResult {
+  html: string;
+  fuelGal: number;
+  timeMinutes: number;
+}
+
 export class OFPTable {
   constructor(
     private readonly element: HTMLElement,
     private readonly store: FlightPlanStore,
-  ) {}
+  ) {
+    this.element.addEventListener('change', (event) => this.handleChange(event));
+  }
 
   render(): void {
     const legs = this.store.getLegs();
@@ -29,6 +40,8 @@ export class OFPTable {
       }
     }
 
+    let accumulatedDistanceNm = 0;
+    let accumulatedTimeMinutes = 0;
     let accumulatedFuelGal = 0;
     const rows = legs.map((leg) => {
       const row = this.legRow(
@@ -36,8 +49,12 @@ export class OFPTable {
         settings,
         cruisePerformance,
         performanceError,
+        accumulatedDistanceNm,
+        accumulatedTimeMinutes,
         accumulatedFuelGal,
       );
+      accumulatedDistanceNm += leg.distanceNm;
+      accumulatedTimeMinutes += row.timeMinutes;
       accumulatedFuelGal += row.fuelGal;
       return row.html;
     });
@@ -54,18 +71,49 @@ export class OFPTable {
         </div>
       </div>
       <div class="table-scroll">
-        <table>
+        <table class="ofp-table">
           <thead>
-            <tr>
-              <th>FROM</th><th>TO</th><th>TAS</th><th>TT</th><th>VAR</th><th>MT</th><th>WIND<br>DIR/VEL</th><th>WCA</th><th>DIST</th><th>TIME</th><th>FF</th><th>INT</th><th>ACC</th><th>ALT</th><th>MSA</th><th>PL</th><th>TH</th><th>MH</th><th>GS</th><th>ETO</th><th>FREQ</th>
+            <tr class="ofp-group-row">
+              <th rowspan="2">FROM</th>
+              <th rowspan="2">TAS</th>
+              <th rowspan="2">TT</th>
+              <th rowspan="2">VAR</th>
+              <th rowspan="2">MT</th>
+              <th colspan="2">WIND</th>
+              <th colspan="2">ACC</th>
+              <th colspan="3">FUEL</th>
+              <th rowspan="2">TO</th>
+              <th colspan="2">ALTITUDE</th>
+              <th rowspan="2">MH</th>
+              <th colspan="3">INTERMEDIATE</th>
+              <th rowspan="2">ETO</th>
+              <th colspan="2">TIME</th>
+              <th colspan="2">FUEL REMAINING</th>
+              <th rowspan="2">FREQ</th>
+            </tr>
+            <tr class="ofp-subhead-row">
+              <th>DIR/VEL</th><th>WCA</th>
+              <th title="Accumulated route distance from departure">DIST</th>
+              <th title="Accumulated route time from departure">TIME</th>
+              <th title="Fuel flow in US gallons per hour">FF<br><span class="ofp-unit">GPH</span></th>
+              <th title="Fuel used on this leg">INT<br><span class="ofp-unit">GAL</span></th>
+              <th title="Accumulated cruise fuel used">ACC<br><span class="ofp-unit">GAL</span></th>
+              <th>MSA</th><th title="Planned level for this leg">PL</th>
+              <th>GS</th><th title="Distance for this leg">DIST</th><th title="Time for this leg">TIME</th>
+              <th>ATO</th><th>DIFF</th>
+              <th>EST</th><th>ACT</th>
             </tr>
           </thead>
           <tbody>
-            ${legs.length === 0 ? '<tr><td colspan="21" class="table-empty">Add at least two waypoints to calculate a leg.</td></tr>' : rows.join('')}
+            ${legs.length === 0 ? '<tr><td colspan="25" class="table-empty">Add at least two waypoints to calculate a leg.</td></tr>' : rows.join('')}
           </tbody>
         </table>
       </div>
-      <div class="table-legend"><span><i class="dot calculated-dot"></i> Calculated</span><span><i class="dot pending-dot"></i> Added in later phases</span></div>
+      <div class="table-legend">
+        <span><i class="dot calculated-dot"></i> Calculated</span>
+        <span><i class="dot pending-dot"></i> Added in later phases</span>
+        <span>Fuel INT = this leg, Fuel ACC = accumulated cruise fuel used</span>
+      </div>
     `;
   }
 
@@ -74,8 +122,10 @@ export class OFPTable {
     settings: ReturnType<FlightPlanStore['getNavigationSettings']>,
     cruisePerformance: CruisePerformanceResult | null,
     performanceError: string | null,
+    accumulatedDistanceBeforeNm: number,
+    accumulatedTimeBeforeMinutes: number,
     accumulatedFuelBeforeGal: number,
-  ): { html: string; fuelGal: number } {
+  ): LegRowResult {
     try {
       if (performanceError) {
         throw new Error(`POH performance: ${performanceError}`);
@@ -83,9 +133,10 @@ export class OFPTable {
 
       const tasKt = cruisePerformance?.ktas ?? settings.tasKt;
       const fuelFlowGph = cruisePerformance?.fuelFlowGph ?? null;
-      const variationDegEast = settings.automaticVariation
+      const rawVariationDegEast = settings.automaticVariation
         ? automaticVariationForLeg(leg).variationDegEast
         : settings.variationDegEast;
+      const variationDegEast = roundVariationDeg(rawVariationDegEast);
 
       const wind = solveWindTriangle({
         trueTrackDeg: leg.trueTrackDeg,
@@ -97,33 +148,56 @@ export class OFPTable {
       const magneticHeading = trueToMagnetic(wind.trueHeadingDeg, variationDegEast);
       const timeHours = leg.distanceNm / wind.groundSpeedKt;
       const timeMinutes = timeHours * 60;
+      const accumulatedDistanceNm = accumulatedDistanceBeforeNm + leg.distanceNm;
+      const accumulatedTimeMinutes = accumulatedTimeBeforeMinutes + timeMinutes;
       const legFuelGal = fuelFlowGph === null ? 0 : fuelFlowGph * timeHours;
       const accumulatedFuelGal = accumulatedFuelBeforeGal + legFuelGal;
-      const variationLabel = `${Math.abs(variationDegEast).toFixed(1)}°${variationDegEast >= 0 ? 'E' : 'W'}`;
+      const variationLabel = `${Math.abs(variationDegEast)}°${variationDegEast >= 0 ? 'E' : 'W'}`;
+      const plannedAltitudeFt = this.store.getPlannedAltitudeFt(leg.from.id, leg.to.id);
 
       return {
         fuelGal: legFuelGal,
+        timeMinutes,
         html: `
         <tr>
           <td><strong>${leg.from.name}</strong></td>
-          <td><strong>${leg.to.name}</strong></td>
           <td class="calculated">${tasKt.toFixed(0)}</td>
           <td class="calculated">${leg.trueTrackDeg.toFixed(1)}°</td>
-          <td class="calculated" title="${settings.automaticVariation ? 'WMM2025 at leg midpoint' : 'Manual variation override'}">${variationLabel}</td>
+          <td class="calculated" title="${settings.automaticVariation ? `WMM2025 at leg midpoint: ${rawVariationDegEast.toFixed(2)}°, rounded for OFP` : 'Manual variation override'}">${variationLabel}</td>
           <td class="calculated">${magneticTrack.toFixed(1)}°</td>
           <td class="calculated">${String(Math.round(settings.windFromDeg)).padStart(3, '0')}/${settings.windSpeedKt.toFixed(0)}</td>
           <td class="calculated">${this.signed(wind.wcaDeg)}°</td>
-          <td class="calculated">${leg.distanceNm.toFixed(1)}</td>
-          <td class="calculated">${this.formatMinutes(timeMinutes)}</td>
+          <td class="calculated" title="Accumulated distance from departure">${accumulatedDistanceNm.toFixed(1)}</td>
+          <td class="calculated" title="Accumulated time from departure">${this.formatMinutes(accumulatedTimeMinutes)}</td>
           ${fuelFlowGph === null
             ? '<td class="pending">—</td><td class="pending">—</td><td class="pending">—</td>'
-            : `<td class="calculated">${fuelFlowGph.toFixed(1)}</td><td class="calculated">${legFuelGal.toFixed(2)}</td><td class="calculated">${accumulatedFuelGal.toFixed(2)}</td>`}
+            : `<td class="calculated" title="Fuel flow, US gal/hour">${fuelFlowGph.toFixed(1)}</td><td class="calculated" title="Fuel used on this leg, US gal">${legFuelGal.toFixed(2)}</td><td class="calculated" title="Accumulated cruise fuel used, US gal">${accumulatedFuelGal.toFixed(2)}</td>`}
+          <td><strong>${leg.to.name}</strong></td>
           <td class="pending">—</td>
-          <td class="pending">—</td>
-          <td class="pending">—</td>
-          <td class="calculated">${wind.trueHeadingDeg.toFixed(1)}°</td>
+          <td class="editable-cell">
+            <input
+              class="ofp-altitude-input"
+              type="number"
+              inputmode="numeric"
+              min="0"
+              max="30000"
+              step="100"
+              placeholder="ft"
+              aria-label="Planned altitude ${leg.from.name} to ${leg.to.name}"
+              title="Planned level for this leg in feet"
+              data-alt-from="${leg.from.id}"
+              data-alt-to="${leg.to.id}"
+              value="${plannedAltitudeFt ?? ''}"
+            />
+          </td>
           <td class="calculated">${magneticHeading.toFixed(1)}°</td>
           <td class="calculated">${wind.groundSpeedKt.toFixed(0)}</td>
+          <td class="calculated" title="Distance for this leg">${leg.distanceNm.toFixed(1)}</td>
+          <td class="calculated" title="Time for this leg">${this.formatMinutes(timeMinutes)}</td>
+          <td class="pending">—</td>
+          <td class="pending">—</td>
+          <td class="pending">—</td>
+          <td class="pending">—</td>
           <td class="pending">—</td>
           <td class="pending">—</td>
         </tr>`,
@@ -132,9 +206,26 @@ export class OFPTable {
       const message = error instanceof Error ? error.message : 'Navigation calculation failed.';
       return {
         fuelGal: 0,
-        html: `<tr><td><strong>${leg.from.name}</strong></td><td><strong>${leg.to.name}</strong></td><td colspan="19" class="calculation-error">${message}</td></tr>`,
+        timeMinutes: 0,
+        html: `<tr><td><strong>${leg.from.name}</strong></td><td colspan="24" class="calculation-error">${message}</td></tr>`,
       };
     }
+  }
+
+  private handleChange(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const fromId = input.dataset.altFrom;
+    const toId = input.dataset.altTo;
+    if (!fromId || !toId) return;
+
+    if (input.value.trim() === '') {
+      this.store.setPlannedAltitudeFt(fromId, toId, null);
+      return;
+    }
+
+    const altitudeFt = Number(input.value);
+    if (!Number.isFinite(altitudeFt)) return;
+    this.store.setPlannedAltitudeFt(fromId, toId, altitudeFt);
   }
 
   private signed(value: number): string {
