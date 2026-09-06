@@ -23,7 +23,21 @@ Displayed OFP values may be rounded for readability. Internal calculations keep 
 
 ---
 
-## Unreleased / Phase 7 AIP and circuit planning
+## PR #17, fix Avinor AIP current-issue detection
+
+### Fixed
+
+- The first Phase 7 deployment revealed that Avinor's current AIP history-page link format did not match the original strict URL parser.
+- Replaced the strict href assumption with current AIRAC date detection from Avinor's AIP history page.
+- The Pages build now constructs the current English eAIP issue path from the detected AIRAC date.
+- Verified in GitHub Pages deployment that the updater parsed 53 AD 2 aerodromes from the AIP effective 2026-09-03. ENVR and ENBH were skipped because their requested AD 2 pages returned HTTP 404.
+- The committed fallback catalog is still retained if a future AIP refresh fails.
+
+No aviation formulas changed in this update.
+
+---
+
+## PR #16, Phase 7 AIP and circuit planning
 
 ### Added
 
@@ -94,7 +108,7 @@ This guarantees that a descent belonging to the outbound leg never begins before
 
 - Automatic vertical transitions across the whole route rather than only departure and destination.
 - A higher outbound PL creates a TOC after the intermediate waypoint.
-- A lower outbound PL originally created a TOD associated with the intermediate waypoint. This behavior was subsequently refined in the Phase 7 update above so TOD cannot move to the wrong side of the waypoint.
+- A lower outbound PL originally created a TOD associated with the intermediate waypoint. This behavior was subsequently refined in PR #16 so TOD cannot move to the wrong side of the waypoint.
 - Intermediate waypoint modes: Auto from PL, Airport/T&G, Off.
 - Airport/T&G accepts field elevation, creates TOD before the airport and TOC after it.
 - Multiple TOC/TOD map markers.
