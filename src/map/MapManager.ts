@@ -15,33 +15,65 @@ export interface MapManagerCallbacks {
 }
 
 const WEB_MERCATOR_HALF_WORLD = 20037508.342789244;
+const WEB_MERCATOR_INITIAL_RESOLUTION = 156543.03392804097;
+const VFR_SOURCE_RESOLUTION_M_PER_PX = 31.75;
+const TILE_CSS_PX = 256;
 const AVINOR_ICAO_EXPORT =
   'https://avigis.avinor.no/agsmap/rest/services/ICAO_500000_ExB/MapServer/export';
 
+export function webMercatorTileCentreLatitudeDeg(z: number, y: number): number {
+  const n = Math.PI - (2 * Math.PI * (y + 0.5)) / 2 ** z;
+  return (180 / Math.PI) * Math.atan(Math.sinh(n));
+}
+
+export function vfrPixelRatio(z: number, y: number, devicePixelRatio = 1): number {
+  const latitudeRad = (webMercatorTileCentreLatitudeDeg(z, y) * Math.PI) / 180;
+  const cssResolutionMPerPx =
+    (WEB_MERCATOR_INITIAL_RESOLUTION * Math.cos(latitudeRad)) / 2 ** z;
+  const sourceMatchRatio = cssResolutionMPerPx / VFR_SOURCE_RESOLUTION_M_PER_PX;
+
+  return Math.min(4, Math.max(1, devicePixelRatio, sourceMatchRatio));
+}
+
+export function vfrTilePixels(z: number, y: number, devicePixelRatio = 1): number {
+  const requested = TILE_CSS_PX * vfrPixelRatio(z, y, devicePixelRatio);
+  return Math.ceil(requested / 8) * 8;
+}
+
 class AvinorIcaoLayer extends L.GridLayer {
   constructor(options?: GridLayerOptions) {
-    super({ tileSize: 256, maxZoom: 13, minZoom: 4, ...options });
+    super({
+      tileSize: TILE_CSS_PX,
+      maxZoom: 13,
+      minZoom: 4,
+      keepBuffer: 4,
+      updateWhenIdle: true,
+      updateWhenZooming: false,
+      ...options,
+    });
   }
 
   createTile(coords: Coords, done: DoneCallback): HTMLElement {
     const tile = document.createElement('img');
     tile.alt = '';
+    tile.decoding = 'async';
     tile.setAttribute('role', 'presentation');
 
-    const tileSize = 256;
     const tilesAtZoom = 2 ** coords.z;
     const span = (WEB_MERCATOR_HALF_WORLD * 2) / tilesAtZoom;
     const minX = -WEB_MERCATOR_HALF_WORLD + coords.x * span;
     const maxX = minX + span;
     const maxY = WEB_MERCATOR_HALF_WORLD - coords.y * span;
     const minY = maxY - span;
+    const rasterPixels = vfrTilePixels(coords.z, coords.y, window.devicePixelRatio || 1);
 
     const params = new URLSearchParams({
       bbox: `${minX},${minY},${maxX},${maxY}`,
       bboxSR: '3857',
       imageSR: '3857',
-      size: `${tileSize},${tileSize}`,
-      format: 'png32',
+      size: `${rasterPixels},${rasterPixels}`,
+      format: 'png24',
+      dpi: '96',
       transparent: 'false',
       f: 'image',
     });
@@ -56,6 +88,7 @@ class AvinorIcaoLayer extends L.GridLayer {
 export class MapManager {
   private readonly map: LeafletMap;
   private readonly markers = new Map<string, Marker>();
+  private readonly resizeObserver?: ResizeObserver;
   private routeLine: Polyline;
 
   constructor(element: HTMLElement, callbacks: MapManagerCallbacks) {
@@ -68,6 +101,7 @@ export class MapManager {
       'https://cache.kartverket.no/v1/wmts/1.0.0/topo/default/webmercator/{z}/{y}/{x}.png',
       {
         maxZoom: 19,
+        keepBuffer: 4,
         attribution: '&copy; Kartverket',
       },
     );
@@ -78,6 +112,7 @@ export class MapManager {
 
     const openStreetMap = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
+      keepBuffer: 4,
       attribution: '&copy; OpenStreetMap contributors',
     });
 
@@ -104,7 +139,16 @@ export class MapManager {
       callbacks.onMapClick(event.latlng.lat, event.latlng.lng);
     });
 
-    window.setTimeout(() => this.map.invalidateSize(), 0);
+    if (typeof ResizeObserver !== 'undefined') {
+      this.resizeObserver = new ResizeObserver(() => this.invalidateSize());
+      this.resizeObserver.observe(element);
+    }
+
+    window.setTimeout(() => this.invalidateSize(), 0);
+  }
+
+  invalidateSize(): void {
+    this.map.invalidateSize({ pan: false, animate: false });
   }
 
   renderRoute(waypoints: Waypoint[], onMoved: MapManagerCallbacks['onWaypointMoved']): void {
