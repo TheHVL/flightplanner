@@ -8,6 +8,15 @@ export interface NavigationSettings {
   windFromDeg: number;
   windSpeedKt: number;
   variationDegEast: number;
+  automaticVariation: boolean;
+}
+
+export interface PerformanceSettings {
+  usePohPerformance: boolean;
+  pressureAltitudeFt: number;
+  oatC: number;
+  rpm: number;
+  manifoldPressureInHg: number;
 }
 
 const DEFAULT_NAVIGATION_SETTINGS: NavigationSettings = {
@@ -15,11 +24,21 @@ const DEFAULT_NAVIGATION_SETTINGS: NavigationSettings = {
   windFromDeg: 0,
   windSpeedKt: 0,
   variationDegEast: 7,
+  automaticVariation: true,
+};
+
+const DEFAULT_PERFORMANCE_SETTINGS: PerformanceSettings = {
+  usePohPerformance: true,
+  pressureAltitudeFt: 1000,
+  oatC: 13,
+  rpm: 2300,
+  manifoldPressureInHg: 23,
 };
 
 export class FlightPlanStore {
   private waypoints: Waypoint[] = [];
   private navigationSettings: NavigationSettings = { ...DEFAULT_NAVIGATION_SETTINGS };
+  private performanceSettings: PerformanceSettings = { ...DEFAULT_PERFORMANCE_SETTINGS };
   private listeners = new Set<Listener>();
 
   getWaypoints(): Waypoint[] {
@@ -34,8 +53,17 @@ export class FlightPlanStore {
     return { ...this.navigationSettings };
   }
 
+  getPerformanceSettings(): PerformanceSettings {
+    return { ...this.performanceSettings };
+  }
+
   updateNavigationSettings(patch: Partial<NavigationSettings>): void {
     this.navigationSettings = { ...this.navigationSettings, ...patch };
+    this.emit();
+  }
+
+  updatePerformanceSettings(patch: Partial<PerformanceSettings>): void {
+    this.performanceSettings = { ...this.performanceSettings, ...patch };
     this.emit();
   }
 
