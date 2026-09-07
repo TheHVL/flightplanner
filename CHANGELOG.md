@@ -23,6 +23,87 @@ Displayed OFP values may be rounded for readability. Internal calculations keep 
 
 ---
 
+## 2026-09-07, C182T Figure 5-8 climb performance
+
+### Added / changed
+
+- Added both supplied C182T Figure 5-8 `TIME, FUEL AND DISTANCE TO CLIMB AT 3100 POUNDS` sheets.
+- Added selectable `POH normal climb - 90 KIAS`, `POH maximum rate of climb`, and the original manual climb mode.
+- Normal climb is loaded from sea level through 10,000 ft pressure altitude.
+- Maximum-rate climb is loaded from sea level through 14,000 ft pressure altitude.
+- POH modes now drive TOC time and distance as well as climb fuel, so manual Climb FF is no longer required when a Figure 5-8 profile is selected.
+- For climbs beginning above sea level, cumulative Figure 5-8 time, fuel and distance at the starting pressure altitude are subtracted from the cumulative target values.
+- Linear interpolation is used only between published altitude rows. No extrapolation is allowed beyond the selected sheet.
+- Applied the Figure 5-8 note to increase time, fuel and distance by 10% for each 10°C above standard temperature.
+- Values are not reduced when temperature is below standard because the source note only specifies an increase above standard.
+- POH climb distance remains zero-wind, exactly as stated by Figure 5-8.
+- The selected climb model updates vertical-profile TOC markers, glide-envelope altitude modeling, phase-aware OFP timing and fuel.
+- If a requested climb is outside the selected Figure 5-8 sheet, the climb and complete trip-fuel result are marked incomplete instead of silently falling back or extrapolating.
+- Added automated tests for exact table values, climbs starting above sea level, interpolation, temperature correction, below-standard handling and source altitude limits.
+
+### Figure 5-8 source conditions
+
+```text
+3100 lb
+Flaps UP
+2400 RPM
+Full throttle
+Mixture set to Maximum Power Fuel Flow placard
+Cowl flaps OPEN
+Standard temperature
+```
+
+### Cumulative climb calculation
+
+For a climb from pressure altitude `PA_start` to `PA_target`:
+
+```text
+climb time
+= cumulative time(PA_target) - cumulative time(PA_start)
+
+climb fuel
+= cumulative fuel(PA_target) - cumulative fuel(PA_start)
+
+climb distance
+= cumulative distance(PA_target) - cumulative distance(PA_start)
+```
+
+Between published altitude rows:
+
+```text
+fraction = (requested PA - lower PA) / (upper PA - lower PA)
+interpolated value = lower value + (upper value - lower value) x fraction
+```
+
+### Temperature correction
+
+The Figure 5-8 source note says to increase time, fuel and distance by 10% for each 10°C above standard temperature. The current implementation uses:
+
+```text
+ISA temperature [°C]
+= 15 - 2 x pressure altitude [thousand ft]
+
+temperature above ISA
+= max(0, OAT - ISA temperature)
+
+correction factor
+= 1 + temperature above ISA / 100
+
+corrected time/fuel/distance
+= standard-table result x correction factor
+```
+
+For now the Phase 4 OAT field is used at the target climb altitude. A later weather-profile enhancement can use temperature through the climb.
+
+### Important limitations
+
+- Entered field elevation and PL are currently used as pressure-altitude proxies until QNH-based conversion is implemented.
+- Figure 5-8 distance is zero-wind. Wind-aware climb ground distance is not yet modeled.
+- Figure 5-8 is a 3100 lb performance table. No weight interpolation has been added.
+- Descent and circuit fuel still require manual fuel-flow inputs because no verified descent/circuit source has been supplied yet.
+
+---
+
 ## PR #23, phase-aware fuel planning
 
 ### Added / changed
