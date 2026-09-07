@@ -20,7 +20,7 @@ export class RoutePanel {
         </div>
         <button class="ghost-button" data-action="clear" ${waypoints.length === 0 ? 'disabled' : ''}>Clear</button>
       </div>
-      <p class="hint">Click the map to add at the end, drag a route line to insert between points, or drag a marker to move it. Ctrl+Z / Cmd+Z undoes the last planner action.</p>
+      <p class="hint">Click the map to add a waypoint at the end, drag a marker to move it, or drag the blue line between waypoints to shape the flown path without creating a new OFP waypoint. A shaped leg uses the longer plotted distance for time/fuel while TT/MT/MH remain based on the direct waypoint-to-waypoint course. Ctrl+Z / Cmd+Z immediately undoes the latest line-shape drag or planner action.</p>
       <div class="waypoint-list">
         ${waypoints.length === 0 ? '<div class="empty-state">No route yet</div>' : ''}
         ${waypoints.map((waypoint, index) => this.waypointRow(waypoint.id, waypoint.name, waypoint.lat, waypoint.lon, index, waypoints.length)).join('')}
