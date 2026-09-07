@@ -14,24 +14,24 @@ export class PerformancePanel {
     this.element.innerHTML = `
       <div class="panel-heading">
         <div>
-          <p class="eyebrow">PHASE 4 · IN PROGRESS</p>
+          <p class="eyebrow">PHASE 4 · COMPLETE</p>
           <h2>C182T cruise performance</h2>
         </div>
       </div>
-      <p class="hint">POH Figure 5-9 interpolation. Current preview contains the verified sea-level and 2,000 ft tables for 2200-2400 RPM. More pressure-altitude tables will be added next.</p>
+      <p class="hint">Complete POH Figure 5-9 cruise table, sea level through 14,000 ft, with 2000-2400 RPM where published. Interpolation remains bounded by the actual table cells, with no extrapolation.</p>
       <label class="nav-toggle performance-toggle">
         <input type="checkbox" data-performance-boolean="usePohPerformance" ${settings.usePohPerformance ? 'checked' : ''} />
         <span>Use POH TAS and fuel flow in the navigation log</span>
       </label>
       <div class="nav-input-grid performance-grid">
-        ${this.numberField('pressureAltitudeFt', 'Pressure altitude', settings.pressureAltitudeFt, 'ft', 100, 0, 2000)}
-        ${this.numberField('oatC', 'OAT', settings.oatC, '°C', 1, -40, 50)}
-        ${this.numberField('rpm', 'RPM', settings.rpm, 'RPM', 50, 2200, 2400)}
-        ${this.numberField('manifoldPressureInHg', 'Manifold pressure', settings.manifoldPressureInHg, 'inHg', 0.1, 20, 27)}
+        ${this.numberField('pressureAltitudeFt', 'Pressure altitude', settings.pressureAltitudeFt, 'ft', 100, 0, 14000)}
+        ${this.numberField('oatC', 'OAT', settings.oatC, '°C', 1, -60, 50)}
+        ${this.numberField('rpm', 'RPM', settings.rpm, 'RPM', 50, 2000, 2400)}
+        ${this.numberField('manifoldPressureInHg', 'Manifold pressure', settings.manifoldPressureInHg, 'inHg', 0.1, 15, 27)}
       </div>
       <div id="performance-result" class="performance-result"></div>
       <div class="nav-help performance-source">
-        <strong>POH conditions:</strong> 3100 lb, recommended lean mixture, cowl flaps closed. Maximum cruise power is 80% MCP; values above 80% are retained only to support POH interpolation.
+        <strong>POH conditions:</strong> 3100 lb, recommended lean mixture, cowl flaps closed. Maximum cruise power is 80% MCP; values above 80% are retained only to support POH interpolation. At high altitude some RPM/MP combinations are not published, and the planner will reject them rather than extrapolate.
       </div>
     `;
     this.refreshResult();
