@@ -35,11 +35,18 @@ export interface FuelLegPlan {
   pressureAltitudeFt: number;
   oatC: number;
   oatSource: 'forecast' | 'manual';
+  /** TAS displayed in the OFP row: cruise TAS when cruise exists, otherwise the dominant vertical phase TAS. */
   tasKt: number;
+  cruiseTasKt: number;
+  climbTasKt: number | null;
+  descentTasKt: number | null;
+  displayPhase: 'cruise' | 'climb' | 'descent';
   windFromDeg: number;
   windSpeedKt: number;
   forecastWindActive: boolean;
+  /** Effective whole-leg GS from flown distance divided by climb+cruise+descent time. Circuit time is excluded. */
   groundSpeedKt: number;
+  cruiseGroundSpeedKt: number;
   wcaDeg: number;
   trueHeadingDeg: number;
   cruiseFuelFlowGph: number | null;
@@ -50,6 +57,7 @@ export interface FuelLegPlan {
   climbTimeMin: number;
   descentTimeMin: number;
   activityTimeMin: number;
+  flightTimeMin: number;
   totalTimeMin: number;
   cruiseFuelGal: number | null;
   climbFuelGal: number | null;
@@ -93,6 +101,7 @@ interface VerticalSegment {
   endNm: number;
   timeMin: number;
   fuelGal: number | null;
+  tasKt: number;
 }
 
 interface LegVerticalPhase {
@@ -100,6 +109,8 @@ interface LegVerticalPhase {
   descentDistanceNm: number;
   climbTimeMin: number;
   descentTimeMin: number;
+  climbTasKt: number | null;
+  descentTasKt: number | null;
   pohClimbFuelGal: number;
   pohClimbFuelComplete: boolean;
 }
@@ -219,7 +230,7 @@ export function calculateRouteFuelPlan(input: RouteFuelPlanInput): RouteFuelPlan
       warnings.push(`${leg.from.name} -> ${leg.to.name}: no PL entered, so the Phase 4 pressure-altitude field is used for cruise performance.`);
     }
 
-    let tasKt = navigationSettings.tasKt;
+    let cruiseTasKt = navigationSettings.tasKt;
     let cruiseFuelFlowGph: number | null = performanceSettings.usePohPerformance
       ? null
       : fuelSettings.manualCruiseFuelFlowGph;
@@ -233,17 +244,17 @@ export function calculateRouteFuelPlan(input: RouteFuelPlanInput): RouteFuelPlan
           rpm: performanceSettings.rpm,
           manifoldPressureInHg: performanceSettings.manifoldPressureInHg,
         });
-        tasKt = performance.ktas;
+        cruiseTasKt = performance.ktas;
         cruiseFuelFlowGph = performance.fuelFlowGph;
       } catch (error) {
         performanceError = error instanceof Error ? error.message : 'POH cruise performance could not be calculated.';
       }
     }
 
-    const wind = performanceError === null
+    const cruiseWind = performanceError === null
       ? solveWindTriangle({
           trueTrackDeg: leg.trueTrackDeg,
-          tasKt,
+          tasKt: cruiseTasKt,
           windFromDeg,
           windSpeedKt,
         })
@@ -258,13 +269,16 @@ export function calculateRouteFuelPlan(input: RouteFuelPlanInput): RouteFuelPlan
           descentDistanceNm: 0,
           climbTimeMin: 0,
           descentTimeMin: 0,
+          climbTasKt: null,
+          descentTasKt: null,
           pohClimbFuelGal: 0,
           pohClimbFuelComplete: false,
         };
     const cruiseDistanceNm = Math.max(0, leg.distanceNm - phase.climbDistanceNm - phase.descentDistanceNm);
-    const cruiseTimeMin = wind ? cruiseDistanceNm / wind.groundSpeedKt * 60 : 0;
+    const cruiseTimeMin = cruiseWind ? cruiseDistanceNm / cruiseWind.groundSpeedKt * 60 : 0;
     const activityTimeMin = Math.max(0, waypointActivityMinutes[index]);
-    const totalTimeMin = cruiseTimeMin + phase.climbTimeMin + phase.descentTimeMin + activityTimeMin;
+    const flightTimeMin = cruiseTimeMin + phase.climbTimeMin + phase.descentTimeMin;
+    const totalTimeMin = flightTimeMin + activityTimeMin;
 
     const cruiseFuelGal = phaseFuel(cruiseTimeMin, cruiseFuelFlowGph);
     const climbFuelGal = profilesOverlap || climbPerformanceIncomplete
@@ -295,6 +309,28 @@ export function calculateRouteFuelPlan(input: RouteFuelPlanInput): RouteFuelPlan
           ? `Enter ${missingPhases.join(', ')} to complete fuel for this leg.`
           : null;
 
+    let displayPhase: FuelLegPlan['displayPhase'] = 'cruise';
+    let tasKt = cruiseTasKt;
+    if (cruiseTimeMin <= 0.5 && phase.climbTimeMin > EPSILON && phase.climbTimeMin >= phase.descentTimeMin) {
+      displayPhase = 'climb';
+      tasKt = phase.climbTasKt ?? cruiseTasKt;
+    } else if (cruiseTimeMin <= 0.5 && phase.descentTimeMin > EPSILON) {
+      displayPhase = 'descent';
+      tasKt = phase.descentTasKt ?? cruiseTasKt;
+    }
+
+    const displayWind = performanceError === null
+      ? solveWindTriangle({
+          trueTrackDeg: leg.trueTrackDeg,
+          tasKt,
+          windFromDeg,
+          windSpeedKt,
+        })
+      : null;
+    const effectiveGroundSpeedKt = flightTimeMin > EPSILON
+      ? leg.distanceNm / (flightTimeMin / 60)
+      : displayWind?.groundSpeedKt ?? 0;
+
     return {
       fromId: leg.from.id,
       toId: leg.to.id,
@@ -302,12 +338,17 @@ export function calculateRouteFuelPlan(input: RouteFuelPlanInput): RouteFuelPlan
       oatC,
       oatSource,
       tasKt,
+      cruiseTasKt,
+      climbTasKt: phase.climbTasKt,
+      descentTasKt: phase.descentTasKt,
+      displayPhase,
       windFromDeg,
       windSpeedKt,
       forecastWindActive,
-      groundSpeedKt: wind?.groundSpeedKt ?? 0,
-      wcaDeg: wind?.wcaDeg ?? 0,
-      trueHeadingDeg: wind?.trueHeadingDeg ?? leg.trueTrackDeg,
+      groundSpeedKt: effectiveGroundSpeedKt,
+      cruiseGroundSpeedKt: cruiseWind?.groundSpeedKt ?? 0,
+      wcaDeg: displayWind?.wcaDeg ?? 0,
+      trueHeadingDeg: displayWind?.trueHeadingDeg ?? leg.trueTrackDeg,
       cruiseFuelFlowGph,
       cruiseDistanceNm,
       climbDistanceNm: phase.climbDistanceNm,
@@ -316,6 +357,7 @@ export function calculateRouteFuelPlan(input: RouteFuelPlanInput): RouteFuelPlan
       climbTimeMin: phase.climbTimeMin,
       descentTimeMin: phase.descentTimeMin,
       activityTimeMin,
+      flightTimeMin,
       totalTimeMin,
       cruiseFuelGal,
       climbFuelGal,
@@ -352,8 +394,11 @@ export function calculateRouteFuelPlan(input: RouteFuelPlanInput): RouteFuelPlan
     warnings.push('Per-leg PL is currently used as a pressure-altitude proxy for Figure 5-9. A future QNH conversion can refine this.');
   }
   if (fuelSettings.climbPerformanceMode !== 'manual') {
-    warnings.push('POH Figure 5-8 climb calculations use entered elevation/PL as pressure-altitude proxies. Distance is the POH zero-wind distance.');
-    warnings.push('Figure 5-8 temperature correction currently uses the Phase 4 OAT field at the target climb altitude, increasing time, fuel and distance only when above ISA.');
+    warnings.push('POH Figure 5-8 climb time and fuel use entered elevation/PL as pressure-altitude proxies. Its zero-wind distance is used to derive average climb TAS; active per-leg wind then determines TOC ground distance.');
+    warnings.push('Figure 5-8 temperature correction uses route-weather OAT for the outbound leg where available, otherwise the Phase 4 OAT fallback, and increases time/fuel/distance only when above ISA.');
+  }
+  if (legPlans.some((leg) => leg.descentTimeMin > EPSILON)) {
+    warnings.push('Descent distance uses the entered descent TAS with active per-leg wind. Descent rate and fuel flow remain manual inputs.');
   }
   if (legPlans.some((leg) => leg.oatSource === 'manual')) {
     warnings.push('Where no route-weather temperature is available, the Phase 4 OAT field is used as the cruise-temperature fallback.');
@@ -401,6 +446,7 @@ function segmentFromEvent(event: RouteVerticalEvent, routeDistanceNm: number): V
     endNm,
     timeMin: event.timeMin * fraction,
     fuelGal: event.fuelGal === null ? null : event.fuelGal * fraction,
+    tasKt: event.phaseTasKt,
   };
 }
 
@@ -409,6 +455,8 @@ function phaseForLeg(segments: VerticalSegment[], legStartNm: number, legEndNm: 
   let descentDistanceNm = 0;
   let climbTimeMin = 0;
   let descentTimeMin = 0;
+  let climbTasTime = 0;
+  let descentTasTime = 0;
   let pohClimbFuelGal = 0;
   let pohClimbFuelComplete = true;
 
@@ -421,6 +469,7 @@ function phaseForLeg(segments: VerticalSegment[], legStartNm: number, legEndNm: 
     if (segment.phase === 'climb') {
       climbDistanceNm += overlapNm;
       climbTimeMin += overlapTimeMin;
+      climbTasTime += segment.tasKt * overlapTimeMin;
       if (segment.fuelGal === null) {
         pohClimbFuelComplete = false;
       } else {
@@ -429,6 +478,7 @@ function phaseForLeg(segments: VerticalSegment[], legStartNm: number, legEndNm: 
     } else {
       descentDistanceNm += overlapNm;
       descentTimeMin += overlapTimeMin;
+      descentTasTime += segment.tasKt * overlapTimeMin;
     }
   }
 
@@ -438,6 +488,8 @@ function phaseForLeg(segments: VerticalSegment[], legStartNm: number, legEndNm: 
     descentDistanceNm,
     climbTimeMin,
     descentTimeMin,
+    climbTasKt: climbTimeMin > EPSILON ? climbTasTime / climbTimeMin : null,
+    descentTasKt: descentTimeMin > EPSILON ? descentTasTime / descentTimeMin : null,
     pohClimbFuelGal,
     pohClimbFuelComplete,
   };
