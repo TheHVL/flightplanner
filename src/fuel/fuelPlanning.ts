@@ -99,8 +99,8 @@ interface VerticalSegment {
   phase: 'climb' | 'descent';
   startNm: number;
   endNm: number;
-  timeMin: number;
-  fuelGal: number | null;
+  totalTimeMin: number;
+  totalFuelGal: number | null;
   tasKt: number;
 }
 
@@ -263,7 +263,7 @@ export function calculateRouteFuelPlan(input: RouteFuelPlanInput): RouteFuelPlan
     const legStartNm = cumulativeDistances[index];
     const legEndNm = cumulativeDistances[index + 1];
     const phase: LegVerticalPhase = phaseModelAvailable
-      ? phaseForLeg(segments, legStartNm, legEndNm)
+      ? phaseForLeg(segments, legStartNm, legEndNm, leg, windFromDeg, windSpeedKt)
       : {
           climbDistanceNm: 0,
           descentDistanceNm: 0,
@@ -437,20 +437,25 @@ function segmentFromEvent(event: RouteVerticalEvent, routeDistanceNm: number): V
     : event.routeDistanceNm + event.distanceNm;
   const startNm = Math.max(0, Math.min(routeDistanceNm, rawStartNm));
   const endNm = Math.max(0, Math.min(routeDistanceNm, rawEndNm));
-  const clippedDistanceNm = Math.max(0, endNm - startNm);
-  if (clippedDistanceNm <= EPSILON) return null;
-  const fraction = clippedDistanceNm / event.distanceNm;
+  if (endNm - startNm <= EPSILON) return null;
   return {
     phase: event.type === 'TOC' ? 'climb' : 'descent',
     startNm,
     endNm,
-    timeMin: event.timeMin * fraction,
-    fuelGal: event.fuelGal === null ? null : event.fuelGal * fraction,
+    totalTimeMin: event.timeMin,
+    totalFuelGal: event.fuelGal,
     tasKt: event.phaseTasKt,
   };
 }
 
-function phaseForLeg(segments: VerticalSegment[], legStartNm: number, legEndNm: number): LegVerticalPhase {
+function phaseForLeg(
+  segments: VerticalSegment[],
+  legStartNm: number,
+  legEndNm: number,
+  leg: RouteLeg,
+  windFromDeg: number,
+  windSpeedKt: number,
+): LegVerticalPhase {
   let climbDistanceNm = 0;
   let descentDistanceNm = 0;
   let climbTimeMin = 0;
@@ -463,17 +468,22 @@ function phaseForLeg(segments: VerticalSegment[], legStartNm: number, legEndNm: 
   for (const segment of segments) {
     const overlapNm = overlapLength(segment.startNm, segment.endNm, legStartNm, legEndNm);
     if (overlapNm <= EPSILON) continue;
-    const segmentDistanceNm = segment.endNm - segment.startNm;
-    const overlapFraction = overlapNm / segmentDistanceNm;
-    const overlapTimeMin = segment.timeMin * overlapFraction;
+    const phaseWind = solveWindTriangle({
+      trueTrackDeg: leg.trueTrackDeg,
+      tasKt: segment.tasKt,
+      windFromDeg,
+      windSpeedKt,
+    });
+    const overlapTimeMin = overlapNm / phaseWind.groundSpeedKt * 60;
     if (segment.phase === 'climb') {
       climbDistanceNm += overlapNm;
       climbTimeMin += overlapTimeMin;
       climbTasTime += segment.tasKt * overlapTimeMin;
-      if (segment.fuelGal === null) {
+      if (segment.totalFuelGal === null) {
         pohClimbFuelComplete = false;
       } else {
-        pohClimbFuelGal += segment.fuelGal * overlapFraction;
+        const timeFraction = Math.min(1, Math.max(0, overlapTimeMin / segment.totalTimeMin));
+        pohClimbFuelGal += segment.totalFuelGal * timeFraction;
       }
     } else {
       descentDistanceNm += overlapNm;
