@@ -2,6 +2,7 @@ import L, {
   type Coords,
   type DoneCallback,
   type GridLayerOptions,
+  type LayerGroup,
   type LeafletMouseEvent,
   type Map as LeafletMap,
   type Marker,
@@ -10,6 +11,10 @@ import L, {
 } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import type { Coordinate, Waypoint } from '../types';
+import {
+  buildLegCorridorPolygon,
+  MSA_CORRIDOR_HALF_WIDTH_METERS,
+} from '../navigation/msaCorridor';
 import {
   ICAO_TILE_CSS_PX,
   vfrTilePixels,
@@ -117,10 +122,12 @@ export class MapManager {
   private readonly icaoLayer: AvinorIcaoLayer;
   private readonly routeLine: Polyline;
   private readonly routeHitLine: Polyline;
+  private readonly msaCorridorLayer: LayerGroup;
   private chartEdition: string | null = null;
   private renderedWaypoints: Waypoint[] = [];
   private routeInsertDrag: RouteInsertDrag | null = null;
   private suppressNextMapClick = false;
+  private msaCorridorVisible = false;
 
   constructor(element: HTMLElement, callbacks: MapManagerCallbacks) {
     this.map = L.map(element, {
@@ -130,6 +137,11 @@ export class MapManager {
       maxBoundsViscosity: 1,
       worldCopyJump: false,
     }).setView([69.6492, 18.9553], 7);
+
+    const msaPane = this.map.createPane('msa-corridor-pane');
+    msaPane.style.zIndex = '390';
+    msaPane.style.pointerEvents = 'none';
+    this.msaCorridorLayer = L.layerGroup();
 
     const kartverket = L.tileLayer(
       'https://cache.kartverket.no/v1/wmts/1.0.0/topo/default/webmercator/{z}/{y}/{x}.png',
@@ -214,6 +226,48 @@ export class MapManager {
     this.icaoLayer.setDetailMode(mode);
   }
 
+  setMsaCorridorVisible(visible: boolean): void {
+    if (this.msaCorridorVisible === visible) return;
+    this.msaCorridorVisible = visible;
+    if (visible) {
+      this.msaCorridorLayer.addTo(this.map);
+    } else {
+      this.msaCorridorLayer.removeFrom(this.map);
+    }
+  }
+
+  renderMsaCorridor(waypoints: Waypoint[]): void {
+    this.msaCorridorLayer.clearLayers();
+    if (waypoints.length < 2) return;
+
+    const pathStyle = {
+      pane: 'msa-corridor-pane',
+      color: '#c46a12',
+      weight: 1.2,
+      opacity: 0.72,
+      fillColor: '#f2a23a',
+      fillOpacity: 0.11,
+      interactive: false,
+    } as const;
+
+    for (let index = 0; index < waypoints.length - 1; index += 1) {
+      const from = waypoints[index];
+      const to = waypoints[index + 1];
+      const polygon = buildLegCorridorPolygon(from, to);
+      L.polygon(
+        polygon.map((point) => [point.lat, point.lon] as [number, number]),
+        pathStyle,
+      ).addTo(this.msaCorridorLayer);
+    }
+
+    for (const waypoint of waypoints) {
+      L.circle([waypoint.lat, waypoint.lon], {
+        ...pathStyle,
+        radius: MSA_CORRIDOR_HALF_WIDTH_METERS,
+      }).addTo(this.msaCorridorLayer);
+    }
+  }
+
   renderRoute(waypoints: Waypoint[], onMoved: MapManagerCallbacks['onWaypointMoved']): void {
     this.renderedWaypoints = waypoints.map((waypoint) => ({ ...waypoint }));
     const activeIds = new Set(waypoints.map((waypoint) => waypoint.id));
@@ -239,9 +293,7 @@ export class MapManager {
 
         marker.on('dragend', () => {
           const position = marker?.getLatLng();
-          if (position) {
-            onMoved(waypoint.id, position.lat, position.lng);
-          }
+          if (position) onMoved(waypoint.id, position.lat, position.lng);
         });
 
         this.markers.set(waypoint.id, marker);
