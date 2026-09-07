@@ -13,6 +13,7 @@ export class PerformancePanel {
     private readonly store: FlightPlanStore,
   ) {
     this.element.addEventListener('input', (event) => this.handleInput(event));
+    this.store.subscribe(() => this.refreshFuelResult());
   }
 
   render(): void {
