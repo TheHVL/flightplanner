@@ -104,4 +104,48 @@ describe('FlightPlanStore', () => {
     expect(store.getTotalWaypointActivityMinutes()).toBe(16.5);
     expect(store.getWaypointVerticalConstraint(airport.id).icaoCode).toBe('ENDU');
   });
+
+  it('inserts a waypoint between two points and carries the old PL onto both split legs', () => {
+    const store = new FlightPlanStore();
+    const a = store.addWaypoint({ lat: 69, lon: 18 }, 'A');
+    const b = store.addWaypoint({ lat: 70, lon: 20 }, 'B');
+    store.setPlannedAltitudeFt(a.id, b.id, 4500);
+
+    const inserted = store.insertWaypointAt(1, { lat: 69.5, lon: 19 });
+
+    expect(inserted).not.toBeNull();
+    expect(store.getWaypoints().map((waypoint) => waypoint.name)).toEqual(['A', 'WP02', 'B']);
+    expect(store.getPlannedAltitudeFt(a.id, b.id)).toBeNull();
+    expect(store.getPlannedAltitudeFt(a.id, inserted!.id)).toBe(4500);
+    expect(store.getPlannedAltitudeFt(inserted!.id, b.id)).toBe(4500);
+  });
+
+  it('undoes a route edit and restores waypoint names and leg planning state', () => {
+    const store = new FlightPlanStore();
+    const a = store.addWaypoint({ lat: 69, lon: 18 });
+    const b = store.addWaypoint({ lat: 69.5, lon: 19 });
+    const c = store.addWaypoint({ lat: 70, lon: 20 });
+    store.setPlannedAltitudeFt(a.id, b.id, 3500);
+    store.setPlannedAltitudeFt(b.id, c.id, 5500);
+
+    store.removeWaypoint(b.id);
+    expect(store.getWaypoints().map((waypoint) => waypoint.name)).toEqual(['WP01', 'WP02']);
+
+    expect(store.undoLastAction()).toBe(true);
+    expect(store.getWaypoints().map((waypoint) => waypoint.name)).toEqual(['WP01', 'WP02', 'WP03']);
+    expect(store.getPlannedAltitudeFt(a.id, b.id)).toBe(3500);
+    expect(store.getPlannedAltitudeFt(b.id, c.id)).toBe(5500);
+  });
+
+  it('undoes planning-setting changes as the most recent planner action', () => {
+    const store = new FlightPlanStore();
+    expect(store.getNavigationSettings().tasKt).toBe(130);
+
+    store.updateNavigationSettings({ tasKt: 145 });
+    expect(store.getNavigationSettings().tasKt).toBe(145);
+    expect(store.canUndo()).toBe(true);
+
+    store.undoLastAction();
+    expect(store.getNavigationSettings().tasKt).toBe(130);
+  });
 });
