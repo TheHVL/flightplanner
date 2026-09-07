@@ -11,6 +11,7 @@ import { PerformancePanel } from './components/PerformancePanel';
 import { WeatherPanel } from './components/WeatherPanel';
 import { VerticalProfilePanel } from './components/VerticalProfilePanel';
 import { OFPTable } from './components/OFPTable';
+import { buildC182TGlideEnvelopeSamples } from './navigation/glideEnvelope';
 import { calculateRouteVerticalProfile } from './navigation/verticalProfile';
 
 if ('serviceWorker' in navigator) {
@@ -54,6 +55,10 @@ root.innerHTML = `
               <input id="msa-corridor-toggle" type="checkbox" />
               <span>MSA ±1 NM</span>
             </label>
+            <label class="glide-envelope-control" title="Show the approximate C182T zero-wind maximum-glide reach from the modeled route altitude. This is a visual planning aid, not a landing guarantee.">
+              <input id="glide-envelope-toggle" type="checkbox" />
+              <span>C182T glide</span>
+            </label>
             <label class="chart-detail-control">
               <span>ICAO detail</span>
               <select id="chart-detail" aria-label="ICAO chart detail">
@@ -64,6 +69,11 @@ root.innerHTML = `
             </label>
             <button id="map-expand" class="map-expand-button" type="button" aria-pressed="false">⛶ Expand map</button>
           </div>
+        </div>
+        <div id="glide-assumption-bar" class="glide-assumption-bar" hidden>
+          <strong>C182T maximum glide, POH Fig. 3-1:</strong>
+          propeller windmilling, flaps up, zero wind. The shading uses the Phase 6 modeled altitude and assumes the shoreline/landing surface is at sea level. Best glide speeds shown by the chart are 76 KIAS at 3100 lb, 70 KIAS at 2600 lb and 58 KIAS at 2100 lb. It shows theoretical reach, not terrain clearance or landing suitability.
+          <span id="glide-status" class="glide-status"></span>
         </div>
         <div id="map" class="map"></div>
         <div
@@ -96,6 +106,9 @@ const mapExpandButton = document.querySelector<HTMLButtonElement>('#map-expand')
 const mapResizeHandle = document.querySelector<HTMLElement>('#map-resize-handle');
 const chartDetailSelect = document.querySelector<HTMLSelectElement>('#chart-detail');
 const msaCorridorToggle = document.querySelector<HTMLInputElement>('#msa-corridor-toggle');
+const glideEnvelopeToggle = document.querySelector<HTMLInputElement>('#glide-envelope-toggle');
+const glideAssumptionBar = document.querySelector<HTMLElement>('#glide-assumption-bar');
+const glideStatus = document.querySelector<HTMLElement>('#glide-status');
 const tableElement = document.querySelector<HTMLElement>('#ofp-table');
 if (
   !workspace ||
@@ -110,6 +123,9 @@ if (
   !mapResizeHandle ||
   !chartDetailSelect ||
   !msaCorridorToggle ||
+  !glideEnvelopeToggle ||
+  !glideAssumptionBar ||
+  !glideStatus ||
   !tableElement
 ) {
   throw new Error('Failed to mount Flightplanner UI.');
@@ -147,6 +163,17 @@ mapManager.setMsaCorridorVisible(savedMsaCorridor);
 msaCorridorToggle.addEventListener('change', () => {
   localStorage.setItem('flightplanner-msa-corridor', String(msaCorridorToggle.checked));
   mapManager.setMsaCorridorVisible(msaCorridorToggle.checked);
+});
+
+const savedGlideEnvelope = localStorage.getItem('flightplanner-glide-envelope') === 'true';
+glideEnvelopeToggle.checked = savedGlideEnvelope;
+glideAssumptionBar.hidden = !savedGlideEnvelope;
+mapManager.setGlideEnvelopeVisible(savedGlideEnvelope);
+glideEnvelopeToggle.addEventListener('change', () => {
+  localStorage.setItem('flightplanner-glide-envelope', String(glideEnvelopeToggle.checked));
+  glideAssumptionBar.hidden = !glideEnvelopeToggle.checked;
+  mapManager.setGlideEnvelopeVisible(glideEnvelopeToggle.checked);
+  renderGlideEnvelope();
 });
 
 const MIN_WORKSPACE_HEIGHT = 480;
@@ -252,22 +279,28 @@ performancePanel.render();
 weatherPanel.render();
 verticalProfilePanel.render();
 
-const renderVerticalProfileMarkers = () => {
+const calculateCurrentVerticalProfile = () => {
   const legs = store.getLegs();
-  if (legs.length === 0) {
-    mapManager.renderVerticalProfileMarkers([]);
-    return;
-  }
+  if (legs.length === 0) return null;
+  const plannedAltitudesFt = legs.map((leg) => store.getPlannedAltitudeFt(leg.from.id, leg.to.id));
+  const profile = calculateRouteVerticalProfile({
+    legs,
+    plannedAltitudesFt,
+    waypointConstraints: store.getVerticalWaypointConstraints(),
+    ...store.getVerticalProfileSettings(),
+  });
+  return { legs, plannedAltitudesFt, profile };
+};
 
+const renderVerticalProfileMarkers = () => {
   try {
-    const result = calculateRouteVerticalProfile({
-      legs,
-      plannedAltitudesFt: legs.map((leg) => store.getPlannedAltitudeFt(leg.from.id, leg.to.id)),
-      waypointConstraints: store.getVerticalWaypointConstraints(),
-      ...store.getVerticalProfileSettings(),
-    });
+    const current = calculateCurrentVerticalProfile();
+    if (!current) {
+      mapManager.renderVerticalProfileMarkers([]);
+      return;
+    }
     mapManager.renderVerticalProfileMarkers(
-      result.events
+      current.profile.events
         .filter((event) => event.onRoute && event.coordinate !== null)
         .map((event) => ({
           id: event.id,
@@ -281,6 +314,40 @@ const renderVerticalProfileMarkers = () => {
   }
 };
 
+const renderGlideEnvelope = () => {
+  if (!glideEnvelopeToggle.checked) {
+    mapManager.renderGlideEnvelope([]);
+    glideStatus.textContent = '';
+    return;
+  }
+
+  try {
+    const current = calculateCurrentVerticalProfile();
+    if (!current) {
+      mapManager.renderGlideEnvelope([]);
+      glideStatus.textContent = 'Add at least two waypoints and enter PL to draw the envelope.';
+      return;
+    }
+    const result = buildC182TGlideEnvelopeSamples({
+      legs: current.legs,
+      plannedAltitudesFt: current.plannedAltitudesFt,
+      verticalProfile: current.profile,
+    });
+    mapManager.renderGlideEnvelope(result.samples);
+
+    if (result.samples.length === 0) {
+      glideStatus.textContent = result.warnings[0] ?? 'Enter PL for the route to draw the envelope.';
+      return;
+    }
+
+    const warning = result.warnings.length > 0 ? ` ${result.warnings.join(' ')}` : '';
+    glideStatus.textContent = `Current modeled maximum reach is up to ${result.maxRangeNm.toFixed(1)} NM from the route.${warning}`;
+  } catch (error) {
+    mapManager.renderGlideEnvelope([]);
+    glideStatus.textContent = error instanceof Error ? error.message : 'Glide overlay could not be calculated.';
+  }
+};
+
 const render = () => {
   const waypoints = store.getWaypoints();
   routePanel.render();
@@ -288,6 +355,7 @@ const render = () => {
   mapManager.renderMsaCorridor(waypoints);
   mapManager.renderRoute(waypoints, (id, lat, lon) => store.updateWaypoint(id, { lat, lon }));
   renderVerticalProfileMarkers();
+  renderGlideEnvelope();
 };
 
 store.subscribe(render);
