@@ -4,6 +4,7 @@ import './phase4.css';
 import './phase5.css';
 import './phase6.css';
 import { FlightPlanStore } from './flightplan/FlightPlanStore';
+import { ROUTE_SHAPE_CHANGED_EVENT, RouteShapeController } from './flightplan/RouteShapeController';
 import { MapManager, type ChartDetailMode } from './map/MapManager';
 import { RoutePanel } from './components/RoutePanel';
 import { NavigationPanel } from './components/NavigationPanel';
@@ -13,6 +14,7 @@ import { VerticalProfilePanel } from './components/VerticalProfilePanel';
 import { OFPTable } from './components/OFPTable';
 import { FUEL_SETTINGS_CHANGED_EVENT, getFuelPlanningSettings } from './fuel/fuelPlanning';
 import { buildC182TGlideEnvelopeSamples } from './navigation/glideEnvelope';
+import { coordinateAtRouteDistance, trackAtRouteDistance } from './navigation/geodesy';
 import { calculateRouteVerticalProfile } from './navigation/verticalProfile';
 
 if ('serviceWorker' in navigator) {
@@ -24,6 +26,17 @@ const root = document.querySelector<HTMLDivElement>('#app');
 if (!root) throw new Error('Missing #app root element.');
 
 root.innerHTML = `
+  <div id="planning-warning" class="planning-warning-overlay">
+    <div class="planning-warning-dialog" role="dialog" aria-modal="true" aria-labelledby="planning-warning-title" aria-describedby="planning-warning-text">
+      <p class="eyebrow">IMPORTANT SAFETY NOTICE</p>
+      <h1 id="planning-warning-title">Unapproved planning aid</h1>
+      <p id="planning-warning-text">
+        Flightplanner is an experimental training and planning aid. It is not approved, certified, or guaranteed to be accurate or current, and it must not be used as the sole basis for flight planning or operational decisions. Verify all calculations and information against the current aircraft POH/AFM, official AIP, NOTAM, approved weather briefing, applicable regulations, and required operational procedures.
+      </p>
+      <button id="planning-warning-ack" type="button">I understand and want to continue</button>
+    </div>
+  </div>
+
   <div class="app-shell">
     <header class="topbar">
       <div class="brand-lockup">
@@ -38,11 +51,26 @@ root.innerHTML = `
 
     <main class="workspace">
       <aside class="left-column">
-        <section id="route-panel" class="route-panel panel"></section>
-        <section id="navigation-panel" class="navigation-panel panel"></section>
-        <section id="performance-panel" class="performance-panel panel"></section>
-        <section id="weather-panel" class="weather-panel panel"></section>
-        <section id="vertical-profile-panel" class="vertical-profile-panel panel"></section>
+        <details class="phase-disclosure" data-panel-key="route" open>
+          <summary><span>ROUTE</span><strong>Waypoints</strong></summary>
+          <section id="route-panel" class="route-panel panel"></section>
+        </details>
+        <details class="phase-disclosure" data-panel-key="navigation">
+          <summary><span>PHASE 2</span><strong>Navigation &amp; wind</strong></summary>
+          <section id="navigation-panel" class="navigation-panel panel"></section>
+        </details>
+        <details class="phase-disclosure" data-panel-key="performance" open>
+          <summary><span>PHASE 4</span><strong>Performance &amp; fuel</strong></summary>
+          <section id="performance-panel" class="performance-panel panel"></section>
+        </details>
+        <details class="phase-disclosure" data-panel-key="weather">
+          <summary><span>PHASE 5</span><strong>Route weather</strong></summary>
+          <section id="weather-panel" class="weather-panel panel"></section>
+        </details>
+        <details class="phase-disclosure" data-panel-key="vertical">
+          <summary><span>PHASE 6/7</span><strong>Vertical profile &amp; AIP</strong></summary>
+          <section id="vertical-profile-panel" class="vertical-profile-panel panel"></section>
+        </details>
       </aside>
       <section id="map-column" class="map-column">
         <div class="map-toolbar">
@@ -52,7 +80,7 @@ root.innerHTML = `
           </div>
           <div class="map-toolbar-right">
             <div class="map-note">Switch between Kartverket Norgeskart and Avinor ICAO 1:500 000 using the layer control on the map.</div>
-            <label class="msa-corridor-control" title="Show a visual corridor extending 1 NM either side of the route. Use it to inspect terrain and obstacles manually.">
+            <label class="msa-corridor-control" title="Show a visual corridor extending 1 NM either side of the flown route. Use it to inspect terrain and obstacles manually.">
               <input id="msa-corridor-toggle" type="checkbox" />
               <span>MSA ±1 NM</span>
             </label>
@@ -95,6 +123,8 @@ root.innerHTML = `
   </div>
 `;
 
+const warningOverlay = document.querySelector<HTMLElement>('#planning-warning');
+const warningAck = document.querySelector<HTMLButtonElement>('#planning-warning-ack');
 const workspace = document.querySelector<HTMLElement>('.workspace');
 const routeElement = document.querySelector<HTMLElement>('#route-panel');
 const navigationElement = document.querySelector<HTMLElement>('#navigation-panel');
@@ -112,6 +142,8 @@ const glideAssumptionBar = document.querySelector<HTMLElement>('#glide-assumptio
 const glideStatus = document.querySelector<HTMLElement>('#glide-status');
 const tableElement = document.querySelector<HTMLElement>('#ofp-table');
 if (
+  !warningOverlay ||
+  !warningAck ||
   !workspace ||
   !routeElement ||
   !navigationElement ||
@@ -132,7 +164,25 @@ if (
   throw new Error('Failed to mount Flightplanner UI.');
 }
 
+warningAck.addEventListener('click', () => {
+  warningOverlay.hidden = true;
+});
+window.setTimeout(() => warningAck.focus(), 0);
+
+for (const disclosure of document.querySelectorAll<HTMLDetailsElement>('.phase-disclosure[data-panel-key]')) {
+  const key = disclosure.dataset.panelKey;
+  if (!key) continue;
+  const storageKey = `flightplanner-panel-${key}-open`;
+  const saved = localStorage.getItem(storageKey);
+  if (saved !== null) disclosure.open = saved === 'true';
+  disclosure.addEventListener('toggle', () => {
+    localStorage.setItem(storageKey, String(disclosure.open));
+    window.requestAnimationFrame(() => mapManager.invalidateSize());
+  });
+}
+
 const store = new FlightPlanStore();
+const routeShapeController = new RouteShapeController(store);
 const routePanel = new RoutePanel(routeElement, store);
 const navigationPanel = new NavigationPanel(navigationElement, store);
 const performancePanel = new PerformancePanel(performanceElement, store);
@@ -142,7 +192,7 @@ const ofpTable = new OFPTable(tableElement, store);
 const mapManager = new MapManager(mapElement, {
   onMapClick: (lat, lon) => store.addWaypoint({ lat, lon }),
   onWaypointMoved: (id, lat, lon) => store.updateWaypoint(id, { lat, lon }),
-  onRouteLegInsert: (legIndex, lat, lon) => store.insertWaypointAt(legIndex + 1, { lat, lon }),
+  onRouteLegShape: (legIndex, lat, lon) => routeShapeController.setLegShape(legIndex, { lat, lon }),
 });
 
 const isChartDetailMode = (value: string | null): value is ChartDetailMode =>
@@ -266,7 +316,7 @@ document.addEventListener('keydown', (event) => {
     ) {
       target.blur();
     }
-    store.undoLastAction();
+    if (!routeShapeController.undoImmediateShape()) store.undoLastAction();
     return;
   }
 
@@ -305,13 +355,19 @@ const renderVerticalProfileMarkers = () => {
     }
     mapManager.renderVerticalProfileMarkers(
       current.profile.events
-        .filter((event) => event.onRoute && event.coordinate !== null)
-        .map((event) => ({
-          id: event.id,
-          type: event.type,
-          coordinate: event.coordinate!,
-          title: `${event.type}: ${event.distanceFromWaypointNm.toFixed(1)} NM ${event.position} ${event.waypointName}, ${Math.round(event.altitudeFromFt)} → ${Math.round(event.altitudeToFt)} ft`,
-        })),
+        .filter((event) => event.onRoute)
+        .map((event) => {
+          const coordinate = coordinateAtRouteDistance(current.legs, event.routeDistanceNm);
+          if (!coordinate) return null;
+          return {
+            id: event.id,
+            type: event.type,
+            coordinate,
+            trueTrackDeg: trackAtRouteDistance(current.legs, event.routeDistanceNm),
+            title: `${event.type}: ${event.distanceFromWaypointNm.toFixed(1)} NM ${event.position} ${event.waypointName}, ${Math.round(event.altitudeFromFt)} → ${Math.round(event.altitudeToFt)} ft`,
+          };
+        })
+        .filter((marker): marker is NonNullable<typeof marker> => marker !== null),
     );
   } catch {
     mapManager.renderVerticalProfileMarkers([]);
@@ -354,14 +410,16 @@ const renderGlideEnvelope = () => {
 
 const render = () => {
   const waypoints = store.getWaypoints();
+  const legs = store.getLegs();
   routePanel.render();
   ofpTable.render();
-  mapManager.renderMsaCorridor(waypoints);
-  mapManager.renderRoute(waypoints, (id, lat, lon) => store.updateWaypoint(id, { lat, lon }));
+  mapManager.renderMsaCorridor(legs);
+  mapManager.renderRoute(waypoints, legs, (id, lat, lon) => store.updateWaypoint(id, { lat, lon }));
   renderVerticalProfileMarkers();
   renderGlideEnvelope();
 };
 
 store.subscribe(render);
 window.addEventListener(FUEL_SETTINGS_CHANGED_EVENT, render);
+window.addEventListener(ROUTE_SHAPE_CHANGED_EVENT, render);
 render();
