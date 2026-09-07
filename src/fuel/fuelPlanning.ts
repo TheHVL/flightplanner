@@ -9,6 +9,7 @@ import type { RouteLeg } from '../types';
 import { solveWindTriangle } from '../navigation/wind';
 import {
   calculateRouteVerticalProfile,
+  type ClimbPerformanceMode,
   type RouteVerticalEvent,
   type RouteVerticalProfileResult,
 } from '../navigation/verticalProfile';
@@ -21,6 +22,7 @@ const EPSILON = 1e-6;
 export interface FuelPlanningSettings {
   startupTaxiTakeoffGal: number;
   manualCruiseFuelFlowGph: number | null;
+  climbPerformanceMode: ClimbPerformanceMode;
   climbFuelFlowGph: number | null;
   descentFuelFlowGph: number | null;
   circuitFuelFlowGph: number | null;
@@ -90,12 +92,24 @@ interface VerticalSegment {
   startNm: number;
   endNm: number;
   timeMin: number;
+  fuelGal: number | null;
+}
+
+interface LegVerticalPhase {
+  climbDistanceNm: number;
+  descentDistanceNm: number;
+  climbTimeMin: number;
+  descentTimeMin: number;
+  pohClimbFuelGal: number;
+  pohClimbFuelComplete: boolean;
 }
 
 export const DEFAULT_FUEL_PLANNING_SETTINGS: FuelPlanningSettings = {
   // UiT OFP v4.2 states Trip Fuel includes 1.7 US gal for startup, taxi and takeoff.
   startupTaxiTakeoffGal: 1.7,
   manualCruiseFuelFlowGph: null,
+  // Figure 5-8 Sheet 2 is the normal-climb table at 90 KIAS and is the default planning profile.
+  climbPerformanceMode: 'poh-normal-90',
   climbFuelFlowGph: null,
   descentFuelFlowGph: null,
   circuitFuelFlowGph: null,
@@ -127,6 +141,7 @@ export function calculateFuelPlanForStore(
   fuelSettings: FuelPlanningSettings = getFuelPlanningSettings(),
 ): RouteFuelPlan {
   const legs = store.getLegs();
+  const performanceSettings = store.getPerformanceSettings();
   let verticalProfile: RouteVerticalProfileResult | null = null;
   if (legs.length > 0) {
     try {
@@ -135,6 +150,8 @@ export function calculateFuelPlanForStore(
         plannedAltitudesFt: legs.map((leg) => store.getPlannedAltitudeFt(leg.from.id, leg.to.id)),
         waypointConstraints: store.getVerticalWaypointConstraints(),
         ...store.getVerticalProfileSettings(),
+        climbPerformanceMode: fuelSettings.climbPerformanceMode,
+        climbOatC: performanceSettings.oatC,
       });
     } catch {
       verticalProfile = null;
@@ -147,7 +164,7 @@ export function calculateFuelPlanForStore(
     forecasts: legs.map((leg) => store.getLegWeatherForecast(leg.from.id, leg.to.id)),
     waypointActivityMinutes: legs.map((leg, index) => index > 0 ? store.getWaypointActivityMinutes(leg.from.id) : 0),
     navigationSettings: store.getNavigationSettings(),
-    performanceSettings: store.getPerformanceSettings(),
+    performanceSettings,
     weatherSettings: store.getWeatherSettings(),
     verticalProfile,
     fuelSettings,
@@ -177,9 +194,13 @@ export function calculateRouteFuelPlan(input: RouteFuelPlanInput): RouteFuelPlan
 
   const warnings: string[] = [];
   const profilesOverlap = verticalProfile?.profilesOverlap ?? false;
-  const phaseModelAvailable = verticalProfile !== null && !profilesOverlap;
+  const climbPerformanceIncomplete = verticalProfile?.climbPerformanceIncomplete ?? false;
+  const phaseModelAvailable = verticalProfile !== null && !profilesOverlap && !climbPerformanceIncomplete;
   if (profilesOverlap) {
     warnings.push('Vertical profiles overlap, so climb/descent fuel and complete trip-fuel totals are withheld until the profile is resolved.');
+  }
+  if (climbPerformanceIncomplete) {
+    warnings.push('Selected POH climb data does not cover one or more requested climbs, so complete trip-fuel totals are withheld.');
   }
   const segments = phaseModelAvailable ? verticalSegments(verticalProfile!, legs) : [];
   const cumulativeDistances = cumulativeLegDistances(legs);
@@ -230,36 +251,49 @@ export function calculateRouteFuelPlan(input: RouteFuelPlanInput): RouteFuelPlan
 
     const legStartNm = cumulativeDistances[index];
     const legEndNm = cumulativeDistances[index + 1];
-    const phase = phaseModelAvailable
+    const phase: LegVerticalPhase = phaseModelAvailable
       ? phaseForLeg(segments, legStartNm, legEndNm)
-      : { climbDistanceNm: 0, descentDistanceNm: 0, climbTimeMin: 0, descentTimeMin: 0 };
+      : {
+          climbDistanceNm: 0,
+          descentDistanceNm: 0,
+          climbTimeMin: 0,
+          descentTimeMin: 0,
+          pohClimbFuelGal: 0,
+          pohClimbFuelComplete: false,
+        };
     const cruiseDistanceNm = Math.max(0, leg.distanceNm - phase.climbDistanceNm - phase.descentDistanceNm);
     const cruiseTimeMin = wind ? cruiseDistanceNm / wind.groundSpeedKt * 60 : 0;
     const activityTimeMin = Math.max(0, waypointActivityMinutes[index]);
     const totalTimeMin = cruiseTimeMin + phase.climbTimeMin + phase.descentTimeMin + activityTimeMin;
 
     const cruiseFuelGal = phaseFuel(cruiseTimeMin, cruiseFuelFlowGph);
-    const climbFuelGal = profilesOverlap
+    const climbFuelGal = profilesOverlap || climbPerformanceIncomplete
       ? null
-      : phaseFuel(phase.climbTimeMin, fuelSettings.climbFuelFlowGph);
-    const descentFuelGal = profilesOverlap
+      : phase.climbTimeMin <= EPSILON
+        ? 0
+        : phase.pohClimbFuelComplete
+          ? phase.pohClimbFuelGal
+          : phaseFuel(phase.climbTimeMin, fuelSettings.climbFuelFlowGph);
+    const descentFuelGal = profilesOverlap || climbPerformanceIncomplete
       ? null
       : phaseFuel(phase.descentTimeMin, fuelSettings.descentFuelFlowGph);
     const circuitFuelGal = phaseFuel(activityTimeMin, fuelSettings.circuitFuelFlowGph);
-    const legFuelGal = profilesOverlap
+    const legFuelGal = profilesOverlap || climbPerformanceIncomplete
       ? null
       : sumIfKnown([cruiseFuelGal, climbFuelGal, descentFuelGal, circuitFuelGal]);
 
     const missingPhases: string[] = [];
     if (cruiseTimeMin > EPSILON && cruiseFuelFlowGph === null) missingPhases.push('cruise FF');
-    if (phase.climbTimeMin > EPSILON && fuelSettings.climbFuelFlowGph === null) missingPhases.push('climb FF');
+    if (phase.climbTimeMin > EPSILON && !phase.pohClimbFuelComplete && fuelSettings.climbFuelFlowGph === null) missingPhases.push('climb FF');
     if (phase.descentTimeMin > EPSILON && fuelSettings.descentFuelFlowGph === null) missingPhases.push('descent FF');
     if (activityTimeMin > EPSILON && fuelSettings.circuitFuelFlowGph === null) missingPhases.push('circuit FF');
     const phaseWarning = profilesOverlap
       ? 'Vertical profiles overlap, so phase-aware climb/descent fuel is unavailable.'
-      : missingPhases.length > 0
-        ? `Enter ${missingPhases.join(', ')} to complete fuel for this leg.`
-        : null;
+      : climbPerformanceIncomplete
+        ? 'Selected POH climb profile does not cover the requested climb.'
+        : missingPhases.length > 0
+          ? `Enter ${missingPhases.join(', ')} to complete fuel for this leg.`
+          : null;
 
     return {
       fromId: leg.from.id,
@@ -293,11 +327,12 @@ export function calculateRouteFuelPlan(input: RouteFuelPlanInput): RouteFuelPlan
     };
   });
 
+  const routeFuelIncomplete = profilesOverlap || climbPerformanceIncomplete;
   const cruiseFuelGal = sumComponent(legPlans.map((leg) => leg.cruiseFuelGal));
-  const climbFuelGal = profilesOverlap ? null : sumComponent(legPlans.map((leg) => leg.climbFuelGal));
-  const descentFuelGal = profilesOverlap ? null : sumComponent(legPlans.map((leg) => leg.descentFuelGal));
+  const climbFuelGal = routeFuelIncomplete ? null : sumComponent(legPlans.map((leg) => leg.climbFuelGal));
+  const descentFuelGal = routeFuelIncomplete ? null : sumComponent(legPlans.map((leg) => leg.descentFuelGal));
   const circuitFuelGal = sumComponent(legPlans.map((leg) => leg.circuitFuelGal));
-  const enrouteFuelGal = profilesOverlap ? null : sumComponent(legPlans.map((leg) => leg.legFuelGal));
+  const enrouteFuelGal = routeFuelIncomplete ? null : sumComponent(legPlans.map((leg) => leg.legFuelGal));
   const tripFuelGal = enrouteFuelGal === null
     ? null
     : fuelSettings.startupTaxiTakeoffGal + enrouteFuelGal;
@@ -315,6 +350,10 @@ export function calculateRouteFuelPlan(input: RouteFuelPlanInput): RouteFuelPlan
 
   if (performanceSettings.usePohPerformance) {
     warnings.push('Per-leg PL is currently used as a pressure-altitude proxy for Figure 5-9. A future QNH conversion can refine this.');
+  }
+  if (fuelSettings.climbPerformanceMode !== 'manual') {
+    warnings.push('POH Figure 5-8 climb calculations use entered elevation/PL as pressure-altitude proxies. Distance is the POH zero-wind distance.');
+    warnings.push('Figure 5-8 temperature correction currently uses the Phase 4 OAT field at the target climb altitude, increasing time, fuel and distance only when above ISA.');
   }
   if (legPlans.some((leg) => leg.oatSource === 'manual')) {
     warnings.push('Where no route-weather temperature is available, the Phase 4 OAT field is used as the cruise-temperature fallback.');
@@ -355,35 +394,53 @@ function segmentFromEvent(event: RouteVerticalEvent, routeDistanceNm: number): V
   const endNm = Math.max(0, Math.min(routeDistanceNm, rawEndNm));
   const clippedDistanceNm = Math.max(0, endNm - startNm);
   if (clippedDistanceNm <= EPSILON) return null;
+  const fraction = clippedDistanceNm / event.distanceNm;
   return {
     phase: event.type === 'TOC' ? 'climb' : 'descent',
     startNm,
     endNm,
-    timeMin: event.timeMin * clippedDistanceNm / event.distanceNm,
+    timeMin: event.timeMin * fraction,
+    fuelGal: event.fuelGal === null ? null : event.fuelGal * fraction,
   };
 }
 
-function phaseForLeg(segments: VerticalSegment[], legStartNm: number, legEndNm: number) {
+function phaseForLeg(segments: VerticalSegment[], legStartNm: number, legEndNm: number): LegVerticalPhase {
   let climbDistanceNm = 0;
   let descentDistanceNm = 0;
   let climbTimeMin = 0;
   let descentTimeMin = 0;
+  let pohClimbFuelGal = 0;
+  let pohClimbFuelComplete = true;
 
   for (const segment of segments) {
     const overlapNm = overlapLength(segment.startNm, segment.endNm, legStartNm, legEndNm);
     if (overlapNm <= EPSILON) continue;
     const segmentDistanceNm = segment.endNm - segment.startNm;
-    const overlapTimeMin = segment.timeMin * overlapNm / segmentDistanceNm;
+    const overlapFraction = overlapNm / segmentDistanceNm;
+    const overlapTimeMin = segment.timeMin * overlapFraction;
     if (segment.phase === 'climb') {
       climbDistanceNm += overlapNm;
       climbTimeMin += overlapTimeMin;
+      if (segment.fuelGal === null) {
+        pohClimbFuelComplete = false;
+      } else {
+        pohClimbFuelGal += segment.fuelGal * overlapFraction;
+      }
     } else {
       descentDistanceNm += overlapNm;
       descentTimeMin += overlapTimeMin;
     }
   }
 
-  return { climbDistanceNm, descentDistanceNm, climbTimeMin, descentTimeMin };
+  if (climbTimeMin <= EPSILON) pohClimbFuelComplete = true;
+  return {
+    climbDistanceNm,
+    descentDistanceNm,
+    climbTimeMin,
+    descentTimeMin,
+    pohClimbFuelGal,
+    pohClimbFuelComplete,
+  };
 }
 
 function cumulativeLegDistances(legs: RouteLeg[]): number[] {
@@ -415,11 +472,18 @@ function sanitizeSettings(settings: FuelPlanningSettings): FuelPlanningSettings 
   return {
     startupTaxiTakeoffGal: boundedNumber(settings.startupTaxiTakeoffGal, 0, 20, 1.7),
     manualCruiseFuelFlowGph: nullableBoundedNumber(settings.manualCruiseFuelFlowGph, 0, 40),
+    climbPerformanceMode: sanitizeClimbPerformanceMode(settings.climbPerformanceMode),
     climbFuelFlowGph: nullableBoundedNumber(settings.climbFuelFlowGph, 0, 40),
     descentFuelFlowGph: nullableBoundedNumber(settings.descentFuelFlowGph, 0, 40),
     circuitFuelFlowGph: nullableBoundedNumber(settings.circuitFuelFlowGph, 0, 40),
     totalFuelOnboardGal: nullableBoundedNumber(settings.totalFuelOnboardGal, 0, 100),
   };
+}
+
+function sanitizeClimbPerformanceMode(value: ClimbPerformanceMode): ClimbPerformanceMode {
+  return value === 'manual' || value === 'poh-max-rate' || value === 'poh-normal-90'
+    ? value
+    : DEFAULT_FUEL_PLANNING_SETTINGS.climbPerformanceMode;
 }
 
 function boundedNumber(value: number, min: number, max: number, fallback: number): number {
