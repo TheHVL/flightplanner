@@ -3,6 +3,7 @@ import './mapEnhancements.css';
 import './phase4.css';
 import './phase5.css';
 import './phase6.css';
+import './uxEnhancements.css';
 import { FlightPlanStore } from './flightplan/FlightPlanStore';
 import { ROUTE_SHAPE_CHANGED_EVENT, RouteShapeController } from './flightplan/RouteShapeController';
 import { MapManager, type ChartDetailMode } from './map/MapManager';
@@ -169,18 +170,6 @@ warningAck.addEventListener('click', () => {
 });
 window.setTimeout(() => warningAck.focus(), 0);
 
-for (const disclosure of document.querySelectorAll<HTMLDetailsElement>('.phase-disclosure[data-panel-key]')) {
-  const key = disclosure.dataset.panelKey;
-  if (!key) continue;
-  const storageKey = `flightplanner-panel-${key}-open`;
-  const saved = localStorage.getItem(storageKey);
-  if (saved !== null) disclosure.open = saved === 'true';
-  disclosure.addEventListener('toggle', () => {
-    localStorage.setItem(storageKey, String(disclosure.open));
-    window.requestAnimationFrame(() => mapManager.invalidateSize());
-  });
-}
-
 const store = new FlightPlanStore();
 const routeShapeController = new RouteShapeController(store);
 const routePanel = new RoutePanel(routeElement, store);
@@ -194,6 +183,18 @@ const mapManager = new MapManager(mapElement, {
   onWaypointMoved: (id, lat, lon) => store.updateWaypoint(id, { lat, lon }),
   onRouteLegShape: (legIndex, lat, lon) => routeShapeController.setLegShape(legIndex, { lat, lon }),
 });
+
+for (const disclosure of document.querySelectorAll<HTMLDetailsElement>('.phase-disclosure[data-panel-key]')) {
+  const key = disclosure.dataset.panelKey;
+  if (!key) continue;
+  const storageKey = `flightplanner-panel-${key}-open`;
+  const saved = localStorage.getItem(storageKey);
+  if (saved !== null) disclosure.open = saved === 'true';
+  disclosure.addEventListener('toggle', () => {
+    localStorage.setItem(storageKey, String(disclosure.open));
+    window.requestAnimationFrame(() => mapManager.invalidateSize());
+  });
+}
 
 const isChartDetailMode = (value: string | null): value is ChartDetailMode =>
   value === 'auto' || value === 'sharp' || value === 'fast';
@@ -408,11 +409,54 @@ const renderGlideEnvelope = () => {
   }
 };
 
+const enhanceVerticalPanel = () => {
+  for (const select of verticalProfileElement.querySelectorAll<HTMLSelectElement>('[data-vertical-waypoint-mode]')) {
+    const airportOption = select.querySelector<HTMLOptionElement>('option[value="airport"]');
+    const circuitOption = select.querySelector<HTMLOptionElement>('option[value="circuits"]');
+    if (airportOption) airportOption.textContent = 'Airport / T&G';
+    if (circuitOption) circuitOption.textContent = 'Airport + circuits (1000 ft AGL)';
+  }
+
+  const sectionHint = verticalProfileElement.querySelector<HTMLElement>('.vertical-waypoint-section .vertical-section-title span');
+  if (sectionHint) {
+    sectionHint.textContent = 'Airport / T&G models the airport visit without added circuit time. Airport + circuits uses the same airport descent/climb and adds circuit time/fuel; standard circuit altitude is 1000 ft AGL.';
+  }
+
+  for (const controls of verticalProfileElement.querySelectorAll<HTMLElement>('.vertical-circuit-controls')) {
+    if (controls.querySelector('.circuit-standard-note')) continue;
+    const row = controls.closest<HTMLElement>('.vertical-waypoint-row');
+    const elevationInput = row?.querySelector<HTMLInputElement>('[data-vertical-waypoint-elevation]');
+    const elevationFt = elevationInput?.value ? Number(elevationInput.value) : null;
+    const altitudeText = elevationFt !== null && Number.isFinite(elevationFt)
+      ? `${Math.round(elevationFt + 1000).toLocaleString()} ft AMSL (1000 ft AGL)`
+      : 'field elevation + 1000 ft AGL';
+    const note = document.createElement('div');
+    note.className = 'circuit-standard-note';
+    note.textContent = `Standard circuit altitude: ${altitudeText}.`;
+    controls.append(note);
+  }
+};
+
+const fixOfpFuelRemainingColumn = () => {
+  for (const row of tableElement.querySelectorAll<HTMLTableRowElement>('tbody tr')) {
+    if (row.cells.length !== 24) continue;
+    const estimatedCell = Array.from(row.cells).find((cell) => cell.title.startsWith('Estimated fuel remaining'));
+    if (!estimatedCell) continue;
+    const diffCell = document.createElement('td');
+    diffCell.className = 'pending';
+    diffCell.title = 'Time difference between actual and estimated time.';
+    diffCell.textContent = '—';
+    estimatedCell.before(diffCell);
+  }
+};
+
 const render = () => {
   const waypoints = store.getWaypoints();
   const legs = store.getLegs();
   routePanel.render();
   ofpTable.render();
+  enhanceVerticalPanel();
+  fixOfpFuelRemainingColumn();
   mapManager.renderMsaCorridor(legs);
   mapManager.renderRoute(waypoints, legs, (id, lat, lon) => store.updateWaypoint(id, { lat, lon }));
   renderVerticalProfileMarkers();
