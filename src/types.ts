@@ -16,9 +16,9 @@ export interface RouteLeg {
   /** Flown/plotted distance, including an optional route-shaping bend. */
   distanceNm: number;
   /** Direct waypoint-to-waypoint distance, independent of route shaping. */
-  directDistanceNm: number;
+  directDistanceNm?: number;
   /** Direct waypoint-to-waypoint true track used by the OFP/navigation calculations. */
   trueTrackDeg: number;
-  /** Plotted/flown path. The first/last points are always from/to. */
-  path: Coordinate[];
+  /** Plotted/flown path. Older callers may omit this, which means direct from/to. */
+  path?: Coordinate[];
 }
