@@ -23,6 +23,62 @@ Displayed OFP values may be rounded for readability. Internal calculations keep 
 
 ---
 
+## PR #20, visual 1 NM MSA corridor and manual MSA validation
+
+### Added / changed
+
+- Added an optional `MSA ±1 NM` overlay above the map.
+- The corridor is geographic rather than pixel-based, so its width remains 1 NM either side of the route when map zoom changes.
+- Each route leg is drawn with 1 NM lateral offsets, plus 1 NM-radius caps around waypoints to cover the route endpoints and turns.
+- Added a manual MSA field for every OFP leg.
+- When both PL and manual MSA are entered, the OFP highlights the MSA and PL cells if `PL < MSA`.
+- Manual MSA values participate in Ctrl+Z/Cmd+Z undo.
+- Manual MSA values are cleared for affected legs when route geometry changes, because an MSA checked for the old 1 NM corridor should not silently remain attached to a different corridor.
+- Splitting a route leg by dragging the route line intentionally does not copy the old manual MSA onto the two new legs. The MSA must be rechecked for the new geometry.
+- Updated the README and `docs/MSA_IMPLEMENTATION_PLAN.md` to describe the pilot-driven workflow and future glide/terrain assistance.
+
+### Rule used by the current workflow
+
+The project daytime-VFR rule supplied for Flightplanner remains:
+
+```text
+manual MSA = highest terrain or obstacle within 1 NM of route + 500 ft
+```
+
+When above water, the pilot must additionally account for the supplied requirement to remain within gliding distance of land. The current website does not automatically claim that this requirement is met.
+
+OFP validation is deliberately simple and transparent:
+
+```text
+if PL < entered MSA:
+    show warning
+```
+
+### Corridor geometry
+
+The lateral offset helper uses the same spherical Earth radius as the great-circle navigation model:
+
+```text
+R = 3440.065 NM
+angular distance = offset distance / R
+```
+
+For each leg, left and right points are calculated 1 NM perpendicular to the local course at each endpoint. Waypoint caps use a radius of:
+
+```text
+1 NM = 1852 m
+```
+
+This overlay is a visual inspection tool, not an automatic obstacle database.
+
+### Safety/data behavior
+
+- No complete automatic MSA is presented because unrestricted, complete man-made obstacle data is not currently available to the public browser application.
+- The pilot remains responsible for inspecting the relevant chart/data inside the corridor and entering the resulting MSA.
+- A future C182T still-air glide-to-land overlay is planned using verified POH maximum-glide data.
+
+---
+
 ## PR #19, route-line waypoint insertion, undo history and MSA design
 
 ### Added / changed
