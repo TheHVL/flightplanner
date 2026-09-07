@@ -13,17 +13,19 @@ Browser-based VFR flight planning for Norwegian flight training, with the Cessna
 - Ctrl+Z on Windows/Linux and Cmd+Z on macOS undo the latest planner-state action, with up to 50 stored undo steps.
 - Great-circle leg distance and initial true track.
 - Automatic WMM2025 magnetic variation per leg, with manual override.
-- Wind triangle with WCA, heading, groundspeed and leg time.
+- Wind triangle with WCA, heading and groundspeed.
 - Kartverket Norgeskart and Avinor Norway Aeronautical Chart ICAO 1:500 000 map layers.
 - Optional visual MSA corridor extending 1 NM either side of the complete route, including waypoint end caps.
 - Manual MSA entry for every OFP leg, with a warning when PL is below the entered MSA.
 - Optional C182T zero-wind maximum-glide visualization based on POH Figure 3-1 and the Phase 6 modeled route altitude.
 - UiT-style operational flight-plan navigation log with accumulated distance/time and editable planned level (PL) per leg.
 - Complete C182T POH Figure 5-9 cruise-performance model from sea level through 14,000 ft, 2000-2400 RPM where published, ISA -20°C to ISA +20°C, with bounded interpolation and no extrapolation.
+- Phase-aware fuel planning that separates cruise, climb, descent, circuit/pattern, and startup/taxi/takeoff fuel.
+- Optional fuel-onboard entry and estimated fuel remaining in the OFP.
 - Route weather preview using Open-Meteo pressure-level winds and temperature, interpolated by geopotential height and forecast time.
 - Automatic TOC/TOD across route altitude changes, including intermediate airport / touch-and-go handling.
 - Phase 7 AIP preview: aerodrome elevation lookup by ICAO code from an Avinor AIP-derived dataset.
-- Circuit/pattern planning at intermediate airports, with configurable circuit count and minutes per circuit added to OFP accumulated time.
+- Circuit/pattern planning at intermediate airports, with configurable circuit count and minutes per circuit added to route time and, when Circuit FF is supplied, fuel.
 - Resizable map workspace, scrollable planning sidebar and full-screen map mode.
 
 When a route line with an existing PL is split by inserting a new waypoint, the old PL is carried onto both new legs so an editing operation does not silently discard the planned altitude. Weather forecasts for changed route geometry are invalidated and can then be refreshed.
@@ -57,18 +59,48 @@ Cowl flaps CLOSED
 
 The source note states that maximum cruise power is 80% MCP and settings above 80% MCP are listed only to aid interpolation. Flightplanner preserves those values for interpolation and displays a warning when the selected result is above 80% MCP.
 
-The model interpolates only between published bracketing values for:
+The model interpolates only between published bracketing values for pressure altitude, RPM, temperature offset from ISA and manifold pressure. No extrapolation is allowed. Because the source tables become progressively smaller with altitude, not every RPM/MP combination exists at every altitude. For example, Figure 5-9 does not publish 2000 RPM at 14,000 ft. Unsupported combinations are rejected rather than invented.
+
+For route fuel/navigation calculations, each leg now uses its PL as the Figure 5-9 pressure-altitude input, with the Phase 4 pressure-altitude field as a fallback when PL is blank. If route-weather temperature has been fetched for the leg, that OAT is used; otherwise the Phase 4 OAT field is used as the fallback.
+
+**Current limitation:** PL is an altitude, not automatically pressure altitude. Until a QNH-based conversion is added, Flightplanner treats PL as a pressure-altitude proxy and labels that assumption in the fuel-planning UI.
+
+## Phase-aware fuel planning
+
+The fuel model combines the completed cruise model with the Phase 6 vertical profile.
+
+For each route leg, the horizontal distance is split into modeled climb, cruise and descent portions. Circuit/pattern time at the leg's FROM waypoint is also included where configured.
+
+Cruise fuel flow comes from Figure 5-9 when POH performance is enabled. If POH performance is disabled, a manual cruise fuel-flow field is available.
+
+The supplied Figure 5-9 PDF does **not** provide climb, descent or circuit fuel-flow data. Flightplanner therefore does not invent those values. Climb FF, Descent FF and Circuit FF are manual inputs until a verified C182T source or UTSA planning standard is provided.
+
+Fuel formulas:
 
 ```text
-pressure altitude
-RPM
-temperature offset from ISA
-manifold pressure
+Phase fuel [gal] = fuel flow [gal/h] x phase time [min] / 60
+
+Leg fuel = cruise fuel + climb fuel + descent fuel + circuit/activity fuel
+
+Enroute fuel = sum of leg fuel
+
+Trip fuel = startup/taxi/takeoff allowance + enroute fuel
 ```
 
-No extrapolation is allowed. Because the source tables become progressively smaller with altitude, not every RPM/MP combination exists at every altitude. For example, Figure 5-9 does not publish 2000 RPM at 14,000 ft. The planner rejects unsupported combinations rather than inventing a value.
+The UiT OFP v4.2 supplied for this project states that Trip Fuel includes `1.7` US gal for startup, taxi and takeoff. Flightplanner therefore uses 1.7 gal as the editable default startup/taxi/takeoff allowance.
 
-The current performance inputs are still one global cruise setup. A later enhancement can apply pressure altitude and forecast temperature separately to each route leg while retaining this same verified Figure 5-9 calculation engine.
+When Fuel onboard is entered, the OFP EST fuel-remaining column uses:
+
+```text
+Estimated remaining after leg n
+= fuel onboard
+- startup/taxi/takeoff allowance
+- accumulated enroute fuel through leg n
+```
+
+If a required phase fuel flow is missing, INT/ACC fuel remains incomplete rather than substituting cruise fuel flow. Phase-aware OFP leg time still separates cruise from the existing Phase 6 climb/descent timing model.
+
+Fuel-planning settings are currently stored in browser local storage. They are not yet part of the planner Ctrl+Z history or future save/load flight-plan format.
 
 ## AIP aerodrome data
 
@@ -92,7 +124,7 @@ Each leg has a planned level in the OFP. At an ordinary waypoint:
 - Airport/T&G mode descends to field elevation before the airport and climbs again after it.
 - Airport + circuits uses the same vertical logic and adds a user-selected time allowance for pattern work.
 
-Circuit time currently affects **accumulated OFP time only**. Circuit fuel is deliberately not estimated yet because applying cruise fuel flow to circuit operations would be misleading.
+Climb/descent timing still uses the user-selected Phase 6 vertical rates and groundspeeds. A future improvement can replace those assumptions with verified C182T climb/descent performance data.
 
 ## MSA workflow
 
@@ -108,68 +140,33 @@ When above water there is an additional project requirement to remain within gli
 
 Use the `MSA ±1 NM` control above the map to display the inspection corridor. The overlay extends 1 NM to either side of every route leg and includes 1 NM end caps around the waypoints. Inspect the applicable chart/data inside that corridor, determine the MSA yourself, and enter it in the OFP MSA field for that leg.
 
-If both MSA and PL are entered and:
+If both MSA and PL are entered and `PL < MSA`, the MSA and PL cells are highlighted as a warning.
 
-```text
-PL < MSA
-```
-
-the MSA and PL cells are highlighted as a warning.
-
-The website does **not** currently calculate a complete MSA from terrain and obstacle data. This avoids presenting a terrain-only calculation as complete while unrestricted automatic NRL obstacle data is unavailable. The detailed future implementation is documented in [docs/MSA_IMPLEMENTATION_PLAN.md](docs/MSA_IMPLEMENTATION_PLAN.md).
+The website does **not** currently calculate a complete MSA from terrain and obstacle data. The detailed future implementation is documented in [docs/MSA_IMPLEMENTATION_PLAN.md](docs/MSA_IMPLEMENTATION_PLAN.md).
 
 ## C182T glide-to-land visualization
 
 Use the `C182T glide` map control to display an approximate zero-wind maximum-glide reach around the route.
 
-Source basis: Cessna Model 182T NAV III GFC 700 AFCS, Section 3, Figure 3-1 `MAXIMUM GLIDE`, supplied for this project. The figure states:
+Source basis: Cessna Model 182T NAV III GFC 700 AFCS, Section 3, Figure 3-1 `MAXIMUM GLIDE`, supplied for this project. The figure states propeller windmilling, flaps up and zero wind, with best-glide speeds 76 KIAS at 3100 lb, 70 KIAS at 2600 lb and 58 KIAS at 2100 lb.
 
-- propeller windmilling;
-- flaps up;
-- zero wind;
-- best-glide speed 76 KIAS at 3100 lb;
-- best-glide speed 70 KIAS at 2600 lb;
-- best-glide speed 58 KIAS at 2100 lb.
-
-The plotted maximum-glide line is approximately linear from 0 ft / 0 NM to 14,000 ft / 20 NM. Flightplanner therefore represents the line as:
+The plotted maximum-glide line is approximately linear from 0 ft / 0 NM to 14,000 ft / 20 NM. Flightplanner represents it as:
 
 ```text
 approximate glide distance [NM]
 = height above assumed landing surface [ft] / 700
 ```
 
-Examples:
-
-```text
-2,800 ft -> 4.0 NM
-4,500 ft -> 6.4 NM
-7,000 ft -> 10.0 NM
-14,000 ft -> 20.0 NM
-```
-
-The map overlay is designed specifically as a visual aid for the over-water part of the UTSA project rule. It uses the modeled Phase 6 route altitude, including climb and descent where a valid vertical profile exists, rather than blindly applying the full PL before TOC or after TOD.
-
-Important limitations:
-
-- the POH figure assumes zero wind;
-- the displayed reach assumes the shoreline/landing surface is at sea level;
-- the overlay does not account for terrain height between the aircraft and a possible landing area;
-- it does not determine whether land is suitable for landing;
-- it is not a wind-aware glide footprint;
-- Figure 3-1 is not extrapolated above 14,000 ft;
-- if Phase 6 climb/descent profiles overlap, the glide overlay is hidden rather than presenting an ambiguous result.
-
-The shaded area should therefore be read as **theoretical maximum reach to a sea-level shoreline under the stated POH conditions**, not as a guaranteed safe landing area.
+The overlay uses the modeled Phase 6 route altitude. It assumes a sea-level shoreline, does not account for terrain or landing suitability, is not wind-aware, and is not extrapolated above 14,000 ft.
 
 ## Architecture
 
-The project keeps route state, navigation mathematics, aircraft performance, weather, AIP data, map rendering and flight-plan presentation in separate modules. UI code should not own aviation calculations.
-
-Key areas:
+The project keeps route state, navigation mathematics, aircraft performance, fuel, weather, AIP data, map rendering and flight-plan presentation in separate modules.
 
 ```text
 src/navigation/    Great-circle, wind, magnetic, MSA-corridor, glide-envelope and vertical-profile math
 src/performance/   C182T cruise data, interpolation and maximum-glide source model
+src/fuel/          Phase-aware route fuel planning and persisted fuel inputs
 src/weather/       Route forecast sampling/interpolation
 src/aip/           AIP aerodrome catalog lookup
 src/map/           Leaflet map and ICAO chart quality logic
