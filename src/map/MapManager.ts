@@ -34,6 +34,12 @@ export interface VerticalProfileMapMarker {
   title: string;
 }
 
+export interface GlideEnvelopeMapSample {
+  lat: number;
+  lon: number;
+  glideRangeNm: number;
+}
+
 export type { ChartDetailMode } from './icaoQuality';
 
 const WEB_MERCATOR_HALF_WORLD = 20037508.342789244;
@@ -123,11 +129,13 @@ export class MapManager {
   private readonly routeLine: Polyline;
   private readonly routeHitLine: Polyline;
   private readonly msaCorridorLayer: LayerGroup;
+  private readonly glideEnvelopeLayer: LayerGroup;
   private chartEdition: string | null = null;
   private renderedWaypoints: Waypoint[] = [];
   private routeInsertDrag: RouteInsertDrag | null = null;
   private suppressNextMapClick = false;
   private msaCorridorVisible = false;
+  private glideEnvelopeVisible = false;
 
   constructor(element: HTMLElement, callbacks: MapManagerCallbacks) {
     this.map = L.map(element, {
@@ -137,6 +145,11 @@ export class MapManager {
       maxBoundsViscosity: 1,
       worldCopyJump: false,
     }).setView([69.6492, 18.9553], 7);
+
+    const glidePane = this.map.createPane('glide-envelope-pane');
+    glidePane.style.zIndex = '385';
+    glidePane.style.pointerEvents = 'none';
+    this.glideEnvelopeLayer = L.layerGroup();
 
     const msaPane = this.map.createPane('msa-corridor-pane');
     msaPane.style.zIndex = '390';
@@ -236,6 +249,16 @@ export class MapManager {
     }
   }
 
+  setGlideEnvelopeVisible(visible: boolean): void {
+    if (this.glideEnvelopeVisible === visible) return;
+    this.glideEnvelopeVisible = visible;
+    if (visible) {
+      this.glideEnvelopeLayer.addTo(this.map);
+    } else {
+      this.glideEnvelopeLayer.removeFrom(this.map);
+    }
+  }
+
   renderMsaCorridor(waypoints: Waypoint[]): void {
     this.msaCorridorLayer.clearLayers();
     if (waypoints.length < 2) return;
@@ -265,6 +288,22 @@ export class MapManager {
         ...pathStyle,
         radius: MSA_CORRIDOR_HALF_WIDTH_METERS,
       }).addTo(this.msaCorridorLayer);
+    }
+  }
+
+  renderGlideEnvelope(samples: GlideEnvelopeMapSample[]): void {
+    this.glideEnvelopeLayer.clearLayers();
+    for (const sample of samples) {
+      if (!Number.isFinite(sample.glideRangeNm) || sample.glideRangeNm <= 0) continue;
+      L.circle([sample.lat, sample.lon], {
+        pane: 'glide-envelope-pane',
+        radius: sample.glideRangeNm * 1852,
+        stroke: false,
+        fill: true,
+        fillColor: '#16889a',
+        fillOpacity: 0.024,
+        interactive: false,
+      }).addTo(this.glideEnvelopeLayer);
     }
   }
 

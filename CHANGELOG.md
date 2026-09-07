@@ -1,8 +1,8 @@
 # Flightplanner change history
 
-This file records the significant changes made to Flightplanner, why they were made, the formulas used, and important limitations. New updates should be added at the top.
+This file records significant Flightplanner updates, the formulas used, data assumptions, and important limitations. New updates are added at the top.
 
-## Conventions used in formulas
+## Formula conventions
 
 - `D` = distance in NM
 - `TAS` = true airspeed in kt
@@ -19,7 +19,61 @@ This file records the significant changes made to Flightplanner, why they were m
 - `ROC` = rate of climb in ft/min
 - `ROD` = rate of descent in ft/min
 
-Displayed OFP values may be rounded for readability. Internal calculations keep the unrounded values unless explicitly documented otherwise.
+Displayed OFP values may be rounded for readability. Internal calculations keep unrounded values unless explicitly documented otherwise.
+
+---
+
+## PR #21, C182T maximum-glide visualization
+
+### Added / changed
+
+- Added a `C182T glide` map toggle.
+- Added a shaded theoretical maximum-glide reach around the route.
+- Source basis is the user-supplied Cessna Model 182T NAV III GFC 700 AFCS, Section 3, Figure 3-1 `MAXIMUM GLIDE`.
+- The UI preserves the source conditions: propeller windmilling, flaps up, zero wind.
+- Recorded the best-glide speeds printed in the figure:
+  - 3100 lb: 76 KIAS
+  - 2600 lb: 70 KIAS
+  - 2100 lb: 58 KIAS
+- The overlay uses the Phase 6 modeled altitude during climbs and descents rather than applying full PL before TOC or after TOD.
+- The overlay is hidden when vertical profiles overlap because the altitude model is ambiguous.
+- Figure 3-1 is not extrapolated above 14,000 ft.
+- Added tests for the glide-line model, best-glide speeds, climb-altitude sampling, overlap handling, and chart-limit behavior.
+
+### Glide model
+
+The plotted Figure 3-1 line is approximately straight from 0 ft / 0 NM to 14,000 ft / 20 NM. Flightplanner represents that plotted line as:
+
+```text
+700 ft per NM = 14,000 ft / 20 NM
+
+approximate maximum glide distance [NM]
+= height above assumed landing surface [ft] / 700
+```
+
+Examples:
+
+```text
+2,800 ft -> 4.0 NM
+4,500 ft -> 6.4 NM
+7,000 ft -> 10.0 NM
+14,000 ft -> 20.0 NM
+```
+
+During a modeled climb or descent, altitude is linearly interpolated along the vertical-profile distance:
+
+```text
+fraction = (route distance - vertical-segment start) / vertical-segment distance
+modeled altitude = altitude_from + (altitude_to - altitude_from) × fraction
+```
+
+### Important limitations
+
+- The overlay assumes zero wind because that is the condition stated by Figure 3-1.
+- For the current over-water visual aid, the shoreline/landing surface is assumed to be at sea level.
+- The shading does not account for terrain between the aircraft and a landing area.
+- It does not determine whether land is suitable for landing.
+- It is not a landing guarantee and does not automatically alter MSA.
 
 ---
 
@@ -27,55 +81,31 @@ Displayed OFP values may be rounded for readability. Internal calculations keep 
 
 ### Added / changed
 
-- Added an optional `MSA ±1 NM` overlay above the map.
-- The corridor is geographic rather than pixel-based, so its width remains 1 NM either side of the route when map zoom changes.
-- Each route leg is drawn with 1 NM lateral offsets, plus 1 NM-radius caps around waypoints to cover the route endpoints and turns.
-- Added a manual MSA field for every OFP leg.
-- When both PL and manual MSA are entered, the OFP highlights the MSA and PL cells if `PL < MSA`.
-- Manual MSA values participate in Ctrl+Z/Cmd+Z undo.
-- Manual MSA values are cleared for affected legs when route geometry changes, because an MSA checked for the old 1 NM corridor should not silently remain attached to a different corridor.
-- Splitting a route leg by dragging the route line intentionally does not copy the old manual MSA onto the two new legs. The MSA must be rechecked for the new geometry.
-- Updated the README and `docs/MSA_IMPLEMENTATION_PLAN.md` to describe the pilot-driven workflow and future glide/terrain assistance.
+- Added an optional `MSA ±1 NM` map overlay.
+- Corridor width is geographic rather than pixel-based, so it stays 1 NM either side of the route when zoom changes.
+- Added 1 NM waypoint end caps.
+- Added manual MSA entry for every OFP leg.
+- OFP highlights MSA and PL if planned level is below entered MSA.
+- Manual MSA participates in Ctrl+Z/Cmd+Z undo.
+- Geometry-changing route edits clear affected manual MSA values so stale checks are not reused.
+- Splitting a route leg does not copy the old MSA to the new legs; MSA must be rechecked.
 
-### Rule used by the current workflow
-
-The project daytime-VFR rule supplied for Flightplanner remains:
+### Rule used
 
 ```text
 manual MSA = highest terrain or obstacle within 1 NM of route + 500 ft
-```
 
-When above water, the pilot must additionally account for the supplied requirement to remain within gliding distance of land. The current website does not automatically claim that this requirement is met.
-
-OFP validation is deliberately simple and transparent:
-
-```text
 if PL < entered MSA:
     show warning
 ```
 
-### Corridor geometry
-
-The lateral offset helper uses the same spherical Earth radius as the great-circle navigation model:
-
-```text
-R = 3440.065 NM
-angular distance = offset distance / R
-```
-
-For each leg, left and right points are calculated 1 NM perpendicular to the local course at each endpoint. Waypoint caps use a radius of:
+The corridor uses spherical geographic offsets. Waypoint caps use:
 
 ```text
 1 NM = 1852 m
 ```
 
-This overlay is a visual inspection tool, not an automatic obstacle database.
-
-### Safety/data behavior
-
-- No complete automatic MSA is presented because unrestricted, complete man-made obstacle data is not currently available to the public browser application.
-- The pilot remains responsible for inspecting the relevant chart/data inside the corridor and entering the resulting MSA.
-- A future C182T still-air glide-to-land overlay is planned using verified POH maximum-glide data.
+The overlay is a chart-inspection tool, not an automatic terrain/obstacle database.
 
 ---
 
@@ -83,177 +113,126 @@ This overlay is a visual inspection tool, not an automatic obstacle database.
 
 ### Added / changed
 
-- Route legs now have a wide invisible interaction line. Dragging a route leg bends the route as a preview and inserts a new waypoint at the release position.
-- The inserted waypoint is placed in route order between the two waypoints that formed the dragged leg rather than appended to the end.
-- If the original leg had a planned level, that PL is copied to both new split legs so inserting a point does not silently lose the altitude plan.
-- Route weather data is invalidated after insertion because the route geometry changed.
-- Added planner-state undo history with up to 50 snapshots.
-- Ctrl+Z on Windows/Linux and Cmd+Z on macOS restore the previous planner state. If a form control is focused, it is blurred first so the edit is committed before the planner undo is applied.
-- Undo restores route waypoints, automatic/manual waypoint-name status, navigation settings, performance settings, weather settings, vertical-profile settings, planned altitudes, weather forecast state and intermediate airport/circuit constraints.
-- Added `docs/MSA_IMPLEMENTATION_PLAN.md` describing the proposed daytime-VFR MSA architecture for this project.
+- Route legs gained a wider invisible grab line.
+- Dragging a route line previews a bend and inserts a waypoint at the release point.
+- Inserted points are placed in route order instead of appended to the end.
+- Existing PL on a split leg is copied to both new legs.
+- Changed route geometry invalidates route weather.
+- Added up to 50 planner-state undo snapshots.
+- Ctrl+Z on Windows/Linux and Cmd+Z on macOS restore the previous planner state.
+- Added the MSA implementation design document.
 
-### MSA proposal documented, not yet calculated in the application
-
-The project rule supplied for the planned MSA feature is:
-
-```text
-Obstacle/terrain MSA = highest controlling elevation within 1 NM of route + 500 ft
-```
-
-When above water, the proposal adds a separate glide-to-land requirement. For a simple constant still-air glide-ratio model, if later supported by verified aircraft data:
-
-```text
-required height above landing point [ft]
-  = distance to land [NM] × 6076.12 / glide ratio
-
-required glide altitude MSL
-  = landing-point elevation MSL + required height above landing point
-
-leg MSA = max(obstacle/terrain MSA, glide-to-land requirement)
-```
-
-No glide ratio has been invented or taken from the cruise tables. The C182T glide model must be based on separately verified POH glide data before this calculation is implemented.
-
-### Data-access note
-
-- Kartverket terrain/elevation data is available through national elevation-model services and is the proposed source for terrain corridor analysis.
-- Nasjonalt register over luftfartshindre (NRL) is the appropriate source family for man-made obstacles, but Kartverket requires approved access from 1 July 2026.
-- The public repository must not contain restricted NRL data or credentials.
-- A first MSA implementation should therefore be terrain-only with a clear incomplete-data warning plus manual obstacle override, unless an approved obstacle-data integration is established.
-
-No new operational MSA value is exposed by this PR. The implementation plan deliberately separates the design from an unverified obstacle/glide calculation.
+No operational MSA value was introduced in this update.
 
 ---
 
-## PR #17, fix Avinor AIP current-issue detection
+## PR #18, Phase 7 documentation and status cleanup
+
+### Added / changed
+
+- Updated the app header to Phase 7.
+- Updated README and change-history documentation to explicitly include the AIP/circuit changes and AIP parser fix.
+- Kept the project status and limitations aligned with what was actually deployed.
+
+No aviation formulas changed.
+
+---
+
+## PR #17, Avinor AIP current-issue detection fix
 
 ### Fixed
 
-- The first Phase 7 deployment revealed that Avinor's current AIP history-page link format did not match the original strict URL parser.
-- Replaced the strict href assumption with current AIRAC date detection from Avinor's AIP history page.
-- The Pages build now constructs the current English eAIP issue path from the detected AIRAC date.
-- Verified in GitHub Pages deployment that the updater parsed 53 AD 2 aerodromes from the AIP effective 2026-09-03. ENVR and ENBH were skipped because their requested AD 2 pages returned HTTP 404.
-- The committed fallback catalog is still retained if a future AIP refresh fails.
+- Updated the AIP updater to detect the current AIRAC date from Avinor's AIP history page rather than relying on an outdated strict href format.
+- Pages builds construct the current English eAIP issue path from the detected AIRAC date.
+- The deployment verified 53 AD 2 aerodromes for the AIP effective 2026-09-03; ENVR and ENBH were skipped because the requested pages returned HTTP 404.
+- The committed fallback dataset remains available if a refresh fails.
 
-No aviation formulas changed in this update.
-
----
-
-## PR #16, Phase 7 AIP and circuit planning
-
-### Added
-
-- Added an Avinor AIP-derived aerodrome catalog and ICAO lookup for airport elevation.
-- Added a build-time AIP updater in `scripts/update-aip-aerodromes.mjs`.
-- GitHub Pages now attempts to refresh AIP aerodrome data before deployment and runs a scheduled weekly refresh.
-- Added committed fallback AIP data so the planner remains usable if Avinor is temporarily unavailable or the current eAIP cannot be parsed safely.
-- Added ICAO lookup controls for departure, destination and intermediate airport waypoints.
-- Added `Airport + circuits` as an intermediate waypoint mode.
-- Circuit planning supports circuit count and minutes per circuit.
-- Circuit/pattern time is added to OFP accumulated time after the airport and before the next outbound leg.
-- Circuit fuel is intentionally not calculated yet.
-- Fixed automatic waypoint renumbering so deleting or moving an automatically named waypoint keeps map labels and OFP names aligned.
-- Fixed PL descent gating. If WP03 is planned at one altitude and the outbound WP03 to WP04 leg is planned lower, TOD can no longer be placed before WP03.
-
-### Formulas and rules
-
-Circuit time:
-
-```text
-Circuit allowance [min] = number of circuits × minutes per circuit
-```
-
-OFP accumulated time:
-
-```text
-ACC time after leg n = previous ACC time
-                     + activity/circuit time at leg start waypoint
-                     + leg time
-```
-
-Vertical transition time:
-
-```text
-Climb time [min]   = Δh / ROC
-Descent time [min] = Δh / ROD
-```
-
-Vertical transition distance:
-
-```text
-Climb distance [NM]   = climb GS × climb time / 60
-Descent distance [NM] = descent GS × descent time / 60
-```
-
-For a lower outbound PL after waypoint `WPi`, the ideal TOD is calculated backwards from the next waypoint, but the transition is gated by `WPi`:
-
-```text
-Ideal TOD route distance = next waypoint route distance - descent distance
-Actual TOD route distance = max(WPi route distance, Ideal TOD route distance)
-```
-
-This guarantees that a descent belonging to the outbound leg never begins before the waypoint where that lower planned level starts. If the required descent distance is longer than the outbound leg, the planner holds TOD at the waypoint and issues a warning that the requested target altitude cannot be achieved by the next waypoint using the selected descent assumptions.
-
-### AIP data notes
-
-- Source: Avinor AIP Norway, AD 2 aerodrome pages.
-- The browser uses a static JSON snapshot rather than requesting Avinor eAIP pages directly, avoiding browser CORS dependence and avoiding private API credentials.
-- The deployed snapshot is refreshed at build time when possible.
-- Manual field elevation remains available and should be used if an airport is absent from the snapshot or current AIP data needs correction.
-- The AIP lookup is a convenience for training planning, not an operational database guarantee.
+No aviation formulas changed.
 
 ---
 
-## PR #15, automatic Phase 6 across PL changes and touch-and-go airports
+## PR #16, Phase 7 AIP aerodrome elevation and circuit planning
 
-### Added
+### Added / changed
 
-- Automatic vertical transitions across the whole route rather than only departure and destination.
-- A higher outbound PL creates a TOC after the intermediate waypoint.
-- A lower outbound PL originally created a TOD associated with the intermediate waypoint. This behavior was subsequently refined in PR #16 so TOD cannot move to the wrong side of the waypoint.
-- Intermediate waypoint modes: Auto from PL, Airport/T&G, Off.
-- Airport/T&G accepts field elevation, creates TOD before the airport and TOC after it.
-- Multiple TOC/TOD map markers.
-- Vertical-profile overlap detection.
-- Zero-altitude-change events are suppressed so a pointless marker is not placed directly on a waypoint.
+- Added an Avinor AIP-derived aerodrome catalog and ICAO lookup for field elevation.
+- Added build-time and scheduled AIP refresh.
+- Added intermediate `Airport + circuits` mode.
+- Added circuit count and minutes per circuit.
+- Circuit time is added to accumulated OFP time.
+- Fixed automatic waypoint renumbering so map and OFP names stay aligned after deletion/reordering.
+- Fixed PL-change descent gating so TOD for a lower outbound PL cannot move before the waypoint where that lower PL starts.
 
 ### Formulas
 
-Same vertical formulas as above:
+```text
+Circuit allowance [min]
+= number of circuits × minutes per circuit
+
+ACC time after leg n
+= previous ACC time + waypoint activity time + leg time
+```
+
+For a lower outbound PL after waypoint `WPi`:
+
+```text
+Descent time [min] = Δh / ROD
+Descent distance [NM] = descent GS × descent time / 60
+
+Ideal TOD = next waypoint route distance - descent distance
+Actual TOD = max(WPi route distance, Ideal TOD)
+```
+
+If the selected descent cannot fit before the next waypoint, the planner warns rather than moving TOD to the wrong side of the waypoint.
+
+---
+
+## PR #15, automatic multi-leg TOC/TOD and touch-and-go airports
+
+### Added / changed
+
+- Extended vertical profiling from only departure/arrival to altitude changes throughout the route.
+- Higher outbound PL creates TOC after the waypoint.
+- Lower outbound PL creates a descent on the outbound leg.
+- Added intermediate waypoint modes: Auto from PL, Airport/T&G, Off.
+- Airport/T&G descends to field elevation and climbs again after the airport.
+- Added multiple TOC/TOD markers and profile-overlap detection.
+
+### Formulas
 
 ```text
 Time [min] = altitude change [ft] / vertical speed [ft/min]
 Distance [NM] = groundspeed [kt] × time [min] / 60
 ```
 
-For an airport/T&G:
+Airport/T&G model:
 
 ```text
 Inbound descent: inbound PL -> field elevation
-Outbound climb:   field elevation -> outbound PL
+Outbound climb: field elevation -> outbound PL
 ```
 
 ---
 
-## PR #14, initial Phase 6 TOC/TOD vertical profile
+## PR #14, initial Phase 6 vertical profile
 
 ### Added
 
-- Departure and destination elevation assumptions.
-- User-selectable climb and descent rates in ft/min.
-- User-selectable climb and descent groundspeeds.
-- Initial TOC and final TOD calculation.
-- Great-circle placement of TOC/TOD points on the route.
-- Detection of overlapping climb and descent profiles.
+- Departure and destination elevations.
+- User-selectable climb/descent rates.
+- User-selectable climb/descent groundspeeds.
+- Initial TOC and final TOD calculations.
+- Great-circle placement of TOC/TOD markers.
+- Overlap detection.
 
 ### Formulas
 
 ```text
-Climb altitude gain = max(0, planned altitude - departure elevation)
-Descent altitude loss = max(0, final planned altitude - destination elevation)
+Climb altitude gain = max(0, initial PL - departure elevation)
+Descent altitude loss = max(0, final PL - destination elevation)
 
-Climb time [min] = climb altitude gain / climb rate
-Descent time [min] = descent altitude loss / descent rate
+Climb time [min] = climb altitude gain / ROC
+Descent time [min] = descent altitude loss / ROD
 
 Climb distance [NM] = climb GS × climb time / 60
 Descent distance [NM] = descent GS × descent time / 60
@@ -269,8 +248,8 @@ Level distance = max(0, TOD distance - TOC distance)
 
 ### Fixed
 
-- Prevented Route, Phase 2, Phase 4, Phase 5 and later panels from vertically shrinking inside the fixed workspace.
-- Made the left planning column independently scrollable on desktop.
+- Prevented planning panels from shrinking vertically inside the fixed workspace.
+- Made the left column independently scrollable on desktop.
 - Added a visible thin scrollbar while preserving mobile behavior.
 
 No aviation formulas changed.
@@ -281,11 +260,11 @@ No aviation formulas changed.
 
 ### Added / changed
 
-- OFP displayed distances round to nearest 0.5 NM.
-- WCA displays to the nearest whole degree.
-- Draggable map/workspace height on desktop.
-- Map height is stored in browser local storage.
-- Keyboard resizing and double-click reset.
+- Displayed OFP distance rounds to nearest 0.5 NM.
+- Displayed WCA rounds to nearest whole degree.
+- Added draggable desktop map/workspace height.
+- Saved selected height in local storage.
+- Added keyboard resize and double-click reset.
 
 ### Display formulas
 
@@ -294,33 +273,28 @@ Displayed distance = round(exact distance × 2) / 2
 Displayed WCA = round(exact WCA)
 ```
 
-Exact values continue to feed time, navigation and fuel calculations.
+Exact values continue to feed calculations.
 
 ---
 
-## PR #11, rounded headings and Phase 5 route weather preview
+## PR #11, rounded headings and Phase 5 route-weather preview
 
 ### Added / changed
 
-- TT, MT and MH display as normalized whole-degree headings `000°` to `359°`.
-- Map fills the selected workspace height.
-- Route weather panel with UTC departure time.
-- Open-Meteo pressure-level wind and temperature sampling per leg.
-- Forecast is sampled near the geographic leg midpoint and planned altitude.
-- Pressure-level data is interpolated using geopotential height.
-- Forecast time is interpolated between hourly steps.
-- Wind direction is interpolated through vector components rather than directly averaging degrees, avoiding errors around 359°/001°.
-- Fetched per-leg winds can feed the OFP wind triangle; manual winds remain a fallback.
+- TT, MT and MH display as normalized whole-degree headings.
+- Added route weather preview with UTC departure time.
+- Added pressure-level wind and temperature sampling.
+- Added vertical interpolation using geopotential height.
+- Added time interpolation between forecast steps.
+- Added per-leg forecast winds to the OFP wind triangle.
 
-### Weather interpolation formulas
-
-Linear interpolation:
+### Weather interpolation
 
 ```text
 lerp(a, b, t) = a + (b - a) × t
 ```
 
-Wind from direction is converted to vector components before interpolation:
+Wind is interpolated through vector components:
 
 ```text
 u = -speed × sin(direction)
@@ -330,7 +304,7 @@ speed = sqrt(u² + v²)
 wind-from direction = atan2(-u, -v), normalized to 0..360°
 ```
 
-Vertical interpolation fraction uses geopotential height:
+Vertical interpolation fraction:
 
 ```text
 t = (target altitude - lower geopotential height)
@@ -339,19 +313,16 @@ t = (target altitude - lower geopotential height)
 
 ---
 
-## PR #10, OFP layout and per-leg altitude
+## PR #10, OFP layout and per-leg planned altitude
 
 ### Added / changed
 
-- Reworked the navigation log to match the uploaded UiT operational flight plan layout more closely.
-- Columns immediately after WCA are accumulated distance and accumulated time.
-- Individual leg GS, distance and time are in the Intermediate group.
-- Added editable PL for every route leg.
-- Fuel columns clarified as:
-  - `FF`: fuel flow, GPH
-  - `INT`: fuel used on the current leg, gal
-  - `ACC`: accumulated cruise fuel used, gal
-- Magnetic variation rounded to whole degrees and the rounded value is used for MT/MH.
+- Reworked the OFP table to match the UiT layout more closely.
+- Columns after WCA became accumulated distance/time.
+- Individual leg GS, distance and time moved to Intermediate.
+- Added editable PL for every leg.
+- Clarified fuel columns: FF = GPH, INT = leg fuel, ACC = accumulated cruise fuel.
+- Rounded magnetic variation to whole degrees for displayed/used MT and MH.
 
 ### Formulas
 
@@ -364,37 +335,33 @@ Accumulated fuel_n = sum of leg fuel 1..n
 
 ---
 
-## PR #9, Phase 2 complete and Phase 4 C182T performance preview
+## PR #9, Phase 2 complete and C182T cruise-performance preview
 
 ### Added
 
-- WMM2025 automatic magnetic variation at each leg midpoint.
-- Manual magnetic variation override retained.
+- WMM2025 magnetic variation at each leg midpoint, with manual override.
 - C182T cruise-performance panel.
-- Mainline POH preview data for sea level and 2,000 ft pressure altitude, 2200-2400 RPM, ISA -20°C / ISA / ISA +20°C.
-- Bounded interpolation across manifold pressure, temperature offset, RPM and pressure altitude.
-- No extrapolation outside the loaded POH table.
-- POH-derived KTAS can feed the wind triangle.
-- POH-derived fuel flow can feed leg and accumulated cruise fuel.
-- Warning for settings above 80% MCP because the POH table states those values are for interpolation rather than normal maximum cruise use.
+- Initial POH cruise data for sea level and 2,000 ft, 2200-2400 RPM, ISA -20°C / ISA / ISA +20°C.
+- Bounded interpolation with no extrapolation.
+- POH KTAS feeds the wind triangle when enabled.
+- POH GPH feeds cruise leg/accumulated fuel.
+- Warning above 80% MCP.
 
 ### Formulas
 
-Approximate ISA temperature used by the current performance preview:
-
 ```text
-ISA temperature [°C] = 15 - 2 × pressure altitude [thousand ft]
+ISA temperature [°C]
+= 15 - 2 × pressure altitude [thousand ft]
+
 Temperature offset = OAT - ISA temperature
 ```
 
-All POH interpolation is linear within bracketing published points:
+Linear interpolation within published bounds:
 
 ```text
 fraction = (requested - lower) / (upper - lower)
 interpolated value = lower + (upper - lower) × fraction
 ```
-
-This is applied dimension by dimension only inside the loaded table bounds.
 
 ---
 
@@ -402,8 +369,8 @@ This is applied dimension by dimension only inside the loaded table bounds.
 
 ### Fixed
 
-- Removed automatic `fitBounds()` after every route edit.
-- Adding, dragging, renaming, deleting or reordering waypoints now preserves the user's current map center and zoom.
+- Removed automatic `fitBounds()` after route edits.
+- Adding, dragging, renaming, deleting or reordering points preserves map pan/zoom.
 
 No aviation formulas changed.
 
@@ -414,31 +381,24 @@ No aviation formulas changed.
 ### Added / changed
 
 - Adaptive source raster size for the Avinor ICAO chart.
-- Auto, Sharp and Fast chart detail modes.
-- PNG24 chart export.
-- `maxNativeZoom` protection against requesting invented source detail.
-- Wider tile keep buffer and idle-oriented loading.
-- AIRAC-aware service-worker cache for Avinor chart export tiles.
+- Auto, Sharp and Fast detail modes.
+- PNG24 export.
+- `maxNativeZoom` protection.
+- AIRAC-aware service-worker cache.
 - Larger map and expanded-map mode.
 - ResizeObserver integration.
 
-### Raster sizing formulas
-
-Web Mercator approximate ground resolution at tile center latitude:
+### Raster sizing
 
 ```text
 CSS resolution [m/px]
 = 156543.03392804097 × cos(latitude) / 2^zoom
-```
 
-The chart source-match ratio is compared with the measured source chart resolution used by the planner:
-
-```text
 source match ratio = CSS resolution / 31.75 m/px
 requested raster pixels = 256 CSS px × selected ratio
 ```
 
-The result is capped by detail mode and device pixel ratio, never above 4x, then rounded up to a multiple of 8 pixels.
+The result is capped by detail mode/device pixel ratio and rounded to a multiple of 8 pixels.
 
 ---
 
@@ -446,8 +406,8 @@ The result is capped by detail mode and device pixel ratio, never above 4x, then
 
 ### Added
 
-- Kartverket `topo` WMTS as the primary Norgeskart base layer.
-- Avinor Norway Aeronautical Chart ICAO 1:500 000 as a switchable map layer.
+- Kartverket topo WMTS.
+- Avinor Norway Aeronautical Chart ICAO 1:500 000.
 - OpenStreetMap fallback.
 - Numbered waypoint markers with departure/en-route/destination roles.
 
@@ -455,72 +415,55 @@ No navigation formulas changed.
 
 ---
 
-## PR #5, Phase 2 navigation and wind calculations
+## PR #5, Phase 2 navigation and wind triangle
 
 ### Added
 
 - Manual TAS.
-- Manual true wind-from direction and speed.
+- Manual true wind direction/speed.
 - Manual magnetic variation.
-- Wind triangle.
 - WCA, TH, MT, MH, GS and leg time.
-- Wind/navigation unit tests.
+- Wind/navigation tests.
 
-### Wind triangle formulas
-
-Relative wind angle:
+### Formulas
 
 ```text
 relative wind = wind-from direction - TT
-```
-
-Crosswind component and WCA:
-
-```text
 crosswind = W × sin(relative wind)
 WCA = asin(crosswind / TAS)
 TH = TT + WCA
-```
 
-Along-track wind and groundspeed:
-
-```text
 along-track wind = -W × cos(relative wind)
 GS = TAS × cos(WCA) + along-track wind
-```
 
-True to magnetic conversion with east-positive variation:
-
-```text
 MT = TT - VAR_E
 MH = TH - VAR_E
-```
 
-All headings are normalized into `0 <= heading < 360°`.
-
-Leg time:
-
-```text
 leg time [h] = distance [NM] / GS [kt]
 ```
 
----
-
-## PR #4, stacked Phase 4 POH prototype
-
-This was an early stacked feature branch built on the pre-mainline Phase 3 branch. It explored a larger C182T POH dataset, pressure-altitude handling and interpolation architecture. The later mainline implementation evolved through PR #9 and subsequent changes. Treat the current `src/performance/` code and current tests as authoritative for what is actually deployed.
+Headings are normalized into `0 <= heading < 360°`.
 
 ---
 
-## PR #3, stacked Phase 3 map architecture prototype
+## PR #4, stacked C182T performance prototype
 
-This was an early stacked branch exploring Kartverket plus configurable ICAO map-source architecture and licensing boundaries. The deployed map implementation was later replaced/refined by PR #6 and PR #7.
+- Early exploration of a larger C182T POH dataset, pressure-altitude handling and interpolation architecture.
+- Later mainline performance work superseded this prototype.
 
 ---
 
-## PR #2, stacked Phase 2 navigation prototype
+## PR #3, stacked map architecture prototype
 
-This was an early stacked branch exploring manual wind, navigation, fuel accumulation and provider abstractions. The deployed Phase 2 implementation was later developed through PR #5, PR #9 and PR #10.
+- Early exploration of Kartverket plus configurable ICAO map-source architecture and licensing boundaries.
+- Later mainline map work superseded/refined this prototype.
+
+---
+
+## PR #2, stacked navigation prototype
+
+- Early exploration of manual wind, navigation, fuel accumulation and provider abstractions.
+- Later mainline Phase 2 work superseded/refined this prototype.
 
 ---
 
@@ -528,18 +471,17 @@ This was an early stacked branch exploring manual wind, navigation, fuel accumul
 
 ### Added
 
-- Vite and strict TypeScript project foundation.
+- Vite + strict TypeScript foundation.
 - Leaflet map.
 - Click-to-add and drag-to-move waypoints.
 - Reorder, remove and rename route points.
-- Great-circle distance.
-- Initial true track.
-- Basic operational flight-plan table.
+- Great-circle distance and initial true track.
+- Basic OFP table.
 - Unit tests and GitHub Actions CI.
 
-### Great-circle distance formula
+### Great-circle distance
 
-The route uses the haversine great-circle formula with Earth radius `R = 3440.065 NM`:
+Using Earth radius `R = 3440.065 NM`:
 
 ```text
 Δφ = φ2 - φ1
@@ -550,7 +492,7 @@ c = 2 × atan2(sqrt(a), sqrt(1-a))
 D = R × c
 ```
 
-### Initial true track formula
+### Initial true track
 
 ```text
 y = sin(Δλ) × cos(φ2)
@@ -567,7 +509,7 @@ TT = atan2(y, x), normalized to 0..360°
 - Aviation calculations belong in navigation/performance/weather modules, not UI code.
 - Display rounding should not reduce calculation precision.
 - Do not extrapolate POH data beyond published/loaded bounds.
-- Manual overrides should remain available for weather, magnetic variation and field elevation.
-- External data failures should produce an explicit warning or safe fallback, not invented values.
-- AIP and weather integrations are planning conveniences and do not replace official pre-flight briefing sources.
+- Manual overrides should remain available where appropriate.
+- External data failures should produce explicit warnings or safe fallbacks, not invented values.
+- AIP, weather, MSA and glide integrations are planning aids and do not replace official flight-planning sources or pilot judgement.
 - Every significant calculation change should add or update automated tests.
