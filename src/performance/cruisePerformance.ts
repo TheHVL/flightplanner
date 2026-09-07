@@ -23,17 +23,28 @@ interface CruisePoint {
   gph: number;
 }
 
+export const CRUISE_TABLE_ALTITUDES_FT = [0, 2000, 4000, 6000, 8000, 10000, 12000, 14000] as const;
+export const CRUISE_TABLE_RPM = [2000, 2100, 2200, 2300, 2400] as const;
+
 export const CRUISE_PREVIEW_LIMITS = {
   minPressureAltitudeFt: 0,
-  maxPressureAltitudeFt: 2000,
-  minRpm: 2200,
+  maxPressureAltitudeFt: 14000,
+  minRpm: 2000,
   maxRpm: 2400,
   minTempOffsetC: -20,
   maxTempOffsetC: 20,
+  minManifoldPressureInHg: 15,
+  maxManifoldPressureInHg: 27,
+} as const;
+
+export const CRUISE_TABLE_SOURCE = {
+  figure: 'Cessna 182T NAV III Figure 5-9',
+  conditions: '3100 lb, recommended lean mixture, cowl flaps closed',
+  note: 'Maximum cruise power is 80% MCP. Values above 80% MCP are listed only to aid interpolation.',
 } as const;
 
 const POINTS: CruisePoint[] = [
-  // Cessna 182T NAV III, Figure 5-9, pressure altitude sea level.
+  // Figure 5-9, pressure altitude sea level.
   ...rows(0, 2400, -20, [[25,84,134,14.5],[24,79,132,13.6],[23,74,129,12.8],[22,69,126,12.1],[21,65,122,11.4],[20,60,118,10.7]]),
   ...rows(0, 2400, 0, [[25,81,136,14.0],[24,76,133,13.2],[23,71,130,12.4],[22,67,127,11.7],[21,62,122,11.1],[20,58,118,10.4]]),
   ...rows(0, 2400, 20, [[26,82,140,14.3],[25,78,138,13.5],[24,74,135,12.8],[23,69,131,12.1],[22,65,127,11.4],[21,60,123,10.8],[20,56,118,10.2]]),
@@ -46,7 +57,15 @@ const POINTS: CruisePoint[] = [
   ...rows(0, 2200, 0, [[27,83,137,14.4],[26,79,135,13.6],[25,75,133,12.9],[24,71,130,12.3],[23,66,126,11.7],[22,62,122,11.1],[21,58,119,10.5],[20,54,114,9.9]]),
   ...rows(0, 2200, 20, [[27,80,139,13.9],[26,76,136,13.2],[25,72,134,12.6],[24,68,130,11.9],[23,64,126,11.3],[22,60,123,10.8],[21,56,118,10.2],[20,52,114,9.7]]),
 
-  // Cessna 182T NAV III, Figure 5-9, pressure altitude 2,000 feet.
+  ...rows(0, 2100, -20, [[27,82,133,14.2],[26,78,131,13.4],[25,74,129,12.8],[24,70,126,12.1],[23,66,123,11.5],[22,61,119,10.9],[21,57,115,10.4],[20,53,111,9.8]]),
+  ...rows(0, 2100, 0, [[27,79,135,13.7],[26,75,133,13.0],[25,71,130,12.4],[24,67,127,11.8],[23,63,123,11.2],[22,59,120,10.6],[21,55,116,10.1],[20,51,111,9.6]]),
+  ...rows(0, 2100, 20, [[27,76,136,13.2],[26,73,134,12.6],[25,69,130,12.0],[24,65,127,11.4],[23,61,123,10.9],[22,57,120,10.4],[21,54,115,9.9],[20,50,111,9.3]]),
+
+  ...rows(0, 2000, -20, [[27,78,131,13.4],[26,74,129,12.8],[25,70,126,12.2],[24,66,123,11.6],[23,62,120,11.0],[22,58,116,10.5],[21,54,113,10.0],[20,51,108,9.4]]),
+  ...rows(0, 2000, 0, [[27,75,133,13.0],[26,71,130,12.4],[25,67,127,11.8],[24,64,124,11.3],[23,60,120,10.7],[22,56,117,10.2],[21,53,112,9.7],[20,49,108,9.2]]),
+  ...rows(0, 2000, 20, [[27,72,134,12.6],[26,69,131,12.0],[25,65,127,11.5],[24,62,124,11.0],[23,58,121,10.5],[22,54,116,10.0],[21,51,112,9.5],[20,47,108,9.0]]),
+
+  // Figure 5-9, pressure altitude 2,000 feet.
   ...rows(2000, 2400, -20, [[24,81,136,14.1],[23,77,133,13.3],[22,72,130,12.5],[21,67,126,11.8],[20,62,122,11.0]]),
   ...rows(2000, 2400, 0, [[25,83,140,14.4],[24,79,138,13.6],[23,74,134,12.8],[22,69,131,12.1],[21,65,126,11.4],[20,60,122,10.7]]),
   ...rows(2000, 2400, 20, [[25,80,142,13.9],[24,76,139,13.2],[23,71,135,12.4],[22,67,131,11.7],[21,63,127,11.1],[20,58,122,10.5]]),
@@ -58,6 +77,136 @@ const POINTS: CruisePoint[] = [
   ...rows(2000, 2200, -20, [[25,80,135,13.8],[24,75,132,13.1],[23,71,129,12.4],[22,67,126,11.7],[21,62,122,11.1],[20,58,118,10.5]]),
   ...rows(2000, 2200, 0, [[26,81,139,14.1],[25,77,137,13.3],[24,73,134,12.6],[23,69,130,12.0],[22,64,126,11.4],[21,60,122,10.8],[20,56,118,10.2]]),
   ...rows(2000, 2200, 20, [[26,78,140,13.6],[25,74,138,12.9],[24,70,134,12.3],[23,66,130,11.6],[22,62,127,11.0],[21,58,122,10.5],[20,54,118,9.9]]),
+
+  ...rows(2000, 2100, -20, [[26,80,135,13.9],[25,76,133,13.1],[24,72,130,12.5],[23,68,127,11.8],[22,64,123,11.2],[21,59,119,10.6],[20,55,115,10.1]]),
+  ...rows(2000, 2100, 0, [[26,77,137,13.4],[25,73,134,12.7],[24,69,131,12.1],[23,65,127,11.5],[22,61,123,10.9],[21,57,119,10.4],[20,53,115,9.8]]),
+  ...rows(2000, 2100, 20, [[26,75,138,12.9],[25,71,134,12.3],[24,67,131,11.7],[23,63,127,11.2],[22,59,124,10.6],[21,55,119,10.1],[20,52,115,9.6]]),
+
+  ...rows(2000, 2000, -20, [[26,76,133,13.1],[25,72,130,12.5],[24,68,127,11.9],[23,64,124,11.3],[22,60,120,10.8],[21,56,116,10.2],[20,52,112,9.7]]),
+  ...rows(2000, 2000, 0, [[26,73,134,12.7],[25,69,131,12.1],[24,66,127,11.5],[23,62,124,11.0],[22,58,120,10.5],[21,54,116,10.0],[20,51,112,9.4]]),
+  ...rows(2000, 2000, 20, [[26,71,134,12.3],[25,67,131,11.8],[24,64,128,11.2],[23,60,124,10.7],[22,56,120,10.2],[21,53,116,9.7],[20,49,111,9.2]]),
+
+  // Figure 5-9, pressure altitude 4,000 feet.
+  ...rows(4000, 2400, -20, [[24,84,140,14.6],[23,79,138,13.7],[22,74,134,12.9],[21,70,130,12.1],[20,65,126,11.4]]),
+  ...rows(4000, 2400, 0, [[24,81,142,14.0],[23,76,139,13.2],[22,72,135,12.5],[21,67,131,11.7],[20,62,126,11.1]]),
+  ...rows(4000, 2400, 20, [[25,83,146,14.4],[24,78,143,13.6],[23,74,139,12.8],[22,69,135,12.1],[21,65,131,11.4],[20,60,126,10.8]]),
+
+  ...rows(4000, 2300, -20, [[24,81,138,14.0],[23,76,135,13.2],[22,72,132,12.5],[21,67,128,11.7],[20,62,124,11.1]]),
+  ...rows(4000, 2300, 0, [[25,83,143,14.3],[24,78,140,13.5],[23,74,137,12.8],[22,69,133,12.1],[21,65,128,11.4],[20,60,124,10.7]]),
+  ...rows(4000, 2300, 20, [[25,80,144,13.8],[24,75,141,13.1],[23,71,137,12.4],[22,67,133,11.7],[21,62,129,11.1],[20,58,124,10.5]]),
+
+  ...rows(4000, 2200, -20, [[25,82,139,14.2],[24,78,136,13.4],[23,73,133,12.7],[22,69,130,12.0],[21,65,126,11.4],[20,60,122,10.7]]),
+  ...rows(4000, 2200, 0, [[25,79,141,13.7],[24,75,138,13.0],[23,71,134,12.3],[22,66,130,11.7],[21,62,126,11.0],[20,58,122,10.4]]),
+  ...rows(4000, 2200, 20, [[25,77,142,13.2],[24,72,138,12.6],[23,68,134,11.9],[22,64,130,11.3],[21,60,126,10.7],[20,56,121,10.2]]),
+
+  ...rows(4000, 2100, -20, [[25,78,137,13.5],[24,74,134,12.8],[23,70,131,12.2],[22,66,127,11.5],[21,61,123,10.9],[20,57,119,10.3]]),
+  ...rows(4000, 2100, 0, [[25,75,138,13.0],[24,71,135,12.4],[23,67,131,11.8],[22,63,127,11.2],[21,59,123,10.6],[20,55,119,10.1]]),
+  ...rows(4000, 2100, 20, [[25,73,138,12.6],[24,69,135,12.0],[23,65,131,11.4],[22,61,127,10.9],[21,57,123,10.3],[20,53,118,9.8]]),
+
+  ...rows(4000, 2000, -20, [[25,74,134,12.8],[24,70,131,12.2],[23,66,127,11.6],[22,62,124,11.0],[21,58,120,10.5],[20,54,116,9.9]]),
+  ...rows(4000, 2000, 0, [[25,71,135,12.4],[24,68,131,11.8],[23,64,128,11.3],[22,60,124,10.7],[21,56,120,10.2],[20,52,115,9.7]]),
+  ...rows(4000, 2000, 20, [[25,69,135,12.1],[24,65,132,11.5],[23,62,128,11.0],[22,58,124,10.4],[21,54,120,9.9],[20,51,115,9.4]]),
+
+  // Figure 5-9, pressure altitude 6,000 feet.
+  ...rows(6000, 2400, -20, [[23,82,142,14.2],[22,77,138,13.3],[21,72,135,12.5],[20,67,130,11.7],[19,62,126,11.0]]),
+  ...rows(6000, 2400, 0, [[23,79,143,13.6],[22,74,139,12.8],[21,69,135,12.1],[20,65,130,11.4],[19,60,126,10.7]]),
+  ...rows(6000, 2400, 20, [[23,76,144,13.2],[22,72,139,12.4],[21,67,135,11.7],[20,62,131,11.1],[19,58,125,10.4]]),
+
+  ...rows(6000, 2300, -20, [[23,79,140,13.6],[22,74,136,12.8],[21,69,132,12.1],[20,65,128,11.4],[19,60,124,10.7]]),
+  ...rows(6000, 2300, 0, [[23,76,141,13.1],[22,71,137,12.4],[21,67,133,11.7],[20,62,128,11.0],[19,58,123,10.4]]),
+  ...rows(6000, 2300, 20, [[23,73,141,12.7],[22,69,137,12.0],[21,64,133,11.4],[20,60,128,10.7],[19,56,123,10.1]]),
+
+  ...rows(6000, 2200, -20, [[23,76,137,13.1],[22,71,134,12.4],[21,67,130,11.7],[20,62,126,11.0],[19,58,121,10.4]]),
+  ...rows(6000, 2200, 0, [[23,73,138,12.6],[22,69,134,12.0],[21,64,130,11.3],[20,60,126,10.7],[19,56,121,10.1]]),
+  ...rows(6000, 2200, 20, [[23,70,138,12.3],[22,66,135,11.6],[21,62,130,11.0],[20,58,125,10.4],[19,54,120,9.9]]),
+
+  ...rows(6000, 2100, -20, [[23,72,135,12.5],[22,68,131,11.8],[21,63,127,11.2],[20,59,123,10.6],[19,55,118,10.0]]),
+  ...rows(6000, 2100, 0, [[23,69,135,12.1],[22,65,131,11.5],[21,61,127,10.9],[20,57,122,10.3],[19,53,118,9.8]]),
+  ...rows(6000, 2100, 20, [[23,67,135,11.7],[22,63,131,11.1],[21,59,127,10.6],[20,55,122,10.0],[19,51,117,9.5]]),
+
+  ...rows(6000, 2000, -20, [[23,68,131,11.9],[22,64,127,11.3],[21,60,124,10.7],[20,56,119,10.2],[19,52,115,9.6]]),
+  ...rows(6000, 2000, 0, [[23,66,132,11.5],[22,62,128,11.0],[21,58,123,10.4],[20,54,119,9.9],[19,50,114,9.4]]),
+  ...rows(6000, 2000, 20, [[23,63,132,11.2],[22,60,128,10.7],[21,56,123,10.2],[20,52,118,9.7],[19,48,113,9.1]]),
+
+  // Figure 5-9, pressure altitude 8,000 feet.
+  ...rows(8000, 2400, -20, [[21,74,139,12.9],[20,69,134,12.1],[19,64,130,11.4],[18,59,125,10.6]]),
+  ...rows(8000, 2400, 0, [[21,72,139,12.5],[20,67,135,11.7],[19,62,130,11.0],[18,57,124,10.3]]),
+  ...rows(8000, 2400, 20, [[21,69,140,12.1],[20,65,135,11.4],[19,60,130,10.7],[18,55,124,10.1]]),
+
+  ...rows(8000, 2300, -20, [[21,72,136,12.5],[20,67,132,11.7],[19,62,128,11.0],[18,57,122,10.3]]),
+  ...rows(8000, 2300, 0, [[21,69,137,12.0],[20,64,132,11.3],[19,60,127,10.7],[18,55,122,10.1]]),
+  ...rows(8000, 2300, 20, [[21,67,137,11.7],[20,62,132,11.0],[19,58,127,10.4],[18,53,121,9.8]]),
+
+  ...rows(8000, 2200, -20, [[21,69,134,12.0],[20,64,130,11.3],[19,60,125,10.7],[18,55,120,10.1]]),
+  ...rows(8000, 2200, 0, [[21,66,134,11.6],[20,62,130,11.0],[19,57,125,10.4],[18,53,119,9.8]]),
+  ...rows(8000, 2200, 20, [[21,64,134,11.3],[20,60,129,10.7],[19,55,124,10.1],[18,51,119,9.5]]),
+
+  ...rows(8000, 2100, -20, [[21,65,131,11.5],[20,61,127,10.9],[19,57,122,10.3],[18,52,117,9.7]]),
+  ...rows(8000, 2100, 0, [[21,63,131,11.2],[20,59,126,10.6],[19,55,121,10.0],[18,50,116,9.4]]),
+  ...rows(8000, 2100, 20, [[21,61,131,10.8],[20,57,126,10.3],[19,53,121,9.7],[18,49,115,9.2]]),
+
+  ...rows(8000, 2000, -20, [[21,62,128,11.0],[20,58,123,10.4],[19,54,118,9.9]]),
+  ...rows(8000, 2000, 0, [[21,60,127,10.7],[20,56,123,10.1],[19,52,118,9.6]]),
+  ...rows(8000, 2000, 20, [[21,58,127,10.4],[20,54,122,9.9],[19,50,117,9.4]]),
+
+  // Figure 5-9, pressure altitude 10,000 feet.
+  ...rows(10000, 2400, -20, [[20,72,139,12.5],[19,67,134,11.7],[18,62,129,11.0]]),
+  ...rows(10000, 2400, 0, [[20,69,139,12.1],[19,64,134,11.3],[18,59,129,10.6]]),
+  ...rows(10000, 2400, 20, [[20,67,139,11.7],[19,62,134,11.0],[18,57,128,10.3]]),
+
+  ...rows(10000, 2300, -20, [[21,74,141,12.8],[20,69,136,12.1],[19,64,132,11.3],[18,59,126,10.6]]),
+  ...rows(10000, 2300, 0, [[21,71,141,12.4],[20,66,137,11.7],[19,62,132,11.0],[18,57,126,10.3]]),
+  ...rows(10000, 2300, 20, [[21,69,142,12.0],[20,64,136,11.3],[19,60,131,10.7],[18,55,125,10.1]]),
+
+  ...rows(10000, 2200, -20, [[20,66,134,11.6],[19,62,129,11.0],[18,57,124,10.3]]),
+  ...rows(10000, 2200, 0, [[20,64,134,11.3],[19,59,129,10.6],[18,55,123,10.0]]),
+  ...rows(10000, 2200, 20, [[20,62,133,10.9],[19,57,128,10.4],[18,53,123,9.8]]),
+
+  ...rows(10000, 2100, -20, [[20,63,131,11.2],[19,59,126,10.5],[18,54,121,9.9]]),
+  ...rows(10000, 2100, 0, [[20,61,130,10.8],[19,56,125,10.2],[18,52,120,9.7]]),
+  ...rows(10000, 2100, 20, [[20,59,130,10.5],[19,54,125,10.0],[18,50,119,9.4]]),
+
+  ...rows(10000, 2000, -20, [[20,60,127,10.7],[19,56,122,10.1],[18,51,117,9.6]]),
+  ...rows(10000, 2000, 0, [[20,58,127,10.4],[19,54,122,9.8],[18,50,116,9.3]]),
+  ...rows(10000, 2000, 20, [[20,55,126,10.1],[19,52,121,9.6],[18,48,115,9.0]]),
+
+  // Figure 5-9, pressure altitude 12,000 feet.
+  ...rows(12000, 2400, -20, [[18,64,133,11.3],[17,59,127,10.5],[16,53,121,9.8]]),
+  ...rows(12000, 2400, 0, [[18,61,133,10.9],[17,56,127,10.2],[16,51,120,9.6]]),
+  ...rows(12000, 2400, 20, [[18,59,133,10.6],[17,54,126,10.0],[16,50,119,9.3]]),
+
+  ...rows(12000, 2300, -20, [[18,61,131,10.9],[17,56,125,10.2],[16,52,118,9.6]]),
+  ...rows(12000, 2300, 0, [[18,59,130,10.6],[17,54,124,10.0],[16,50,118,9.3]]),
+  ...rows(12000, 2300, 20, [[18,57,130,10.3],[17,52,123,9.7],[16,48,117,9.0]]),
+
+  ...rows(12000, 2200, -20, [[18,59,128,10.6],[17,54,122,9.9]]),
+  ...rows(12000, 2200, 0, [[18,57,128,10.3],[17,52,121,9.7]]),
+  ...rows(12000, 2200, 20, [[18,55,127,10.0],[17,50,121,9.4]]),
+
+  ...rows(12000, 2100, -20, [[18,56,125,10.2],[17,52,119,9.6]]),
+  ...rows(12000, 2100, 0, [[18,54,124,9.9],[17,50,118,9.3]]),
+  ...rows(12000, 2100, 20, [[18,52,123,9.6],[17,48,117,9.1]]),
+
+  ...rows(12000, 2000, -20, [[19,57,126,10.4],[18,53,121,9.8]]),
+  ...rows(12000, 2000, 0, [[19,55,125,10.1],[18,51,120,9.5]]),
+  ...rows(12000, 2000, 20, [[19,53,125,9.8],[18,49,119,9.3]]),
+
+  // Figure 5-9, pressure altitude 14,000 feet.
+  ...rows(14000, 2400, -20, [[16,56,126,10.1],[15,50,118,9.4]]),
+  ...rows(14000, 2400, 0, [[16,53,125,9.8],[15,48,117,9.1]]),
+  ...rows(14000, 2400, 20, [[16,51,124,9.6],[15,47,116,8.9]]),
+
+  ...rows(14000, 2300, -20, [[16,53,123,9.8]]),
+  ...rows(14000, 2300, 0, [[16,51,122,9.6]]),
+  ...rows(14000, 2300, 20, [[16,50,121,9.3]]),
+
+  ...rows(14000, 2200, -20, [[16,51,120,9.6]]),
+  ...rows(14000, 2200, 0, [[16,49,119,9.3]]),
+  ...rows(14000, 2200, 20, [[16,48,118,9.0]]),
+
+  ...rows(14000, 2100, -20, [[16,49,116,9.2]]),
+  ...rows(14000, 2100, 0, [[16,47,115,8.9]]),
+  ...rows(14000, 2100, 20, [[16,45,114,8.7]]),
 ];
 
 export function isaTemperatureC(pressureAltitudeFt: number): number {
@@ -70,15 +219,21 @@ export function calculateCruisePerformance(input: CruisePerformanceInput): Cruis
   const isaC = isaTemperatureC(input.pressureAltitudeFt);
   const offsetC = input.oatC - isaC;
   if (offsetC < CRUISE_PREVIEW_LIMITS.minTempOffsetC || offsetC > CRUISE_PREVIEW_LIMITS.maxTempOffsetC) {
-    throw new Error('OAT is outside the current POH preview range of ISA -20°C to ISA +20°C.');
+    throw new Error('OAT is outside the POH Figure 5-9 range of ISA -20°C to ISA +20°C.');
   }
 
-  const altitudeBracket = bracket([0, 2000], input.pressureAltitudeFt);
-  const rpmBracket = bracket([2200, 2300, 2400], input.rpm);
+  const altitudeBracket = bracket([...CRUISE_TABLE_ALTITUDES_FT], input.pressureAltitudeFt);
+  const rpmBracket = bracket([...CRUISE_TABLE_RPM], input.rpm);
 
   const atAltitude = altitudeBracket.map((altitudeFt) => {
-    const atRpm = rpmBracket.map((rpm) => evaluateGrid(altitudeFt, rpm, input.manifoldPressureInHg, offsetC));
-    return interpolateResult(atRpm[0], atRpm.at(-1)!, fraction(rpmBracket[0], rpmBracket.at(-1)!, input.rpm));
+    const atRpm = rpmBracket.map((rpm) =>
+      evaluateGrid(altitudeFt, rpm, input.manifoldPressureInHg, offsetC),
+    );
+    return interpolateResult(
+      atRpm[0],
+      atRpm.at(-1)!,
+      fraction(rpmBracket[0], rpmBracket.at(-1)!, input.rpm),
+    );
   });
 
   const result = interpolateResult(
@@ -96,17 +251,56 @@ export function calculateCruisePerformance(input: CruisePerformanceInput): Cruis
   };
 }
 
-function evaluateGrid(altitudeFt: number, rpm: number, mpInHg: number, tempOffsetC: number) {
+function evaluateGrid(
+  altitudeFt: number,
+  rpm: number,
+  mpInHg: number,
+  tempOffsetC: number,
+) {
   const tempBracket = bracket([-20, 0, 20], tempOffsetC);
-  const values = tempBracket.map((temp) => interpolateMp(altitudeFt, rpm, temp as -20 | 0 | 20, mpInHg));
-  return interpolateResult(values[0], values.at(-1)!, fraction(tempBracket[0], tempBracket.at(-1)!, tempOffsetC));
+  const values = tempBracket.map((temp) =>
+    interpolateMp(altitudeFt, rpm, temp as -20 | 0 | 20, mpInHg),
+  );
+  return interpolateResult(
+    values[0],
+    values.at(-1)!,
+    fraction(tempBracket[0], tempBracket.at(-1)!, tempOffsetC),
+  );
 }
 
-function interpolateMp(altitudeFt: number, rpm: number, tempOffsetC: -20 | 0 | 20, mpInHg: number) {
+function interpolateMp(
+  altitudeFt: number,
+  rpm: number,
+  tempOffsetC: -20 | 0 | 20,
+  mpInHg: number,
+) {
   const candidates = POINTS
-    .filter((point) => point.altitudeFt === altitudeFt && point.rpm === rpm && point.tempOffsetC === tempOffsetC)
+    .filter(
+      (point) =>
+        point.altitudeFt === altitudeFt &&
+        point.rpm === rpm &&
+        point.tempOffsetC === tempOffsetC,
+    )
     .sort((a, b) => a.mpInHg - b.mpInHg);
-  const mpBracket = bracket(candidates.map((point) => point.mpInHg), mpInHg);
+
+  if (candidates.length === 0) {
+    throw new Error(
+      `No Figure 5-9 cruise data is published at ${altitudeFt.toLocaleString()} ft and ${rpm} RPM.`,
+    );
+  }
+
+  let mpBracket: [number, number];
+  try {
+    mpBracket = bracket(candidates.map((point) => point.mpInHg), mpInHg);
+  } catch {
+    const minMp = candidates[0].mpInHg;
+    const maxMp = candidates.at(-1)!.mpInHg;
+    throw new Error(
+      `Manifold pressure ${mpInHg.toFixed(1)} inHg is outside the published Figure 5-9 range ` +
+      `of ${minMp.toFixed(1)}-${maxMp.toFixed(1)} inHg for this altitude/RPM/temperature bracket.`,
+    );
+  }
+
   const lower = candidates.find((point) => point.mpInHg === mpBracket[0]);
   const upper = candidates.find((point) => point.mpInHg === mpBracket.at(-1));
   if (!lower || !upper) {
@@ -115,7 +309,11 @@ function interpolateMp(altitudeFt: number, rpm: number, tempOffsetC: -20 | 0 | 2
   return interpolateResult(lower, upper, fraction(lower.mpInHg, upper.mpInHg, mpInHg));
 }
 
-function interpolateResult<T extends { percentMcp: number; ktas: number; gph: number }>(a: T, b: T, t: number) {
+function interpolateResult<T extends { percentMcp: number; ktas: number; gph: number }>(
+  a: T,
+  b: T,
+  t: number,
+) {
   return {
     percentMcp: lerp(a.percentMcp, b.percentMcp, t),
     ktas: lerp(a.ktas, b.ktas, t),
@@ -126,7 +324,7 @@ function interpolateResult<T extends { percentMcp: number; ktas: number; gph: nu
 function bracket(values: number[], target: number): [number, number] {
   const sorted = [...new Set(values)].sort((a, b) => a - b);
   if (sorted.length === 0 || target < sorted[0] || target > sorted.at(-1)!) {
-    throw new Error('Requested value is outside the currently loaded POH cruise table.');
+    throw new Error('Requested value is outside the loaded POH cruise table.');
   }
   const exact = sorted.find((value) => value === target);
   if (exact !== undefined) return [exact, exact];
@@ -139,14 +337,25 @@ function bracket(values: number[], target: number): [number, number] {
 }
 
 function validateInput(input: CruisePerformanceInput): void {
-  if (!Number.isFinite(input.pressureAltitudeFt) || !Number.isFinite(input.oatC) || !Number.isFinite(input.rpm) || !Number.isFinite(input.manifoldPressureInHg)) {
+  if (
+    !Number.isFinite(input.pressureAltitudeFt) ||
+    !Number.isFinite(input.oatC) ||
+    !Number.isFinite(input.rpm) ||
+    !Number.isFinite(input.manifoldPressureInHg)
+  ) {
     throw new Error('Cruise performance inputs must be numeric.');
   }
-  if (input.pressureAltitudeFt < 0 || input.pressureAltitudeFt > 2000) {
-    throw new Error('Phase 4 preview currently contains the POH sea-level and 2,000 ft tables only.');
+  if (
+    input.pressureAltitudeFt < CRUISE_PREVIEW_LIMITS.minPressureAltitudeFt ||
+    input.pressureAltitudeFt > CRUISE_PREVIEW_LIMITS.maxPressureAltitudeFt
+  ) {
+    throw new Error('POH Figure 5-9 cruise data is loaded from sea level through 14,000 ft.');
   }
-  if (input.rpm < 2200 || input.rpm > 2400) {
-    throw new Error('Phase 4 preview currently supports 2200-2400 RPM.');
+  if (input.rpm < CRUISE_PREVIEW_LIMITS.minRpm || input.rpm > CRUISE_PREVIEW_LIMITS.maxRpm) {
+    throw new Error('POH Figure 5-9 cruise data supports 2000-2400 RPM where published.');
+  }
+  if (input.manifoldPressureInHg <= 0) {
+    throw new Error('Manifold pressure must be greater than zero.');
   }
 }
 

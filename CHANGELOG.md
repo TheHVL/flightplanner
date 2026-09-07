@@ -23,6 +23,69 @@ Displayed OFP values may be rounded for readability. Internal calculations keep 
 
 ---
 
+## PR #22, complete C182T Figure 5-9 cruise-performance model
+
+### Added / changed
+
+- Completed Phase 4 by transcribing and visually verifying all 11 sheets of the supplied Cessna Model 182T NAV III GFC 700 AFCS Figure 5-9 `CRUISE PERFORMANCE`.
+- Expanded the source dataset from the initial sea-level/2,000 ft preview to all published pressure-altitude tables: sea level, 2,000, 4,000, 6,000, 8,000, 10,000, 12,000 and 14,000 ft.
+- Added the published 2000 and 2100 RPM rows in addition to 2200-2400 RPM. At 14,000 ft the source publishes 2100-2400 RPM only, and the planner preserves that limitation.
+- The loaded dataset contains 527 published MP / %MCP / KTAS / GPH points across ISA -20°C, ISA and ISA +20°C conditions.
+- Expanded the Performance panel input range to 0-14,000 ft, 2000-2400 RPM and 15-27 inHg while still validating against the smaller published range for each individual altitude/RPM/temperature bracket.
+- Improved errors for unsupported RPM or manifold-pressure combinations instead of silently extrapolating.
+- Added exact-point tests from 4,000, 8,000 and 14,000 ft, plus interpolation tests between altitude tables and tests that verify altitude/RPM/MP extrapolation is refused.
+- Updated README and Phase 4 status to complete.
+
+### Source conditions
+
+```text
+3100 lb
+Recommended lean mixture
+Cowl flaps CLOSED
+```
+
+The Figure 5-9 note remains enforced in presentation:
+
+```text
+Maximum cruise power = 80% MCP
+Values above 80% MCP are retained only to aid interpolation
+```
+
+### Interpolation
+
+The calculation remains bounded linear interpolation through the published table dimensions:
+
+```text
+fraction = (requested - lower) / (upper - lower)
+interpolated value = lower + (upper - lower) × fraction
+```
+
+The dimensions are evaluated in this order:
+
+```text
+1. manifold pressure inside each published temperature/RPM/altitude cell
+2. temperature offset between ISA -20 / ISA / ISA +20
+3. RPM between published RPM rows
+4. pressure altitude between published altitude tables
+```
+
+ISA temperature continues to follow the Figure 5-9 standard-temperature progression:
+
+```text
+ISA temperature [°C]
+= 15 - 2 × pressure altitude [thousand ft]
+
+Temperature offset = OAT - ISA temperature
+```
+
+### Important limitation
+
+Figure 5-9 is an irregular table at high altitude. Flightplanner only interpolates when every required bracketing cell exists. It does not invent missing cells or extrapolate beyond the published RPM, MP, temperature or altitude bounds.
+
+The performance panel still represents one global cruise setup. Per-leg automatic pressure-altitude/OAT selection is a later enhancement and will use this same verified calculation engine.
+
+---
+
 ## PR #21, C182T maximum-glide visualization
 
 ### Added / changed
