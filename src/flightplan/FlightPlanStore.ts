@@ -24,6 +24,11 @@ export interface WeatherSettings {
   departureTimeUtc: string;
 }
 
+export interface VerticalLegWind {
+  windFromDeg: number;
+  windSpeedKt: number;
+}
+
 export interface VerticalProfileSettings {
   departureElevationFt: number;
   destinationElevationFt: number;
@@ -31,8 +36,14 @@ export interface VerticalProfileSettings {
   destinationIcaoCode: string;
   climbRateFpm: number;
   descentRateFpm: number;
+  /** Legacy field name. The UI now treats this as manual climb TAS. */
   climbGroundSpeedKt: number;
+  /** Legacy field name. The UI now treats this as descent TAS. */
   descentGroundSpeedKt: number;
+  /** Derived on read so all vertical-profile consumers use the same active per-leg winds. */
+  legWinds?: VerticalLegWind[];
+  /** Derived on read from route weather where available, otherwise the Phase 4 OAT fallback. */
+  legOatC?: Array<number | null>;
 }
 
 export type WaypointVerticalMode = 'auto' | 'airport' | 'circuits' | 'none';
@@ -146,7 +157,21 @@ export class FlightPlanStore {
   }
 
   getVerticalProfileSettings(): VerticalProfileSettings {
-    return { ...this.verticalProfileSettings };
+    const legs = this.getLegs();
+    const legWinds = legs.map((leg) => {
+      const forecast = this.getLegWeatherForecast(leg.from.id, leg.to.id);
+      if (this.weatherSettings.useForecastWinds && forecast) {
+        return { windFromDeg: forecast.windFromDeg, windSpeedKt: forecast.windSpeedKt };
+      }
+      return {
+        windFromDeg: this.navigationSettings.windFromDeg,
+        windSpeedKt: this.navigationSettings.windSpeedKt,
+      };
+    });
+    const legOatC = legs.map((leg) =>
+      this.getLegWeatherForecast(leg.from.id, leg.to.id)?.temperatureC ?? this.performanceSettings.oatC,
+    );
+    return { ...this.verticalProfileSettings, legWinds, legOatC };
   }
 
   canUndo(): boolean {
@@ -223,15 +248,16 @@ export class FlightPlanStore {
   }
 
   updateVerticalProfileSettings(patch: Partial<VerticalProfileSettings>): void {
+    const { legWinds: _legWinds, legOatC: _legOatC, ...editablePatch } = patch;
     const next: VerticalProfileSettings = {
       ...this.verticalProfileSettings,
-      ...patch,
-      departureIcaoCode: patch.departureIcaoCode === undefined
+      ...editablePatch,
+      departureIcaoCode: editablePatch.departureIcaoCode === undefined
         ? this.verticalProfileSettings.departureIcaoCode
-        : normalizeIcao(patch.departureIcaoCode),
-      destinationIcaoCode: patch.destinationIcaoCode === undefined
+        : normalizeIcao(editablePatch.departureIcaoCode),
+      destinationIcaoCode: editablePatch.destinationIcaoCode === undefined
         ? this.verticalProfileSettings.destinationIcaoCode
-        : normalizeIcao(patch.destinationIcaoCode),
+        : normalizeIcao(editablePatch.destinationIcaoCode),
     };
     if (
       !Number.isFinite(next.departureElevationFt) || next.departureElevationFt < 0 || next.departureElevationFt > 20000 ||

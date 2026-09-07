@@ -1,6 +1,6 @@
 # Flightplanner change history
 
-This file records significant Flightplanner updates, formulas, source assumptions and known limitations. New updates are added at the top.
+This file records significant Flightplanner updates, formulas, source assumptions, limitations and implementation decisions. New updates are added at the top.
 
 ## Formula conventions
 
@@ -23,23 +23,95 @@ Displayed OFP values may be rounded for readability. Internal calculations keep 
 
 ---
 
+## PR #24, phase-specific TAS and wind-aware TOC/TOD
+
+### Added / changed
+
+- Reworked vertical geometry so climb, cruise and descent can use different TAS values instead of treating one groundspeed as representative of every phase.
+- Figure 5-8 POH climb time and fuel remain source-derived and are not changed by wind.
+- The Figure 5-8 zero-wind climb distance is now used to derive the average TAS represented by the POH table.
+- Active wind is then applied to that climb TAS on each route leg to determine the actual ground distance covered before TOC.
+- Manual climb mode now interprets the existing stored `climbGroundSpeedKt` value as manual climb TAS. The legacy field name is kept for stored-setting compatibility.
+- Descent now interprets the existing stored `descentGroundSpeedKt` value as descent TAS, then applies active per-leg wind when locating TOD. Descent rate and descent FF remain manual.
+- A climb/descent that crosses multiple legs walks the route in order and solves the wind triangle separately for each leg's true track and active wind.
+- Enabled route-weather wind is used when available. Otherwise the manual navigation wind is used.
+- Route-weather OAT is used for the outbound POH climb temperature correction when available, with Phase 4 OAT as fallback.
+- OFP TAS now shows cruise TAS when a meaningful cruise portion exists. An essentially all-climb leg shows climb TAS, and an essentially all-descent leg shows descent TAS.
+- OFP WCA/MH are based on the TAS displayed in that row.
+- OFP GS now shows effective whole-leg flying groundspeed rather than cruise GS when a leg contains several phases.
+- Circuit/activity minutes remain part of OFP elapsed time, but are excluded from effective GS because they add time without route distance.
+- Added automated tests for headwind/tailwind TOC movement, wind-aware TOD, forecast-wind selection, phase-TAS display and effective GS.
+- Updated the README and vertical-profile UI wording to make TAS, wind, source assumptions and limitations explicit.
+
+### POH climb TAS
+
+Figure 5-8 states that its climb distance is based on zero wind. Flightplanner derives the average climb TAS represented by that table:
+
+```text
+average climb TAS [kt]
+= corrected Figure 5-8 zero-wind distance [NM]
+/ (corrected Figure 5-8 climb time [min] / 60)
+```
+
+Because Figure 5-8 applies the same above-ISA correction factor to time and distance, the TAS ratio remains consistent after the correction.
+
+### Phase wind triangle
+
+For each climb, cruise or descent section on a route leg, the existing wind-triangle solution is applied with that phase's TAS:
+
+```text
+relative wind = wind-from direction - TT
+crosswind = W x sin(relative wind)
+WCA = asin(crosswind / TAS)
+TH = TT + WCA
+
+along-track wind = -W x cos(relative wind)
+GS = TAS x cos(WCA) + along-track wind
+```
+
+For a phase that remains on one straight leg:
+
+```text
+phase ground distance [NM]
+= phase GS [kt] x phase time [min] / 60
+```
+
+For a phase crossing multiple legs, the planner consumes the available phase time leg by leg using each leg's own track and active wind.
+
+### Effective OFP groundspeed
+
+```text
+effective leg GS [kt]
+= leg distance [NM]
+/ ((climb time + cruise time + descent time) / 60)
+```
+
+Circuit/pattern activity time is deliberately excluded from this GS calculation.
+
+### Source and limitation notes
+
+- Figure 5-8 climb time/fuel remain POH-derived. Wind changes ground position, not POH climb time or fuel.
+- No POH extrapolation was added. Normal Climb still stops at 10,000 ft and Maximum Rate at 14,000 ft.
+- Figure 5-9 cruise interpolation remains bounded to published data.
+- Descent TAS, ROD and FF remain manual until a verified descent-performance source is supplied.
+- PL and aerodrome elevation are still pressure-altitude proxies until QNH conversion is implemented.
+
+---
+
 ## 2026-09-07, C182T Figure 5-8 climb performance
 
 ### Added / changed
 
 - Added both supplied C182T Figure 5-8 `TIME, FUEL AND DISTANCE TO CLIMB AT 3100 POUNDS` sheets.
-- Added selectable `POH normal climb - 90 KIAS`, `POH maximum rate of climb`, and the original manual climb mode.
+- Added selectable `POH normal climb - 90 KIAS`, `POH maximum rate of climb`, and manual climb modes.
 - Normal climb is loaded from sea level through 10,000 ft pressure altitude.
 - Maximum-rate climb is loaded from sea level through 14,000 ft pressure altitude.
-- POH modes now drive TOC time and distance as well as climb fuel, so manual Climb FF is no longer required when a Figure 5-8 profile is selected.
-- For climbs beginning above sea level, cumulative Figure 5-8 time, fuel and distance at the starting pressure altitude are subtracted from the cumulative target values.
-- Linear interpolation is used only between published altitude rows. No extrapolation is allowed beyond the selected sheet.
-- Applied the Figure 5-8 note to increase time, fuel and distance by 10% for each 10°C above standard temperature.
-- Values are not reduced when temperature is below standard because the source note only specifies an increase above standard.
-- POH climb distance remains zero-wind, exactly as stated by Figure 5-8.
-- The selected climb model updates vertical-profile TOC markers, glide-envelope altitude modeling, phase-aware OFP timing and fuel.
-- If a requested climb is outside the selected Figure 5-8 sheet, the climb and complete trip-fuel result are marked incomplete instead of silently falling back or extrapolating.
-- Added automated tests for exact table values, climbs starting above sea level, interpolation, temperature correction, below-standard handling and source altitude limits.
+- POH modes drive climb time, climb fuel and TOC geometry.
+- Climbs starting above sea level subtract cumulative Figure 5-8 values at the starting altitude from those at the target altitude.
+- Linear interpolation is allowed only between published altitude rows. No extrapolation is allowed.
+- Applied the Figure 5-8 instruction to increase time, fuel and distance by 10% for each 10°C above standard temperature.
+- Values are not reduced below standard because the source note only specifies an increase above standard.
+- Added tests for exact values, interpolation, climbs beginning above sea level, temperature correction and source limits.
 
 ### Figure 5-8 source conditions
 
@@ -55,8 +127,6 @@ Standard temperature
 
 ### Cumulative climb calculation
 
-For a climb from pressure altitude `PA_start` to `PA_target`:
-
 ```text
 climb time
 = cumulative time(PA_target) - cumulative time(PA_start)
@@ -64,7 +134,7 @@ climb time
 climb fuel
 = cumulative fuel(PA_target) - cumulative fuel(PA_start)
 
-climb distance
+zero-wind climb distance
 = cumulative distance(PA_target) - cumulative distance(PA_start)
 ```
 
@@ -76,8 +146,6 @@ interpolated value = lower value + (upper value - lower value) x fraction
 ```
 
 ### Temperature correction
-
-The Figure 5-8 source note says to increase time, fuel and distance by 10% for each 10°C above standard temperature. The current implementation uses:
 
 ```text
 ISA temperature [°C]
@@ -93,123 +161,52 @@ corrected time/fuel/distance
 = standard-table result x correction factor
 ```
 
-For now the Phase 4 OAT field is used at the target climb altitude. A later weather-profile enhancement can use temperature through the climb.
-
-### Important limitations
-
-- Entered field elevation and PL are currently used as pressure-altitude proxies until QNH-based conversion is implemented.
-- Figure 5-8 distance is zero-wind. Wind-aware climb ground distance is not yet modeled.
-- Figure 5-8 is a 3100 lb performance table. No weight interpolation has been added.
-- Descent and circuit fuel still require manual fuel-flow inputs because no verified descent/circuit source has been supplied yet.
+PR #24 supersedes the original zero-wind ground-distance treatment by deriving climb TAS from Figure 5-8 and applying route wind to TOC ground position.
 
 ---
 
 ## PR #23, phase-aware fuel planning
 
-### Added / changed
-
 - Added `src/fuel/fuelPlanning.ts` for route-level fuel calculations.
-- Cruise performance is now calculated separately for each leg instead of using one global TAS/FF result for the whole OFP.
-- When POH performance is enabled, each leg uses its PL as the Figure 5-9 pressure-altitude input. If PL is blank, the Phase 4 pressure-altitude field is used as a fallback.
-- If route-weather data has been fetched for the leg, its OAT is used for Figure 5-9. Otherwise the Phase 4 OAT field is used.
-- Cruise TAS and cruise FF therefore change with planned altitude and available temperature.
-- The Phase 6 vertical profile is used to split each leg into climb, cruise and descent portions.
-- OFP leg time now combines cruise time, modeled climb time, modeled descent time and configured circuit/pattern time.
-- Added manual Climb FF, Descent FF and Circuit FF inputs. These stay manual because the supplied Figure 5-9 PDF contains cruise fuel flow only.
-- Added Manual cruise FF for use when POH performance is disabled.
-- Added an editable startup/taxi/takeoff fuel allowance. Default is 1.7 US gal because the supplied UiT OFP v4.2 states that Trip Fuel includes 1.7 US gal for startup, taxi and takeoff.
-- Added optional Fuel onboard input.
-- The OFP `FF` column shows cruise FF for the leg.
-- The OFP `INT` column shows total phase-aware fuel for the leg when every required phase FF is known.
-- The OFP `ACC` column shows accumulated enroute fuel, excluding the startup/taxi/takeoff allowance.
-- The OFP `FUEL REMAINING EST` column is populated when Fuel onboard and all required fuel inputs are available.
-- Circuit fuel is now included when Circuit FF is supplied.
-- Fuel settings are persisted in browser local storage.
-- Added automated tests for altitude-dependent cruise fuel, climb/descent fuel, circuit fuel, missing phase FF and route-weather temperature use.
+- Cruise performance is calculated per leg using PL and route-weather OAT where available.
+- Split leg time/fuel into climb, cruise, descent and circuit/activity phases.
+- Added manual descent FF and circuit FF, plus manual climb FF for manual-climb mode.
+- Added Manual cruise FF when POH cruise performance is disabled.
+- Added editable startup/taxi/takeoff allowance, default `1.7` US gal from supplied UiT OFP v4.2.
+- Added optional Fuel onboard and estimated fuel remaining.
+- OFP `FF` shows cruise FF, `INT` shows complete leg fuel, `ACC` shows accumulated enroute fuel.
+- Added tests for altitude-dependent cruise fuel, climb/descent fuel, circuit fuel, missing inputs and weather-temperature use.
 
-### Fuel formulas
-
-For each modeled phase:
+Fuel formulas:
 
 ```text
-phase fuel [gal]
-= FF [gal/h] x phase time [min] / 60
-```
+phase fuel [gal] = FF [gal/h] x phase time [min] / 60
 
-Leg fuel:
-
-```text
 leg fuel
-= cruise fuel
-+ climb fuel
-+ descent fuel
-+ circuit/activity fuel
-```
+= cruise fuel + climb fuel + descent fuel + circuit/activity fuel
 
-Route fuel:
-
-```text
 enroute fuel = sum(leg fuel)
+trip fuel = startup/taxi/takeoff allowance + enroute fuel
 
-trip fuel
-= startup/taxi/takeoff allowance
-+ enroute fuel
-```
-
-Estimated remaining fuel after leg `n`:
-
-```text
 fuel remaining EST_n
 = total fuel onboard
 - startup/taxi/takeoff allowance
 - accumulated enroute fuel_n
 ```
 
-### Phase timing
-
-Cruise time uses the wind-corrected cruise GS for the non-vertical portion of the leg:
-
-```text
-cruise time [min]
-= cruise distance [NM] / cruise GS [kt] x 60
-```
-
-Climb and descent time remain based on the Phase 6 vertical-profile assumptions:
-
-```text
-climb time [min] = Δh / ROC
-descent time [min] = Δh / ROD
-```
-
-The horizontal portions assigned to climb/descent use:
-
-```text
-climb distance [NM] = climb GS x climb time / 60
-descent distance [NM] = descent GS x descent time / 60
-```
-
-### Source and limitation notes
-
-- C182T Figure 5-9 supplies cruise %MCP, KTAS and GPH, not climb/descent/circuit GPH.
-- Flightplanner therefore does not substitute cruise GPH for climb, descent or circuit operation.
-- PL is currently used as a pressure-altitude proxy. A later QNH-based pressure-altitude conversion should refine this.
-- Phase-aware fuel depends on the current Phase 6 vertical model. Overlapping or otherwise invalid vertical profiles require review.
-- Fuel settings currently live in browser local storage and are not yet part of Ctrl+Z history or future flight-plan save/load.
+PR #24 refines the phase ground-distance and displayed TAS/GS model while retaining these fuel-accounting rules.
 
 ---
 
 ## PR #22, complete C182T Figure 5-9 cruise-performance model
 
-### Added / changed
-
-- Completed Phase 4 from the supplied Cessna Model 182T NAV III GFC 700 AFCS Figure 5-9 `CRUISE PERFORMANCE`.
+- Completed all supplied Figure 5-9 `CRUISE PERFORMANCE` sheets.
 - Loaded sea level, 2,000, 4,000, 6,000, 8,000, 10,000, 12,000 and 14,000 ft tables.
-- Loaded 2000-2400 RPM where published. The 14,000 ft table does not publish 2000 RPM, and the planner preserves that limitation.
+- Loaded 2000-2400 RPM where published, including the fact that 2000 RPM is not published at 14,000 ft.
 - Loaded 527 published MP / %MCP / KTAS / GPH points across ISA -20°C, ISA and ISA +20°C.
-- Expanded the Performance panel to the full source range.
 - Added exact-source and interpolation tests across low, middle and high altitude.
 
-### Figure 5-9 interpolation
+Figure 5-9 interpolation:
 
 ```text
 fraction = (requested - lower) / (upper - lower)
@@ -240,14 +237,13 @@ No extrapolation is allowed. Missing high-altitude table cells are not invented.
 
 ## PR #21, C182T maximum-glide visualization
 
-- Added the `C182T glide` map overlay.
-- Based on the supplied C182T Section 3 Figure 3-1 `MAXIMUM GLIDE`.
-- Preserves source assumptions: propeller windmilling, flaps up, zero wind.
-- Best-glide speeds recorded from the figure: 76 KIAS at 3100 lb, 70 KIAS at 2600 lb, 58 KIAS at 2100 lb.
-- Uses the modeled Phase 6 altitude through climbs and descents.
+- Added the `C182T glide` map overlay based on supplied C182T Figure 3-1 `MAXIMUM GLIDE`.
+- Preserved source assumptions: propeller windmilling, flaps up, zero wind.
+- Recorded best-glide speeds: 76 KIAS at 3100 lb, 70 KIAS at 2600 lb, 58 KIAS at 2100 lb.
+- Uses modeled route altitude through climb and descent.
 - Does not extrapolate above 14,000 ft.
 
-Approximation of the plotted line:
+Approximation:
 
 ```text
 700 ft per NM = 14,000 ft / 20 NM
@@ -262,9 +258,8 @@ The overlay assumes a sea-level shoreline and does not model terrain, wind or la
 
 ## PR #20, visual MSA corridor and manual MSA validation
 
-- Added optional `MSA ±1 NM` map corridor.
-- Added manual MSA per OFP leg.
-- Highlights PL below entered MSA.
+- Added optional `MSA ±1 NM` route corridor.
+- Added manual MSA per OFP leg and PL-below-MSA highlighting.
 - Route-geometry changes clear affected manual MSA values.
 - Manual MSA participates in Ctrl+Z/Cmd+Z undo.
 
@@ -276,8 +271,6 @@ MSA
 + 500 ft
 ```
 
-Waypoint caps use:
-
 ```text
 1 NM = 1852 m
 ```
@@ -286,11 +279,11 @@ Waypoint caps use:
 
 ## PR #19, drag-to-insert waypoint, undo and MSA design
 
-- Dragging the route line inserts a waypoint between existing points.
-- Existing PL on a split leg is copied to the two new legs.
+- Dragging a route line inserts a waypoint between existing points.
+- Existing PL on a split leg is copied to both new legs.
 - Added up to 50 planner-state undo snapshots.
 - Ctrl+Z on Windows/Linux and Cmd+Z on macOS restore the previous planner state.
-- Added the MSA implementation design document.
+- Added the staged MSA implementation design document.
 
 ---
 
@@ -305,7 +298,7 @@ Waypoint caps use:
 
 - Updated the AIP updater for Avinor's current AIRAC history-page format.
 - Pages builds construct the active English eAIP issue path from the detected AIRAC date.
-- The deployment parsed 53 AD 2 aerodromes for AIP effective 2026-09-03. ENVR and ENBH were skipped because their requested pages returned HTTP 404.
+- Deployment parsed 53 AD 2 aerodromes for AIP effective 2026-09-03. ENVR and ENBH were skipped because requested pages returned HTTP 404.
 
 ---
 
@@ -313,33 +306,31 @@ Waypoint caps use:
 
 - Added Avinor AIP-derived field-elevation lookup by ICAO.
 - Added build-time and scheduled AIP refresh.
-- Added `Airport + circuits` intermediate waypoint mode.
-- Added circuit count and minutes per circuit.
-- Fixed automatic waypoint renumbering after route deletion/reordering.
-- Fixed PL-change TOD gating so a lower outbound PL never starts descent before the waypoint where that lower PL begins.
-
-Circuit time:
+- Added `Airport + circuits` mode with circuit count and minutes per circuit.
+- Fixed automatic waypoint renumbering after deletion/reordering.
+- Fixed PL-change TOD gating so a lower outbound PL never starts before the waypoint where that lower PL begins.
 
 ```text
 circuit allowance [min]
 = number of circuits x minutes per circuit
 ```
 
-PL-change descent gating:
+PL-change descent gating at this stage:
 
 ```text
 descent time [min] = Δh / ROD
 descent distance [NM] = descent GS x descent time / 60
-
 ideal TOD = next waypoint route distance - descent distance
 actual TOD = max(current waypoint route distance, ideal TOD)
 ```
+
+PR #24 later replaces the fixed descent-GS assumption with descent TAS plus wind.
 
 ---
 
 ## PR #15, automatic multi-leg TOC/TOD and touch-and-go airports
 
-- Extended vertical profiling through all route altitude changes.
+- Extended vertical profiling through route altitude changes.
 - Higher outbound PL creates TOC after the waypoint.
 - Lower outbound PL creates descent on the outbound leg.
 - Added Auto from PL, Airport/T&G and Off waypoint modes.
@@ -357,8 +348,7 @@ distance [NM] = groundspeed [kt] x time [min] / 60
 
 - Added departure/destination elevation.
 - Added configurable climb/descent rates and groundspeeds.
-- Added initial TOC/TOD calculation and route placement.
-- Added vertical-profile overlap detection.
+- Added initial TOC/TOD calculation and overlap detection.
 
 ```text
 climb altitude gain = max(0, initial PL - departure elevation)
@@ -370,6 +360,8 @@ descent time = descent altitude loss / ROD
 climb distance = climb GS x climb time / 60
 descent distance = descent GS x descent time / 60
 ```
+
+PR #24 later replaces the fixed-GS vertical geometry with phase TAS plus active wind when route wind data is available.
 
 ---
 
@@ -401,8 +393,6 @@ displayed WCA = round(exact WCA)
 - Added vertical interpolation by geopotential height and time interpolation between forecast steps.
 - Forecast winds can feed the OFP wind triangle.
 
-Linear interpolation:
-
 ```text
 lerp(a, b, t) = a + (b - a) x t
 ```
@@ -421,7 +411,7 @@ wind-from direction = atan2(-u, -v)
 
 ## PR #10, OFP layout and per-leg planned altitude
 
-- Reworked the navigation log toward the supplied UiT OFP layout.
+- Reworked navigation log toward supplied UiT OFP layout.
 - Added editable PL per leg.
 - Clarified FF, INT and ACC fuel columns.
 - Rounded magnetic variation to whole degrees for OFP MT/MH.

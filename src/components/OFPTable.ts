@@ -114,9 +114,10 @@ export class OFPTable {
         <span><i class="dot calculated-dot"></i> Calculated</span>
         <span><i class="dot pending-dot"></i> Added in later phases</span>
         <span>Distances shown to nearest 0.5 NM · headings/WCA shown to whole degrees</span>
+        <span>TAS shows cruise TAS when a cruise portion exists; an all-climb/descent row shows that phase TAS. GS is whole-leg effective GS from flown distance / flight time.</span>
         <span>MSA is entered manually. Use the ±1 NM map corridor to inspect terrain/obstacles.</span>
         <span class="msa-legend-warning">PL below entered MSA is highlighted.</span>
-        <span>Fuel INT/ACC now use modeled cruise, climb, descent and circuit phases where the required fuel-flow inputs are available.</span>
+        <span>Fuel INT/ACC uses modeled cruise, climb, descent and circuit phases where the required fuel-flow inputs are available.</span>
         ${totalCircuitMinutes > 0 ? `<span>Circuit/pattern allowance: +${this.formatActivityMinutes(totalCircuitMinutes)} in ACC TIME${fuelPlan.circuitFuelGal === null ? '; enter Circuit FF to include its fuel' : `; ${fuelPlan.circuitFuelGal.toFixed(2)} gal included` }.</span>` : ''}
       </div>
     `;
@@ -153,6 +154,11 @@ export class OFPTable {
         ? `Warning: planned level ${plannedAltitudeFt} ft is below entered MSA ${manualMsaFt} ft.`
         : 'Planned level for this leg in feet';
       const performanceTitle = `Cruise performance at ${Math.round(legPlan.pressureAltitudeFt)} ft pressure-altitude proxy; OAT ${legPlan.oatC.toFixed(1)}°C (${legPlan.oatSource === 'forecast' ? 'route weather' : 'Phase 4 fallback'}).`;
+      const tasTitle = legPlan.displayPhase === 'cruise'
+        ? `Displayed TAS is cruise TAS ${legPlan.cruiseTasKt.toFixed(0)} kt. ${performanceTitle}`
+        : legPlan.displayPhase === 'climb'
+          ? `This leg has no meaningful cruise portion, so TAS shows modeled climb TAS ${legPlan.tasKt.toFixed(0)} kt. Cruise TAS at PL would be ${legPlan.cruiseTasKt.toFixed(0)} kt.`
+          : `This leg has no meaningful cruise portion, so TAS shows descent TAS ${legPlan.tasKt.toFixed(0)} kt. Cruise TAS at PL would be ${legPlan.cruiseTasKt.toFixed(0)} kt.`;
       const timeTitle = this.phaseTimeTitle(legPlan);
       const fuelTitle = this.phaseFuelTitle(legPlan);
       const accumulatedFuelTitle = accumulatedFuelGal === null
@@ -161,17 +167,18 @@ export class OFPTable {
       const remainingTitle = estimatedRemainingGal === null
         ? 'Enter Fuel onboard and all required phase fuel flows to calculate estimated fuel remaining.'
         : `Estimated fuel remaining after this leg, including subtraction of ${startupTaxiTakeoffGal.toFixed(1)} gal startup/taxi/takeoff allowance.`;
+      const gsTitle = `Effective whole-leg GS ${legPlan.groundSpeedKt.toFixed(1)} kt = ${leg.distanceNm.toFixed(2)} NM / ${legPlan.flightTimeMin.toFixed(2)} min of flying time. Circuit/activity time is not included in GS. Cruise-only GS is ${legPlan.cruiseGroundSpeedKt.toFixed(1)} kt.`;
 
       return {
         html: `
         <tr class="${belowMsa ? 'ofp-row-warning' : ''}">
           <td><strong>${leg.from.name}</strong></td>
-          <td class="calculated" title="${performanceTitle}">${legPlan.tasKt.toFixed(0)}</td>
+          <td class="calculated" title="${tasTitle}">${legPlan.tasKt.toFixed(0)}</td>
           <td class="calculated">${this.headingLabel(leg.trueTrackDeg)}</td>
           <td class="calculated" title="${settings.automaticVariation ? `WMM2025 at leg midpoint: ${rawVariationDegEast.toFixed(2)}°, rounded for OFP` : 'Manual variation override'}">${variationLabel}</td>
           <td class="calculated">${this.headingLabel(magneticTrack)}</td>
           <td class="calculated" title="${windTitle}">${this.headingLabel(legPlan.windFromDeg)}/${Math.round(legPlan.windSpeedKt)}</td>
-          <td class="calculated" title="Exact WCA: ${legPlan.wcaDeg.toFixed(2)}°">${this.signedDegrees(legPlan.wcaDeg)}</td>
+          <td class="calculated" title="Exact WCA for displayed ${legPlan.displayPhase} TAS: ${legPlan.wcaDeg.toFixed(2)}°">${this.signedDegrees(legPlan.wcaDeg)}</td>
           <td class="calculated" title="Exact accumulated distance: ${accumulatedDistanceNm.toFixed(2)} NM">${this.distanceLabel(accumulatedDistanceNm)}</td>
           <td class="calculated" title="Accumulated route time including modeled phase time">${this.formatMinutes(accumulatedTimeMinutes)}</td>
           ${legPlan.cruiseFuelFlowGph === null
@@ -217,7 +224,7 @@ export class OFPTable {
             />
           </td>
           <td class="calculated">${this.headingLabel(magneticHeading)}</td>
-          <td class="calculated" title="Cruise groundspeed. Climb/descent time uses the Phase 6 groundspeed settings.">${legPlan.groundSpeedKt.toFixed(0)}</td>
+          <td class="calculated" title="${gsTitle}">${legPlan.groundSpeedKt.toFixed(0)}</td>
           <td class="calculated" title="Exact leg distance: ${leg.distanceNm.toFixed(2)} NM">${this.distanceLabel(leg.distanceNm)}</td>
           <td class="calculated" title="${timeTitle}">${this.formatMinutes(legPlan.totalTimeMin)}</td>
           <td class="pending">—</td>
@@ -268,8 +275,8 @@ export class OFPTable {
   private phaseTimeTitle(leg: FuelLegPlan): string {
     const parts = [
       `cruise ${this.formatMinutes(leg.cruiseTimeMin)}`,
-      leg.climbTimeMin > 0 ? `climb ${this.formatMinutes(leg.climbTimeMin)}` : '',
-      leg.descentTimeMin > 0 ? `descent ${this.formatMinutes(leg.descentTimeMin)}` : '',
+      leg.climbTimeMin > 0 ? `climb ${this.formatMinutes(leg.climbTimeMin)} at ${leg.climbTasKt?.toFixed(0) ?? '—'} KTAS` : '',
+      leg.descentTimeMin > 0 ? `descent ${this.formatMinutes(leg.descentTimeMin)} at ${leg.descentTasKt?.toFixed(0) ?? '—'} KTAS` : '',
       leg.activityTimeMin > 0 ? `circuits/activity ${this.formatMinutes(leg.activityTimeMin)}` : '',
     ].filter(Boolean);
     return `Phase-aware leg time: ${parts.join(', ')}.`;
