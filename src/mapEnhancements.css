@@ -81,7 +81,7 @@ body.map-overlay-open { overflow: hidden; }
   font-weight: 800;
 }
 
-/* Desktop workspace height is user adjustable. The sidebar scrolls inside it so it cannot push the OFP down. */
+/* Desktop workspace height is user adjustable. The sidebar is the single vertical scroll container. */
 .workspace {
   height: var(--workspace-height, 680px);
   min-height: 480px;
@@ -99,8 +99,9 @@ body.map-overlay-open { overflow: hidden; }
   padding-right: 3px;
 }
 
-/* Flex items shrink by default. Prevent the planning panels from being squashed to fit the workspace,
-   otherwise the lower parts of Phase 2/4/5 disappear instead of becoming scrollable. */
+/* The accordion wrappers are now the direct flex children. They must keep their natural height so
+   opening one or several phases makes the sidebar scroll instead of compressing/clipping them. */
+.left-column > .phase-disclosure,
 .left-column > .panel {
   flex: 0 0 auto;
 }
@@ -180,6 +181,7 @@ body.map-resizing { cursor: ns-resize; user-select: none; }
 @media (max-width: 900px) {
   .workspace { height: auto; min-height: 0; }
   .left-column { height: auto; overflow: visible; padding-right: 0; }
+  .left-column > .phase-disclosure,
   .left-column > .panel { flex: none; }
   .map { flex: 0 0 auto; min-height: 0; height: max(520px, 64vh); }
   .map-resize-handle { display: none; }
