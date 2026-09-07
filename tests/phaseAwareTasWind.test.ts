@@ -124,4 +124,50 @@ describe('phase-specific TAS and wind-aware vertical geometry', () => {
     expect(leg.climbTimeMin).toBeCloseTo(6, 5);
     expect(leg.climbFuelGal).toBeCloseTo(1.6, 5);
   });
+
+  it('allocates a multi-leg climb by each leg wind rather than by distance fraction', () => {
+    const store = new FlightPlanStore();
+    const a = store.addWaypoint({ lat: 0, lon: 0 }, 'A');
+    const b = store.addWaypoint({ lat: 0, lon: 2.5 / 60 }, 'B');
+    const c = store.addWaypoint({ lat: 0, lon: 0.3 }, 'C');
+    store.setPlannedAltitudeFt(a.id, b.id, 4000);
+    store.setPlannedAltitudeFt(b.id, c.id, 4000);
+    store.updateVerticalProfileSettings({ departureElevationFt: 0, destinationElevationFt: 4000 });
+    store.updatePerformanceSettings({ oatC: 7, rpm: 2300, manifoldPressureInHg: 22, usePohPerformance: true });
+    store.setRouteWeatherForecasts([
+      {
+        fromId: a.id,
+        toId: b.id,
+        altitudeFt: 4000,
+        validTimeUtc: '2026-09-07T14:00:00.000Z',
+        windFromDeg: 90,
+        windSpeedKt: 50,
+        temperatureC: 7,
+        source: 'test forecast',
+      },
+      {
+        fromId: b.id,
+        toId: c.id,
+        altitudeFt: 4000,
+        validTimeUtc: '2026-09-07T14:00:00.000Z',
+        windFromDeg: 270,
+        windSpeedKt: 50,
+        temperatureC: 7,
+        source: 'test forecast',
+      },
+    ]);
+    store.updateWeatherSettings({ useForecastWinds: true });
+
+    const plan = calculateFuelPlanForStore(store, {
+      ...DEFAULT_FUEL_PLANNING_SETTINGS,
+      climbPerformanceMode: 'poh-normal-90',
+    });
+
+    expect(plan.legs[0].climbTimeMin).toBeCloseTo(3, 2);
+    expect(plan.legs[1].climbTimeMin).toBeCloseTo(3, 2);
+    expect(plan.legs[0].climbFuelGal).toBeCloseTo(0.8, 2);
+    expect(plan.legs[1].climbFuelGal).toBeCloseTo(0.8, 2);
+    expect((plan.legs[0].climbTimeMin + plan.legs[1].climbTimeMin)).toBeCloseTo(6, 5);
+    expect((plan.legs[0].climbFuelGal ?? 0) + (plan.legs[1].climbFuelGal ?? 0)).toBeCloseTo(1.6, 5);
+  });
 });
