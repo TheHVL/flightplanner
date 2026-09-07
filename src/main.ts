@@ -11,6 +11,7 @@ import { PerformancePanel } from './components/PerformancePanel';
 import { WeatherPanel } from './components/WeatherPanel';
 import { VerticalProfilePanel } from './components/VerticalProfilePanel';
 import { OFPTable } from './components/OFPTable';
+import { FUEL_SETTINGS_CHANGED_EVENT, getFuelPlanningSettings } from './fuel/fuelPlanning';
 import { buildC182TGlideEnvelopeSamples } from './navigation/glideEnvelope';
 import { calculateRouteVerticalProfile } from './navigation/verticalProfile';
 
@@ -283,11 +284,14 @@ const calculateCurrentVerticalProfile = () => {
   const legs = store.getLegs();
   if (legs.length === 0) return null;
   const plannedAltitudesFt = legs.map((leg) => store.getPlannedAltitudeFt(leg.from.id, leg.to.id));
+  const fuelSettings = getFuelPlanningSettings();
   const profile = calculateRouteVerticalProfile({
     legs,
     plannedAltitudesFt,
     waypointConstraints: store.getVerticalWaypointConstraints(),
     ...store.getVerticalProfileSettings(),
+    climbPerformanceMode: fuelSettings.climbPerformanceMode,
+    climbOatC: store.getPerformanceSettings().oatC,
   });
   return { legs, plannedAltitudesFt, profile };
 };
@@ -359,4 +363,5 @@ const render = () => {
 };
 
 store.subscribe(render);
+window.addEventListener(FUEL_SETTINGS_CHANGED_EVENT, render);
 render();
