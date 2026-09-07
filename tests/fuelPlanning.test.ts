@@ -35,7 +35,22 @@ describe('phase-aware fuel planning', () => {
     expect(leg.cruiseFuelGal).toBeCloseTo(12.1 * (store.getLegs()[0].distanceNm / 133), 5);
   });
 
-  it('separates climb, cruise and descent fuel using the vertical profile', () => {
+  it('uses Figure 5-8 normal-climb time, distance and fuel automatically', () => {
+    const { store, fromId, toId } = twoPointRoute(2);
+    store.setPlannedAltitudeFt(fromId, toId, 4000);
+    store.updateVerticalProfileSettings({ departureElevationFt: 0, destinationElevationFt: 4000 });
+    store.updatePerformanceSettings({ oatC: 7, rpm: 2300, manifoldPressureInHg: 22, usePohPerformance: true });
+
+    const plan = calculateFuelPlanForStore(store, fuelSettings({ climbPerformanceMode: 'poh-normal-90' }));
+    const leg = plan.legs[0];
+
+    expect(leg.climbTimeMin).toBeCloseTo(6, 5);
+    expect(leg.climbDistanceNm).toBeCloseTo(10, 5);
+    expect(leg.climbFuelGal).toBeCloseTo(1.6, 5);
+    expect(plan.climbFuelGal).toBeCloseTo(1.6, 5);
+  });
+
+  it('separates manual climb, cruise and descent fuel using the vertical profile', () => {
     const { store, fromId, toId } = twoPointRoute(2);
     store.setPlannedAltitudeFt(fromId, toId, 4000);
     store.updateVerticalProfileSettings({
@@ -49,6 +64,7 @@ describe('phase-aware fuel planning', () => {
     store.updatePerformanceSettings({ oatC: 7, rpm: 2300, manifoldPressureInHg: 22, usePohPerformance: true });
 
     const plan = calculateFuelPlanForStore(store, fuelSettings({
+      climbPerformanceMode: 'manual',
       climbFuelFlowGph: 20,
       descentFuelFlowGph: 8,
     }));
@@ -92,18 +108,31 @@ describe('phase-aware fuel planning', () => {
     expect(plan.circuitFuelGal).toBeCloseTo(2.4, 5);
   });
 
-  it('keeps trip fuel incomplete when a required climb fuel flow is missing', () => {
+  it('keeps trip fuel incomplete when manual climb FF is required but missing', () => {
     const { store, fromId, toId } = twoPointRoute(2);
     store.setPlannedAltitudeFt(fromId, toId, 4000);
     store.updateVerticalProfileSettings({ departureElevationFt: 0, destinationElevationFt: 4000 });
     store.updatePerformanceSettings({ oatC: 7, rpm: 2300, manifoldPressureInHg: 22, usePohPerformance: true });
 
-    const plan = calculateFuelPlanForStore(store, fuelSettings());
+    const plan = calculateFuelPlanForStore(store, fuelSettings({ climbPerformanceMode: 'manual' }));
 
     expect(plan.legs[0].climbTimeMin).toBeGreaterThan(0);
     expect(plan.legs[0].climbFuelGal).toBeNull();
     expect(plan.legs[0].legFuelGal).toBeNull();
     expect(plan.tripFuelGal).toBeNull();
+  });
+
+  it('withholds complete fuel when normal-climb data is requested above its 10000 ft limit', () => {
+    const { store, fromId, toId } = twoPointRoute(3);
+    store.setPlannedAltitudeFt(fromId, toId, 12000);
+    store.updateVerticalProfileSettings({ departureElevationFt: 0, destinationElevationFt: 12000 });
+    store.updatePerformanceSettings({ oatC: -9, rpm: 2300, manifoldPressureInHg: 18, usePohPerformance: true });
+
+    const plan = calculateFuelPlanForStore(store, fuelSettings({ climbPerformanceMode: 'poh-normal-90' }));
+
+    expect(plan.verticalProfile?.climbPerformanceIncomplete).toBe(true);
+    expect(plan.tripFuelGal).toBeNull();
+    expect(plan.warnings.join(' ')).toMatch(/does not cover|only published/i);
   });
 
   it('uses fetched route-weather temperature for per-leg cruise performance', () => {
