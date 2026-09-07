@@ -8,7 +8,9 @@ Browser-based VFR flight planning for Norwegian flight training, with the Cessna
 
 ## Current capabilities
 
-- Click, drag, reorder, rename and delete route waypoints on a Leaflet map.
+- Click the map to append a waypoint, drag route lines to insert waypoints between existing points, and drag markers to move them.
+- Reorder, rename and delete route waypoints.
+- Ctrl+Z on Windows/Linux and Cmd+Z on macOS undo the latest planner-state action, with up to 50 stored undo steps.
 - Great-circle leg distance and initial true track.
 - Automatic WMM2025 magnetic variation per leg, with manual override.
 - Wind triangle with WCA, heading, groundspeed and leg time.
@@ -20,6 +22,8 @@ Browser-based VFR flight planning for Norwegian flight training, with the Cessna
 - Phase 7 AIP preview: aerodrome elevation lookup by ICAO code from an Avinor AIP-derived dataset.
 - Circuit/pattern planning at intermediate airports, with configurable circuit count and minutes per circuit added to OFP accumulated time.
 - Resizable map workspace, scrollable planning sidebar and full-screen map mode.
+
+When a route line with an existing PL is split by inserting a new waypoint, the old PL is carried onto both new legs so an editing operation does not silently discard the planned altitude. Weather forecasts for changed route geometry are invalidated and can then be refreshed.
 
 ## AIP aerodrome data
 
@@ -45,6 +49,20 @@ Each leg has a planned level in the OFP. At an ordinary waypoint:
 
 Circuit time currently affects **accumulated OFP time only**. Circuit fuel is deliberately not estimated yet because applying cruise fuel flow to circuit operations would be misleading.
 
+## MSA implementation proposal
+
+MSA is not yet calculated automatically. The planned daytime-VFR rule for this project is 500 ft above the highest terrain/obstacle within 1 NM of the route, with an additional requirement to remain within gliding distance of land when above water.
+
+The proposed implementation is documented in [docs/MSA_IMPLEMENTATION_PLAN.md](docs/MSA_IMPLEMENTATION_PLAN.md). The staged plan is:
+
+1. calculate terrain-only MSA from a 1 NM route corridor using Kartverket elevation data;
+2. integrate per-leg MSA and controlling terrain into the OFP/map;
+3. add manual obstacle override and explicit coverage status;
+4. add land/water and glide-to-land analysis after verified C182T glide-performance data is available;
+5. integrate Nasjonalt register over luftfartshindre (NRL) only if approved access and usage terms permit it.
+
+Kartverket changed NRL access on 1 July 2026, so restricted obstacle data and credentials must not be embedded in this public GitHub Pages application. Until complete obstacle coverage is available, terrain-only results must be clearly labelled as incomplete rather than presented as a verified MSA.
+
 ## Architecture
 
 The project keeps route state, navigation mathematics, aircraft performance, weather, AIP data, map rendering and flight-plan presentation in separate modules. UI code should not own aviation calculations.
@@ -57,8 +75,9 @@ src/performance/   C182T cruise data and interpolation
 src/weather/       Route forecast sampling/interpolation
 src/aip/           AIP aerodrome catalog lookup
 src/map/           Leaflet map and ICAO chart quality logic
-src/flightplan/    Route and planning state
+src/flightplan/    Route and planning state, including undo history
 src/components/    UI panels and OFP presentation
+docs/              Design/implementation proposals such as MSA
 scripts/           Build-time AIP data refresh
 public/            Static deploy assets and fallback AIP dataset
 ```
@@ -73,7 +92,7 @@ public/            Static deploy assets and fallback AIP dataset
 | 4 | In progress | C182T POH cruise database and interpolation |
 | 5 | Preview | Route weather and per-leg forecast wind integration |
 | 6 | Advanced preview | Automatic multi-leg TOC/TOD, airports and touch-and-goes |
-| 7 | Started | Norwegian AIP aerodrome elevation integration and circuit planning |
+| 7 | In progress | Norwegian AIP aerodrome elevation, circuit planning, route editing improvements and MSA design |
 | 8 | Planned | OFP polish, save/load/export/print and broader validation |
 
 ## Development
