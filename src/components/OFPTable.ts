@@ -104,7 +104,7 @@ export class OFPTable {
               <th title="Fuel flow in US gallons per hour">FF<br><span class="ofp-unit">GPH</span></th>
               <th title="Fuel used on this leg">INT<br><span class="ofp-unit">GAL</span></th>
               <th title="Accumulated cruise fuel used">ACC<br><span class="ofp-unit">GAL</span></th>
-              <th>MSA</th><th title="Planned level for this leg">PL</th>
+              <th title="Manual minimum safe altitude for this leg">MSA</th><th title="Planned level for this leg">PL</th>
               <th>GS</th><th title="Distance for this leg">DIST</th><th title="Time for this leg">TIME</th>
               <th>ATO</th><th>DIFF</th>
               <th>EST</th><th>ACT</th>
@@ -119,7 +119,8 @@ export class OFPTable {
         <span><i class="dot calculated-dot"></i> Calculated</span>
         <span><i class="dot pending-dot"></i> Added in later phases</span>
         <span>Distances shown to nearest 0.5 NM · headings/WCA shown to whole degrees</span>
-        <span>Fuel INT = this leg, Fuel ACC = accumulated cruise fuel used</span>
+        <span>MSA is entered manually. Use the ±1 NM map corridor to inspect terrain/obstacles.</span>
+        <span class="msa-legend-warning">PL below entered MSA is highlighted.</span>
         ${totalCircuitMinutes > 0 ? `<span>Circuit/pattern allowance in ACC TIME: +${this.formatActivityMinutes(totalCircuitMinutes)}. Circuit fuel is not yet included.</span>` : ''}
       </div>
     `;
@@ -137,9 +138,7 @@ export class OFPTable {
     waypointActivityMinutes: number,
   ): LegRowResult {
     try {
-      if (performanceError) {
-        throw new Error(`POH performance: ${performanceError}`);
-      }
+      if (performanceError) throw new Error(`POH performance: ${performanceError}`);
 
       const tasKt = cruisePerformance?.ktas ?? settings.tasKt;
       const fuelFlowGph = cruisePerformance?.fuelFlowGph ?? null;
@@ -168,18 +167,23 @@ export class OFPTable {
       const accumulatedFuelGal = accumulatedFuelBeforeGal + legFuelGal;
       const variationLabel = `${Math.abs(variationDegEast)}°${variationDegEast >= 0 ? 'E' : 'W'}`;
       const plannedAltitudeFt = this.store.getPlannedAltitudeFt(leg.from.id, leg.to.id);
+      const manualMsaFt = this.store.getManualMsaFt(leg.from.id, leg.to.id);
+      const belowMsa = plannedAltitudeFt !== null && manualMsaFt !== null && plannedAltitudeFt < manualMsaFt;
       const windTitle = forecastActive
         ? `${forecast.source}; ${Math.round(forecast.altitudeFt)} ft; ${new Date(forecast.validTimeUtc).toISOString().slice(11, 16)}Z; OAT ${forecast.temperatureC.toFixed(1)}°C`
         : 'Manual wind input';
       const accumulatedTimeTitle = waypointActivityMinutes > 0
         ? `Accumulated time from departure; includes +${this.formatActivityMinutes(waypointActivityMinutes)} circuit/pattern allowance at ${leg.from.name}`
         : 'Accumulated time from departure';
+      const altitudeWarning = belowMsa
+        ? `Warning: planned level ${plannedAltitudeFt} ft is below entered MSA ${manualMsaFt} ft.`
+        : 'Planned level for this leg in feet';
 
       return {
         fuelGal: legFuelGal,
         timeMinutes,
         html: `
-        <tr>
+        <tr class="${belowMsa ? 'ofp-row-warning' : ''}">
           <td><strong>${leg.from.name}</strong></td>
           <td class="calculated">${tasKt.toFixed(0)}</td>
           <td class="calculated">${this.headingLabel(leg.trueTrackDeg)}</td>
@@ -193,8 +197,23 @@ export class OFPTable {
             ? '<td class="pending">—</td><td class="pending">—</td><td class="pending">—</td>'
             : `<td class="calculated" title="Fuel flow, US gal/hour">${fuelFlowGph.toFixed(1)}</td><td class="calculated" title="Fuel used on this leg, US gal">${legFuelGal.toFixed(2)}</td><td class="calculated" title="Accumulated cruise fuel used, US gal">${accumulatedFuelGal.toFixed(2)}</td>`}
           <td><strong>${leg.to.name}</strong></td>
-          <td class="pending">—</td>
-          <td class="editable-cell">
+          <td class="editable-cell ${belowMsa ? 'msa-warning-cell' : ''}">
+            <input
+              class="ofp-altitude-input ofp-msa-input"
+              type="number"
+              inputmode="numeric"
+              min="0"
+              max="30000"
+              step="100"
+              placeholder="ft"
+              aria-label="Manual MSA ${leg.from.name} to ${leg.to.name}"
+              title="Manual MSA. UTSA daylight VFR rule supplied for this project: highest terrain/obstacle within 1 NM of route plus 500 ft."
+              data-msa-from="${leg.from.id}"
+              data-msa-to="${leg.to.id}"
+              value="${manualMsaFt ?? ''}"
+            />
+          </td>
+          <td class="editable-cell ${belowMsa ? 'pl-warning-cell' : ''}">
             <input
               class="ofp-altitude-input"
               type="number"
@@ -204,7 +223,7 @@ export class OFPTable {
               step="100"
               placeholder="ft"
               aria-label="Planned altitude ${leg.from.name} to ${leg.to.name}"
-              title="Planned level for this leg in feet"
+              title="${altitudeWarning}"
               data-alt-from="${leg.from.id}"
               data-alt-to="${leg.to.id}"
               value="${plannedAltitudeFt ?? ''}"
@@ -234,6 +253,18 @@ export class OFPTable {
 
   private handleChange(event: Event): void {
     const input = event.target as HTMLInputElement;
+    const msaFromId = input.dataset.msaFrom;
+    const msaToId = input.dataset.msaTo;
+    if (msaFromId && msaToId) {
+      if (input.value.trim() === '') {
+        this.store.setManualMsaFt(msaFromId, msaToId, null);
+        return;
+      }
+      const msaFt = Number(input.value);
+      if (Number.isFinite(msaFt)) this.store.setManualMsaFt(msaFromId, msaToId, msaFt);
+      return;
+    }
+
     const fromId = input.dataset.altFrom;
     const toId = input.dataset.altTo;
     if (!fromId || !toId) return;
