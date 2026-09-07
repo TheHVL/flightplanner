@@ -30,15 +30,32 @@ export function initialTrueTrackDeg(a: Coordinate, b: Coordinate): number {
   return normalizeDegrees(radiansToDegrees(Math.atan2(y, x)));
 }
 
-export function calculateRouteLegs(waypoints: Waypoint[]): RouteLeg[] {
+export function routeLegKey(fromId: string, toId: string): string {
+  return `${fromId}->${toId}`;
+}
+
+export function calculateRouteLegs(
+  waypoints: Waypoint[],
+  routeShapePoints: ReadonlyMap<string, Coordinate> = new Map(),
+): RouteLeg[] {
   return waypoints.slice(0, -1).map((from, index) => {
     const to = waypoints[index + 1];
+    const shapePoint = routeShapePoints.get(routeLegKey(from.id, to.id));
+    const path: Coordinate[] = shapePoint
+      ? [from, { ...shapePoint }, to]
+      : [from, to];
+    const distanceNm = path
+      .slice(0, -1)
+      .reduce((sum, point, pathIndex) => sum + greatCircleDistanceNm(point, path[pathIndex + 1]), 0);
+
     return {
       index,
       from,
       to,
-      distanceNm: greatCircleDistanceNm(from, to),
+      distanceNm,
+      directDistanceNm: greatCircleDistanceNm(from, to),
       trueTrackDeg: initialTrueTrackDeg(from, to),
+      path,
     };
   });
 }
