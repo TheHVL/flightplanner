@@ -3,11 +3,10 @@ import {
   C182T_MAX_GLIDE_CHART_MAX_HEIGHT_FT,
   maximumGlideDistanceNm,
 } from '../performance/maximumGlide';
-import { totalRouteDistanceNm } from './geodesy';
-import {
-  routeCoordinateAtDistance,
-  type RouteVerticalEvent,
-  type RouteVerticalProfileResult,
+import { coordinateAtRouteDistance, totalRouteDistanceNm } from './geodesy';
+import type {
+  RouteVerticalEvent,
+  RouteVerticalProfileResult,
 } from './verticalProfile';
 
 export interface GlideEnvelopeSample {
@@ -87,7 +86,7 @@ export function buildC182TGlideEnvelopeSamples(input: GlideEnvelopeInput): Glide
       continue;
     }
 
-    const coordinate = routeCoordinateAtDistance(legs, routeDistance);
+    const coordinate = coordinateAtRouteDistance(legs, routeDistance);
     if (!coordinate) continue;
     const glideRangeNm = maximumGlideDistanceNm(altitudeFt);
     maxRangeNm = Math.max(maxRangeNm, glideRangeNm);

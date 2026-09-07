@@ -92,8 +92,8 @@ const DEFAULT_PERFORMANCE_SETTINGS: PerformanceSettings = {
   usePohPerformance: true,
   pressureAltitudeFt: 1000,
   oatC: 13,
-  rpm: 2300,
-  manifoldPressureInHg: 23,
+  rpm: 2200,
+  manifoldPressureInHg: 20,
 };
 
 const DEFAULT_WEATHER_SETTINGS: WeatherSettings = {

@@ -23,6 +23,53 @@ Displayed OFP values may be rounded for readability. Internal calculations keep 
 
 ---
 
+## 2026-09-07, route shaping and planning UX
+
+### Added / changed
+
+- Replaced route-line drag waypoint insertion with a non-waypoint route-shaping bend.
+- A shaped route leg uses the longer plotted/flown distance for accumulated distance, phase placement, time and fuel, while TT/MT/MH remain based on the direct original waypoint-to-waypoint leg as requested.
+- One visual shaping bend is supported per leg. It does not create a named waypoint or another OFP row.
+- The visual MSA corridor and C182T glide sampling follow the shaped path.
+- Changing a leg shape clears that leg's manual MSA and invalidates route-weather samples because the checked/sampled geometry changed.
+- An immediately preceding line-shape drag can be undone with Ctrl+Z/Cmd+Z before normal planner undo is used.
+- Changed TOC/TOD map symbols from large oval badges to short lines perpendicular to the local plotted route.
+- Strengthened the blue C182T glide shading for readability.
+- Added a mandatory acknowledgement dialog on each site load stating that Flightplanner is experimental, unapproved and not a sole flight-planning source.
+- Wrapped the sidebar phases in user-selectable collapsible sections and persist each open/closed state locally.
+- Clarified `Airport / T&G` versus `Airport + circuits` in the vertical panel and display the standard circuit altitude as 1000 ft AGL, or field elevation + 1000 ft when elevation is known.
+- Circuits remain a time/fuel activity allowance and are not yet a fully drawn/simulated circuit geometry.
+- Corrected the OFP body-column alignment so estimated fuel remaining sits under `FUEL REMAINING -> EST`, with `TIME -> DIFF` retained as its own pending cell.
+- Changed the Phase 4 default cruise setting to 2200 RPM and 20 inHg manifold pressure.
+- Added route-shaping geometry tests and retained all existing phase/navigation/performance tests.
+
+### Route-shaping calculation
+
+For a direct leg from waypoint A to waypoint B with one optional route-shaping bend S:
+
+```text
+flown distance
+= distance(A,S) + distance(S,B)
+```
+
+The navigation course intentionally remains direct:
+
+```text
+TT = initial true track(A,B)
+```
+
+Thus the shape is a distance/time/fuel planning aid and not another navigation fix.
+
+### Important limitations
+
+- Only one shaping bend per waypoint-to-waypoint leg is currently stored.
+- Route-weather wind/temperature still belongs to the original waypoint leg rather than a separate forecast sample for each side of the bend.
+- The shape is not a certified obstacle-avoidance or routing solution.
+- Circuit altitude is now shown as 1000 ft AGL, but the circuit itself remains a configured time/fuel allowance rather than a modeled rectangular flight path.
+- A `Vertical profiles overlap` fuel warning means climb/descent intervals overlap in route distance. Complete climb/descent/trip fuel is withheld until the vertical profile is resolved.
+
+---
+
 ## PR #24, phase-specific TAS and wind-aware TOC/TOD
 
 ### Added / changed
