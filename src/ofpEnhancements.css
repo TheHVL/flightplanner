@@ -87,6 +87,29 @@
   box-shadow: 0 0 0 2px rgb(31 103 216 / 10%);
 }
 
+.ofp-row-warning td {
+  border-top-color: #e7b768;
+  border-bottom-color: #e7b768;
+}
+
+.msa-warning-cell,
+.pl-warning-cell {
+  background: #fff1dc;
+}
+
+.msa-warning-cell .ofp-altitude-input,
+.pl-warning-cell .ofp-altitude-input {
+  border-color: #d97706;
+  background: #fff9ef;
+  color: #9a4b06;
+  box-shadow: inset 0 0 0 1px rgb(217 119 6 / 8%);
+}
+
+.msa-legend-warning {
+  color: #9a4b06;
+  font-weight: 800;
+}
+
 .table-legend {
   flex-wrap: wrap;
 }

@@ -15,6 +15,8 @@ Browser-based VFR flight planning for Norwegian flight training, with the Cessna
 - Automatic WMM2025 magnetic variation per leg, with manual override.
 - Wind triangle with WCA, heading, groundspeed and leg time.
 - Kartverket Norgeskart and Avinor Norway Aeronautical Chart ICAO 1:500 000 map layers.
+- Optional visual MSA corridor extending 1 NM either side of the complete route, including waypoint end caps.
+- Manual MSA entry for every OFP leg, with a warning when PL is below the entered MSA.
 - UiT-style operational flight-plan navigation log with accumulated distance/time and editable planned level (PL) per leg.
 - C182T POH cruise-performance preview with bounded interpolation and no extrapolation. Current mainline data coverage is sea level through 2,000 ft, 2200-2400 RPM, ISA -20°C to ISA +20°C.
 - Route weather preview using Open-Meteo pressure-level winds and temperature, interpolated by geopotential height and forecast time.
@@ -24,6 +26,8 @@ Browser-based VFR flight planning for Norwegian flight training, with the Cessna
 - Resizable map workspace, scrollable planning sidebar and full-screen map mode.
 
 When a route line with an existing PL is split by inserting a new waypoint, the old PL is carried onto both new legs so an editing operation does not silently discard the planned altitude. Weather forecasts for changed route geometry are invalidated and can then be refreshed.
+
+Manual MSA values are deliberately treated more conservatively. If a route leg is changed by dragging a waypoint or by inserting/reordering/removing points, affected manual MSA values are cleared so an MSA checked for the old corridor is not silently reused for new geometry.
 
 ## AIP aerodrome data
 
@@ -49,19 +53,31 @@ Each leg has a planned level in the OFP. At an ordinary waypoint:
 
 Circuit time currently affects **accumulated OFP time only**. Circuit fuel is deliberately not estimated yet because applying cruise fuel flow to circuit operations would be misleading.
 
-## MSA implementation proposal
+## MSA workflow
 
-MSA is not yet calculated automatically. The planned daytime-VFR rule for this project is 500 ft above the highest terrain/obstacle within 1 NM of the route, with an additional requirement to remain within gliding distance of land when above water.
+The current MSA implementation is intentionally pilot-driven rather than automatic.
 
-The proposed implementation is documented in [docs/MSA_IMPLEMENTATION_PLAN.md](docs/MSA_IMPLEMENTATION_PLAN.md). The staged plan is:
+The daytime-VFR rule supplied for this project is:
 
-1. calculate terrain-only MSA from a 1 NM route corridor using Kartverket elevation data;
-2. integrate per-leg MSA and controlling terrain into the OFP/map;
-3. add manual obstacle override and explicit coverage status;
-4. add land/water and glide-to-land analysis after verified C182T glide-performance data is available;
-5. integrate Nasjonalt register over luftfartshindre (NRL) only if approved access and usage terms permit it.
+```text
+MSA = highest terrain or obstacle within 1 NM of the route + 500 ft
+```
 
-Kartverket changed NRL access on 1 July 2026, so restricted obstacle data and credentials must not be embedded in this public GitHub Pages application. Until complete obstacle coverage is available, terrain-only results must be clearly labelled as incomplete rather than presented as a verified MSA.
+When above water there is an additional project requirement to remain within gliding distance of land.
+
+Use the `MSA ±1 NM` control above the map to display the inspection corridor. The overlay extends 1 NM to either side of every route leg and includes 1 NM end caps around the waypoints. Inspect the applicable chart/data inside that corridor, determine the MSA yourself, and enter it in the OFP MSA field for that leg.
+
+If both MSA and PL are entered and:
+
+```text
+PL < MSA
+```
+
+the MSA and PL cells are highlighted as a warning.
+
+The website does **not** currently calculate a complete MSA from terrain and obstacle data. This avoids presenting a terrain-only calculation as complete while unrestricted automatic NRL obstacle data is unavailable. The detailed future implementation is documented in [docs/MSA_IMPLEMENTATION_PLAN.md](docs/MSA_IMPLEMENTATION_PLAN.md).
+
+The next planned MSA extension is a C182T still-air glide-to-land visualization based on verified POH maximum-glide data, followed later by optional terrain assistance if the data path can be implemented without implying complete obstacle coverage.
 
 ## Architecture
 
@@ -70,14 +86,14 @@ The project keeps route state, navigation mathematics, aircraft performance, wea
 Key areas:
 
 ```text
-src/navigation/    Great-circle, wind, magnetic and vertical-profile math
+src/navigation/    Great-circle, wind, magnetic, MSA-corridor and vertical-profile math
 src/performance/   C182T cruise data and interpolation
 src/weather/       Route forecast sampling/interpolation
 src/aip/           AIP aerodrome catalog lookup
 src/map/           Leaflet map and ICAO chart quality logic
-src/flightplan/    Route and planning state, including undo history
+src/flightplan/    Route and planning state, including undo history and manual MSA
 src/components/    UI panels and OFP presentation
-docs/              Design/implementation proposals such as MSA
+docs/              Design/implementation proposals such as automatic MSA
 scripts/           Build-time AIP data refresh
 public/            Static deploy assets and fallback AIP dataset
 ```
@@ -92,7 +108,7 @@ public/            Static deploy assets and fallback AIP dataset
 | 4 | In progress | C182T POH cruise database and interpolation |
 | 5 | Preview | Route weather and per-leg forecast wind integration |
 | 6 | Advanced preview | Automatic multi-leg TOC/TOD, airports and touch-and-goes |
-| 7 | In progress | Norwegian AIP aerodrome elevation, circuit planning, route editing improvements and MSA design |
+| 7 | In progress | Norwegian AIP aerodrome elevation, circuit planning, route editing, manual MSA workflow and MSA corridor |
 | 8 | Planned | OFP polish, save/load/export/print and broader validation |
 
 ## Development

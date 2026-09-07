@@ -1,6 +1,6 @@
-# MSA implementation proposal
+# MSA implementation plan
 
-This document describes a proposed implementation of Minimum Safe Altitude (MSA) for the Flightplanner training tool.
+This document describes the current and proposed implementation of Minimum Safe Altitude (MSA) for the Flightplanner training tool.
 
 ## UTSA daytime VFR rule supplied for this project
 
@@ -11,24 +11,24 @@ For daytime VFR planning, use:
 
 This is a project/training rule supplied for Flightplanner. The planner should display the source/rule used and should not silently replace it with a different regulatory interpretation.
 
-## Recommended user-facing result
+## Current implementation
 
-Calculate an MSA for every route leg and place it directly in the OFP MSA column. For each leg also show:
+The first safe version is intentionally pilot-driven:
 
-- controlling terrain/obstacle elevation;
-- MSA resulting from the 500 ft clearance rule;
-- whether the leg crosses water;
-- any glide-to-land minimum that is higher than the obstacle-based MSA;
-- data source, coverage status and timestamp;
-- a clear warning if man-made obstacle data is unavailable.
+- an optional map overlay shows a corridor 1 NM either side of each route leg;
+- the corridor includes 1 NM end caps around waypoints so the visual area represents points within 1 NM of the route centerline;
+- MSA is entered manually for each OFP leg after the pilot inspects the relevant chart/data;
+- PL is compared with the entered MSA and a warning is shown when `PL < MSA`;
+- affected manual MSA values are cleared when route geometry changes, so a value checked for an old corridor is not silently reused;
+- manual MSA state participates in Ctrl+Z/Cmd+Z undo.
 
-A map overlay should optionally show the 1 NM corridor and the location of the controlling terrain/obstacle point.
+No automatic terrain or obstacle value is currently presented as a complete MSA.
 
 ## 1. Terrain and obstacle corridor
 
 For each great-circle leg, construct a corridor extending 1 NM to either side of the route centerline, including the end caps at both waypoints.
 
-Within that corridor determine:
+If complete terrain and obstacle data becomes available, the underlying rule is:
 
 ```text
 highest controlling elevation = max(highest terrain MSL, highest obstacle top MSL)
@@ -38,9 +38,13 @@ obstacle-based MSA = highest controlling elevation + 500 ft
 
 The 500 ft addition is the actual project rule. Any display rounding, for example rounding upward to the next 100 ft, should be a separate display/planning option rather than silently changing the underlying minimum.
 
+### Current visual corridor geometry
+
+The map currently constructs a 2 NM-wide corridor from 1 NM lateral offsets of each leg and adds 1 NM-radius waypoint caps. The lateral offset points are calculated on the Earth sphere rather than using a fixed pixel width, so the corridor remains approximately 1 NM wide as map zoom changes.
+
 ### Terrain source
 
-Kartverket provides national terrain/elevation models and API services. The preferred implementation is to use a national DTM raster service rather than sampling only the route centerline, because the rule requires the highest point anywhere within 1 NM of the route.
+Kartverket provides national terrain/elevation models and API services. A future terrain-assistance implementation should use a national DTM raster service rather than sampling only the route centerline, because the rule requires the highest point anywhere within 1 NM of the route.
 
 Potential source family:
 
@@ -58,60 +62,47 @@ Official information:
 - https://www.kartverket.no/en/geodataarbeid/nrl
 - https://kartverket.no/om-kartverket/nyheter/geodataarbeid/2026/april/tilgang-til-nrl-data-krever-godkjenning-fra-1.-juli
 
-Recommended approach:
+Recommended future approach:
 
-1. Implement terrain-only MSA first, with a very visible `TERRAIN ONLY - OBSTACLE DATA NOT VERIFIED` state.
-2. Add a manual obstacle-elevation override per leg so training flights can use a checked chart/AIP value when NRL cannot be queried.
-3. If approved NRL access is later obtained, add an authenticated server-side/provider integration. Do not put NRL credentials in the browser or public repository.
-4. Before exposing derived NRL results publicly, confirm that the approved access terms allow the intended use and output.
+1. Keep the manual MSA workflow available even if automatic assistance is later added.
+2. Add a terrain-only suggestion with a very visible `TERRAIN ONLY - OBSTACLE DATA NOT VERIFIED` state.
+3. Add a manual controlling-obstacle elevation input if useful for training flights using a separately checked chart/AIP source.
+4. If approved NRL access is later obtained, add an authenticated server-side/provider integration. Do not put NRL credentials in the browser or public repository.
+5. Before exposing derived NRL results publicly, confirm that the approved access terms allow the intended use and output.
 
-The planner should never label a result as a complete MSA if it only used terrain while obstacle coverage is unavailable.
+The planner should never label a result as a complete automatic MSA if it only used terrain while obstacle coverage is unavailable.
 
 ## 2. Water and glide-to-land rule
 
 A separate land/water analysis should examine the route centerline and determine where it passes over water. Kartverket N50 areal-cover/water data is a suitable Norwegian source family for identifying land and water at useful planning resolution.
 
-For each sampled route position over water:
+The C182T POH Maximum Glide Figure 3-1 supplied for this project has now been visually verified as suitable for a later still-air glide check. The chart states the conditions `propeller windmilling`, `flaps up`, and `zero wind`, and gives weight-dependent best-glide speeds. The first glide implementation must preserve those conditions in the UI rather than presenting the result as a wind-aware guarantee.
 
-1. Find the nearest suitable land boundary/location.
-2. Determine the horizontal distance to land.
-3. Determine the altitude required to glide that distance with the configured aircraft glide performance.
-4. Compare that requirement with the obstacle-based MSA.
+A visual glide-to-land overlay is preferred before any binary website decision. For each sampled route position over water, a later implementation should:
 
-Conceptually, for a simple still-air glide-ratio model:
+1. identify nearby land;
+2. determine horizontal distance to land;
+3. use verified C182T maximum-glide performance for available height above the relevant land/terrain;
+4. show the still-air reachable-land envelope visually;
+5. make it clear that wind can reduce or increase actual reach.
 
-```text
-required height above landing point [ft]
-  = distance to land [NM] × 6076.12 / glide ratio
-
-required glide altitude MSL [ft]
-  = landing-point elevation MSL + required height above landing point
-```
-
-Then:
-
-```text
-leg MSA = max(obstacle-based MSA, maximum glide-to-land altitude required on the leg)
-```
-
-The constant-ratio formula should only be used if the aircraft data supports representing glide performance this way. A better C182T implementation would use the applicable POH glide-performance data if available. Wind materially affects a real glide footprint, so the first implementation should be explicitly labelled `still-air glide check` unless wind is incorporated.
-
-Do not invent a glide ratio from cruise data. Add the glide-performance source only after the relevant C182T POH page/data has been verified.
+A generic glide-ratio formula may be useful internally only if it is demonstrated to match the verified POH chart sufficiently well. Do not invent a glide ratio from cruise data.
 
 ## 3. Proposed architecture
 
 Keep the aviation calculation independent from the UI:
 
 ```text
-src/msa/msa.ts                  MSA rule and result model
-src/msa/terrainProvider.ts      Kartverket DTM querying/caching
-src/msa/obstacleProvider.ts     manual/authorized NRL provider interface
-src/msa/landProvider.ts         land/water and nearest-land analysis
-src/msa/glide.ts                aircraft glide model
-src/components/MsaPanel.ts      coverage/status/settings UI
+src/navigation/msaCorridor.ts   current visual 1 NM corridor geometry
+src/msa/msa.ts                  future MSA rule and result model
+src/msa/terrainProvider.ts      future Kartverket DTM querying/caching
+src/msa/obstacleProvider.ts     future manual/authorized NRL provider interface
+src/msa/landProvider.ts         future land/water and nearest-land analysis
+src/msa/glide.ts                future C182T glide model
+src/components/MsaPanel.ts      future coverage/status/settings UI if needed
 ```
 
-Suggested result model per leg:
+A future automatic-assistance result model per leg could include:
 
 ```text
 leg id
@@ -122,53 +113,56 @@ obstacle-based MSA ft
 water crossing yes/no
 maximum distance to land NM
 required glide altitude ft MSL or unavailable
-final MSA ft
+suggested MSA ft
 status: complete | terrain-only | incomplete
 sources and timestamps
 ```
 
 ## 4. Interaction with the OFP
 
-The MSA column should be calculated per leg. The value should update whenever:
-
-- a waypoint is added, removed, inserted, moved or reordered;
-- the 1 NM corridor rule changes;
-- terrain/obstacle data changes;
-- glide-performance settings change;
-- land/water data changes.
-
-A user should be able to inspect why a particular MSA was produced. Clicking/hovering the MSA cell could show something like:
+Current behavior:
 
 ```text
-MSA 3,200 ft
-Controlling terrain: 2,642 ft MSL
-Clearance rule: +500 ft
-Water glide requirement: 2,900 ft
-Obstacle coverage: verified / unavailable
+manual MSA = value entered by pilot
+
+if PL and MSA are both entered:
+  warn when PL < MSA
 ```
+
+Manual MSA should be rechecked whenever the route geometry for that leg changes. Flightplanner therefore clears affected manual MSA values after geometry-changing edits.
+
+If automatic terrain assistance is added later, the user must be able to inspect why a suggested value was produced and distinguish it from the manually accepted MSA.
 
 ## 5. Validation and tests
 
-Minimum automated tests should cover:
+Current automated tests cover:
+
+- 1 NM spherical offset geometry;
+- corridor width at both ends of a Norwegian route leg;
+- manual MSA storage;
+- manual MSA restoration through undo;
+- invalidation of manual MSA after waypoint geometry changes;
+- clearing old manual MSA when a route leg is split.
+
+Future automatic-terrain tests should cover:
 
 - highest terrain exactly on centerline;
 - higher terrain 0.9 NM off track is included;
 - terrain 1.1 NM off track is excluded;
 - obstacle higher than terrain controls MSA;
 - terrain higher than obstacle controls MSA;
-- water segment whose glide requirement controls MSA;
+- water segment whose glide requirement controls planning;
 - water segment already satisfied by obstacle-based MSA;
 - missing obstacle data produces `terrain-only`, not `complete`;
-- route edits invalidate/recalculate the correct leg;
 - geometry around high latitudes in Norway and near longitude wrapping remains correct.
 
-## Recommended implementation order
+## Recommended implementation order from here
 
-1. MSA core model, 1 NM corridor geometry and terrain-only result.
-2. OFP MSA column integration plus map corridor/controlling-point visualization.
-3. Manual obstacle override and explicit data-quality state.
-4. Land/water detection and still-air glide-to-land check using verified C182T glide data.
-5. Authorized NRL provider if access and terms permit it.
-6. Optional wind-aware glide footprint later.
+1. Keep and refine the current 1 NM visual corridor plus manual MSA workflow.
+2. Add a C182T still-air glide-to-land visualization using the verified POH maximum-glide chart.
+3. Add optional terrain-only assistance from Kartverket with explicit incomplete-data labelling.
+4. Add manual obstacle assistance and data-quality/status information.
+5. Add an authorized NRL provider only if access and terms permit it.
+6. Consider a wind-aware glide footprint later.
 
-This staged approach gives a useful terrain MSA early without pretending that restricted obstacle data is available when it is not.
+This staged approach gives useful planning assistance without pretending that incomplete terrain/obstacle data is a verified automatic MSA.

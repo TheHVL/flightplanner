@@ -8,7 +8,8 @@ body.map-overlay-open { overflow: hidden; }
   min-width: 0;
 }
 
-.chart-detail-control {
+.chart-detail-control,
+.msa-corridor-control {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -19,7 +20,20 @@ body.map-overlay-open { overflow: hidden; }
   white-space: nowrap;
 }
 
-.chart-detail-control span { text-transform: uppercase; letter-spacing: 0.05em; }
+.chart-detail-control span,
+.msa-corridor-control span { text-transform: uppercase; letter-spacing: 0.05em; }
+
+.msa-corridor-control {
+  padding: 6px 8px;
+  border: 1px solid #c9d3df;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.msa-corridor-control:hover { background: #f7f9fb; }
+.msa-corridor-control input { margin: 0; accent-color: #c46a12; }
+
 .chart-detail-control select {
   padding: 6px 24px 6px 8px;
   border: 1px solid #c9d3df;
@@ -152,6 +166,11 @@ body.map-resizing { cursor: ns-resize; user-select: none; }
   .map-column--expanded { inset: 4px; }
   .map-column--expanded .map { flex: 1 1 auto; min-height: 0; height: auto; }
   .map-column--expanded .map-note { display: none; }
+}
+
+@media (max-width: 660px) {
+  .msa-corridor-control span { display: none; }
+  .msa-corridor-control { padding: 6px; }
 }
 
 @media (max-width: 560px) {
