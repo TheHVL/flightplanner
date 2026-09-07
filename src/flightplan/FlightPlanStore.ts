@@ -56,6 +56,18 @@ export interface LegWeatherForecast {
   source: string;
 }
 
+interface FlightPlanSnapshot {
+  waypoints: Waypoint[];
+  navigationSettings: NavigationSettings;
+  performanceSettings: PerformanceSettings;
+  weatherSettings: WeatherSettings;
+  verticalProfileSettings: VerticalProfileSettings;
+  plannedAltitudesFt: Array<[string, number]>;
+  weatherForecasts: Array<[string, LegWeatherForecast]>;
+  verticalWaypointConstraints: Array<[string, WaypointVerticalConstraint]>;
+  automaticWaypointIds: string[];
+}
+
 const DEFAULT_NAVIGATION_SETTINGS: NavigationSettings = {
   tasKt: 130,
   windFromDeg: 0,
@@ -96,6 +108,8 @@ const DEFAULT_WAYPOINT_VERTICAL_CONSTRAINT: WaypointVerticalConstraint = {
   minutesPerCircuit: 6,
 };
 
+const MAX_UNDO_STEPS = 50;
+
 export class FlightPlanStore {
   private waypoints: Waypoint[] = [];
   private navigationSettings: NavigationSettings = { ...DEFAULT_NAVIGATION_SETTINGS };
@@ -107,6 +121,7 @@ export class FlightPlanStore {
   private verticalWaypointConstraints = new Map<string, WaypointVerticalConstraint>();
   private automaticWaypointIds = new Set<string>();
   private listeners = new Set<Listener>();
+  private undoStack: FlightPlanSnapshot[] = [];
 
   getWaypoints(): Waypoint[] {
     return this.waypoints.map((waypoint) => ({ ...waypoint }));
@@ -130,6 +145,18 @@ export class FlightPlanStore {
 
   getVerticalProfileSettings(): VerticalProfileSettings {
     return { ...this.verticalProfileSettings };
+  }
+
+  canUndo(): boolean {
+    return this.undoStack.length > 0;
+  }
+
+  undoLastAction(): boolean {
+    const previous = this.undoStack.pop();
+    if (!previous) return false;
+    this.restoreSnapshot(previous);
+    this.emit();
+    return true;
   }
 
   getWaypointVerticalConstraint(waypointId: string): WaypointVerticalConstraint {
@@ -169,16 +196,22 @@ export class FlightPlanStore {
   }
 
   updateNavigationSettings(patch: Partial<NavigationSettings>): void {
+    if (!hasPatchDifference(this.navigationSettings, patch)) return;
+    this.rememberUndo();
     this.navigationSettings = { ...this.navigationSettings, ...patch };
     this.emit();
   }
 
   updatePerformanceSettings(patch: Partial<PerformanceSettings>): void {
+    if (!hasPatchDifference(this.performanceSettings, patch)) return;
+    this.rememberUndo();
     this.performanceSettings = { ...this.performanceSettings, ...patch };
     this.emit();
   }
 
   updateWeatherSettings(patch: Partial<WeatherSettings>): void {
+    if (!hasPatchDifference(this.weatherSettings, patch)) return;
+    this.rememberUndo();
     this.weatherSettings = { ...this.weatherSettings, ...patch };
     this.emit();
   }
@@ -204,6 +237,8 @@ export class FlightPlanStore {
     ) {
       return;
     }
+    if (shallowEqual(this.verticalProfileSettings, next)) return;
+    this.rememberUndo();
     this.verticalProfileSettings = next;
     this.emit();
   }
@@ -228,7 +263,9 @@ export class FlightPlanStore {
     next.elevationFt = next.elevationFt === null ? null : Math.round(next.elevationFt);
     next.circuitCount = Math.round(next.circuitCount);
     next.minutesPerCircuit = Math.round(next.minutesPerCircuit * 2) / 2;
+    if (shallowEqual(existing, next)) return;
 
+    this.rememberUndo();
     if (next.mode === 'auto' && next.elevationFt === null && next.icaoCode === '') {
       this.verticalWaypointConstraints.delete(waypointId);
     } else {
@@ -253,13 +290,19 @@ export class FlightPlanStore {
 
   setPlannedAltitudeFt(fromId: string, toId: string, altitudeFt: number | null): void {
     const key = this.legKey(fromId, toId);
+    const current = this.plannedAltitudesFt.get(key) ?? null;
     if (altitudeFt === null) {
+      if (current === null) return;
+      this.rememberUndo();
       this.plannedAltitudesFt.delete(key);
     } else {
       if (!Number.isFinite(altitudeFt) || altitudeFt < 0 || altitudeFt > 30000) {
         return;
       }
-      this.plannedAltitudesFt.set(key, Math.round(altitudeFt));
+      const rounded = Math.round(altitudeFt);
+      if (current === rounded) return;
+      this.rememberUndo();
+      this.plannedAltitudesFt.set(key, rounded);
     }
     this.weatherForecasts.delete(key);
     this.emit();
@@ -271,6 +314,7 @@ export class FlightPlanStore {
   }
 
   addWaypoint(coordinate: Coordinate, name?: string): Waypoint {
+    this.rememberUndo();
     const id = crypto.randomUUID();
     const hasCustomName = Boolean(name?.trim());
     const waypoint: Waypoint = {
@@ -287,7 +331,48 @@ export class FlightPlanStore {
     return { ...this.waypoints[this.waypoints.length - 1] };
   }
 
+  insertWaypointAt(index: number, coordinate: Coordinate, name?: string): Waypoint | null {
+    if (!Number.isInteger(index) || index <= 0 || index >= this.waypoints.length) return null;
+
+    const from = this.waypoints[index - 1];
+    const to = this.waypoints[index];
+    const previousLegKey = this.legKey(from.id, to.id);
+    const inheritedAltitudeFt = this.plannedAltitudesFt.get(previousLegKey) ?? null;
+
+    this.rememberUndo();
+    const id = crypto.randomUUID();
+    const hasCustomName = Boolean(name?.trim());
+    const waypoint: Waypoint = {
+      id,
+      name: hasCustomName ? name!.trim() : '',
+      ...coordinate,
+    };
+
+    if (!hasCustomName) this.automaticWaypointIds.add(id);
+    const nextWaypoints = [...this.waypoints];
+    nextWaypoints.splice(index, 0, waypoint);
+    this.waypoints = nextWaypoints;
+    this.renumberAutomaticWaypointNames();
+
+    this.plannedAltitudesFt.delete(previousLegKey);
+    if (inheritedAltitudeFt !== null) {
+      this.plannedAltitudesFt.set(this.legKey(from.id, id), inheritedAltitudeFt);
+      this.plannedAltitudesFt.set(this.legKey(id, to.id), inheritedAltitudeFt);
+    }
+    this.weatherForecasts.clear();
+    this.emit();
+
+    const inserted = this.waypoints.find((item) => item.id === id);
+    return inserted ? { ...inserted } : null;
+  }
+
   updateWaypoint(id: string, patch: Partial<Omit<Waypoint, 'id'>>): void {
+    const existing = this.waypoints.find((waypoint) => waypoint.id === id);
+    if (!existing) return;
+    const changesAutomaticStatus = patch.name !== undefined && this.automaticWaypointIds.has(id);
+    if (!changesAutomaticStatus && !hasPatchDifference(existing, patch)) return;
+
+    this.rememberUndo();
     if (patch.name !== undefined) this.automaticWaypointIds.delete(id);
     this.waypoints = this.waypoints.map((waypoint) =>
       waypoint.id === id ? { ...waypoint, ...patch } : waypoint,
@@ -297,6 +382,8 @@ export class FlightPlanStore {
   }
 
   removeWaypoint(id: string): void {
+    if (!this.waypoints.some((waypoint) => waypoint.id === id)) return;
+    this.rememberUndo();
     this.waypoints = this.waypoints.filter((waypoint) => waypoint.id !== id);
     this.automaticWaypointIds.delete(id);
     this.verticalWaypointConstraints.delete(id);
@@ -313,6 +400,7 @@ export class FlightPlanStore {
       return;
     }
 
+    this.rememberUndo();
     const reordered = [...this.waypoints];
     [reordered[index], reordered[nextIndex]] = [reordered[nextIndex], reordered[index]];
     this.waypoints = reordered;
@@ -325,6 +413,7 @@ export class FlightPlanStore {
     if (this.waypoints.length === 0) {
       return;
     }
+    this.rememberUndo();
     this.waypoints = [];
     this.automaticWaypointIds.clear();
     this.plannedAltitudesFt.clear();
@@ -367,9 +456,53 @@ export class FlightPlanStore {
     }
   }
 
+  private rememberUndo(): void {
+    this.undoStack.push(this.createSnapshot());
+    if (this.undoStack.length > MAX_UNDO_STEPS) this.undoStack.shift();
+  }
+
+  private createSnapshot(): FlightPlanSnapshot {
+    return {
+      waypoints: this.waypoints.map((waypoint) => ({ ...waypoint })),
+      navigationSettings: { ...this.navigationSettings },
+      performanceSettings: { ...this.performanceSettings },
+      weatherSettings: { ...this.weatherSettings },
+      verticalProfileSettings: { ...this.verticalProfileSettings },
+      plannedAltitudesFt: [...this.plannedAltitudesFt.entries()],
+      weatherForecasts: [...this.weatherForecasts.entries()].map(([key, forecast]) => [key, { ...forecast }]),
+      verticalWaypointConstraints: [...this.verticalWaypointConstraints.entries()].map(([key, constraint]) => [key, { ...constraint }]),
+      automaticWaypointIds: [...this.automaticWaypointIds],
+    };
+  }
+
+  private restoreSnapshot(snapshot: FlightPlanSnapshot): void {
+    this.waypoints = snapshot.waypoints.map((waypoint) => ({ ...waypoint }));
+    this.navigationSettings = { ...snapshot.navigationSettings };
+    this.performanceSettings = { ...snapshot.performanceSettings };
+    this.weatherSettings = { ...snapshot.weatherSettings };
+    this.verticalProfileSettings = { ...snapshot.verticalProfileSettings };
+    this.plannedAltitudesFt = new Map(snapshot.plannedAltitudesFt);
+    this.weatherForecasts = new Map(
+      snapshot.weatherForecasts.map(([key, forecast]) => [key, { ...forecast }]),
+    );
+    this.verticalWaypointConstraints = new Map(
+      snapshot.verticalWaypointConstraints.map(([key, constraint]) => [key, { ...constraint }]),
+    );
+    this.automaticWaypointIds = new Set(snapshot.automaticWaypointIds);
+  }
+
   private emit(): void {
     this.listeners.forEach((listener) => listener());
   }
+}
+
+function hasPatchDifference<T extends object>(current: T, patch: Partial<T>): boolean {
+  return Object.entries(patch).some(([key, value]) => current[key as keyof T] !== value);
+}
+
+function shallowEqual<T extends object>(a: T, b: T): boolean {
+  const keys = Object.keys(a) as Array<keyof T>;
+  return keys.length === Object.keys(b).length && keys.every((key) => a[key] === b[key]);
 }
 
 function normalizeIcao(value: string): string {
