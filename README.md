@@ -17,6 +17,7 @@ Browser-based VFR flight planning for Norwegian flight training, with the Cessna
 - Kartverket Norgeskart and Avinor Norway Aeronautical Chart ICAO 1:500 000 map layers.
 - Optional visual MSA corridor extending 1 NM either side of the complete route, including waypoint end caps.
 - Manual MSA entry for every OFP leg, with a warning when PL is below the entered MSA.
+- Optional C182T zero-wind maximum-glide visualization based on POH Figure 3-1 and the Phase 6 modeled route altitude.
 - UiT-style operational flight-plan navigation log with accumulated distance/time and editable planned level (PL) per leg.
 - C182T POH cruise-performance preview with bounded interpolation and no extrapolation. Current mainline data coverage is sea level through 2,000 ft, 2200-2400 RPM, ISA -20°C to ISA +20°C.
 - Route weather preview using Open-Meteo pressure-level winds and temperature, interpolated by geopotential height and forecast time.
@@ -77,7 +78,48 @@ the MSA and PL cells are highlighted as a warning.
 
 The website does **not** currently calculate a complete MSA from terrain and obstacle data. This avoids presenting a terrain-only calculation as complete while unrestricted automatic NRL obstacle data is unavailable. The detailed future implementation is documented in [docs/MSA_IMPLEMENTATION_PLAN.md](docs/MSA_IMPLEMENTATION_PLAN.md).
 
-The next planned MSA extension is a C182T still-air glide-to-land visualization based on verified POH maximum-glide data, followed later by optional terrain assistance if the data path can be implemented without implying complete obstacle coverage.
+## C182T glide-to-land visualization
+
+Use the `C182T glide` map control to display an approximate zero-wind maximum-glide reach around the route.
+
+Source basis: Cessna Model 182T NAV III GFC 700 AFCS, Section 3, Figure 3-1 `MAXIMUM GLIDE`, supplied for this project. The figure states:
+
+- propeller windmilling;
+- flaps up;
+- zero wind;
+- best-glide speed 76 KIAS at 3100 lb;
+- best-glide speed 70 KIAS at 2600 lb;
+- best-glide speed 58 KIAS at 2100 lb.
+
+The plotted maximum-glide line is approximately linear from 0 ft / 0 NM to 14,000 ft / 20 NM. Flightplanner therefore represents the line as:
+
+```text
+approximate glide distance [NM]
+= height above assumed landing surface [ft] / 700
+```
+
+Examples:
+
+```text
+2,800 ft -> 4.0 NM
+4,500 ft -> 6.4 NM
+7,000 ft -> 10.0 NM
+14,000 ft -> 20.0 NM
+```
+
+The map overlay is designed specifically as a visual aid for the over-water part of the UTSA project rule. It uses the modeled Phase 6 route altitude, including climb and descent where a valid vertical profile exists, rather than blindly applying the full PL before TOC or after TOD.
+
+Important limitations:
+
+- the POH figure assumes zero wind;
+- the displayed reach assumes the shoreline/landing surface is at sea level;
+- the overlay does not account for terrain height between the aircraft and a possible landing area;
+- it does not determine whether land is suitable for landing;
+- it is not a wind-aware glide footprint;
+- Figure 3-1 is not extrapolated above 14,000 ft;
+- if Phase 6 climb/descent profiles overlap, the glide overlay is hidden rather than presenting an ambiguous result.
+
+The shaded area should therefore be read as **theoretical maximum reach to a sea-level shoreline under the stated POH conditions**, not as a guaranteed safe landing area.
 
 ## Architecture
 
@@ -86,8 +128,8 @@ The project keeps route state, navigation mathematics, aircraft performance, wea
 Key areas:
 
 ```text
-src/navigation/    Great-circle, wind, magnetic, MSA-corridor and vertical-profile math
-src/performance/   C182T cruise data and interpolation
+src/navigation/    Great-circle, wind, magnetic, MSA-corridor, glide-envelope and vertical-profile math
+src/performance/   C182T cruise data, interpolation and maximum-glide source model
 src/weather/       Route forecast sampling/interpolation
 src/aip/           AIP aerodrome catalog lookup
 src/map/           Leaflet map and ICAO chart quality logic
@@ -108,7 +150,7 @@ public/            Static deploy assets and fallback AIP dataset
 | 4 | In progress | C182T POH cruise database and interpolation |
 | 5 | Preview | Route weather and per-leg forecast wind integration |
 | 6 | Advanced preview | Automatic multi-leg TOC/TOD, airports and touch-and-goes |
-| 7 | In progress | Norwegian AIP aerodrome elevation, circuit planning, route editing, manual MSA workflow and MSA corridor |
+| 7 | In progress | Norwegian AIP aerodrome elevation, circuit planning, route editing, manual MSA workflow, MSA corridor and C182T glide visualization |
 | 8 | Planned | OFP polish, save/load/export/print and broader validation |
 
 ## Development
