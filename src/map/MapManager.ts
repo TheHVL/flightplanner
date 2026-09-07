@@ -2,8 +2,10 @@ import L, {
   type Coords,
   type DoneCallback,
   type GridLayerOptions,
+  type LeafletMouseEvent,
   type Map as LeafletMap,
   type Marker,
+  type Point,
   type Polyline,
 } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -17,6 +19,7 @@ import {
 export interface MapManagerCallbacks {
   onMapClick(lat: number, lon: number): void;
   onWaypointMoved(id: string, lat: number, lon: number): void;
+  onRouteLegInsert(legIndex: number, lat: number, lon: number): void;
 }
 
 export interface VerticalProfileMapMarker {
@@ -98,14 +101,26 @@ interface ArcGisLayerMetadata {
   layers?: Array<{ name?: string }>;
 }
 
+interface RouteInsertDrag {
+  legIndex: number;
+  startPoint: Point;
+  latlng: L.LatLng;
+  moved: boolean;
+  mapDraggingWasEnabled: boolean;
+}
+
 export class MapManager {
   private readonly map: LeafletMap;
   private readonly markers = new Map<string, Marker>();
   private readonly verticalMarkers = new Map<string, Marker>();
   private readonly resizeObserver?: ResizeObserver;
   private readonly icaoLayer: AvinorIcaoLayer;
-  private routeLine: Polyline;
+  private readonly routeLine: Polyline;
+  private readonly routeHitLine: Polyline;
   private chartEdition: string | null = null;
+  private renderedWaypoints: Waypoint[] = [];
+  private routeInsertDrag: RouteInsertDrag | null = null;
+  private suppressNextMapClick = false;
 
   constructor(element: HTMLElement, callbacks: MapManagerCallbacks) {
     this.map = L.map(element, {
@@ -154,9 +169,27 @@ export class MapManager {
       color: '#2563eb',
       weight: 4,
       opacity: 0.9,
+      interactive: false,
     }).addTo(this.map);
 
+    this.routeHitLine = L.polyline([], {
+      color: '#2563eb',
+      weight: 18,
+      opacity: 0.001,
+      interactive: true,
+    }).addTo(this.map);
+
+    this.routeHitLine.on('mousedown', (event: LeafletMouseEvent) => {
+      this.startRouteInsertDrag(event);
+    });
+    this.map.on('mousemove', (event: LeafletMouseEvent) => this.updateRouteInsertDrag(event));
+    this.map.on('mouseup', (event: LeafletMouseEvent) => this.finishRouteInsertDrag(event, callbacks));
+
     this.map.on('click', (event) => {
+      if (this.suppressNextMapClick) {
+        this.suppressNextMapClick = false;
+        return;
+      }
       callbacks.onMapClick(event.latlng.lat, event.latlng.lng);
     });
 
@@ -182,6 +215,7 @@ export class MapManager {
   }
 
   renderRoute(waypoints: Waypoint[], onMoved: MapManagerCallbacks['onWaypointMoved']): void {
+    this.renderedWaypoints = waypoints.map((waypoint) => ({ ...waypoint }));
     const activeIds = new Set(waypoints.map((waypoint) => waypoint.id));
 
     for (const [id, marker] of this.markers) {
@@ -223,7 +257,18 @@ export class MapManager {
       });
     });
 
-    this.routeLine.setLatLngs(waypoints.map((waypoint) => [waypoint.lat, waypoint.lon]));
+    const routeLatLngs = waypoints.map((waypoint) => L.latLng(waypoint.lat, waypoint.lon));
+    if (!this.routeInsertDrag) this.routeLine.setLatLngs(routeLatLngs);
+    this.routeHitLine.setLatLngs(routeLatLngs);
+    this.routeHitLine.unbindTooltip();
+    if (waypoints.length > 1) {
+      this.routeHitLine.bindTooltip('Drag the route line to insert a waypoint', {
+        sticky: true,
+        direction: 'top',
+      });
+      const element = this.routeHitLine.getElement();
+      if (element) element.style.cursor = 'grab';
+    }
   }
 
   renderVerticalProfileMarkers(markers: VerticalProfileMapMarker[]): void {
@@ -252,6 +297,88 @@ export class MapManager {
       marker.unbindTooltip();
       marker.bindTooltip(item.title, { direction: 'top', offset: [0, -10] });
     }
+  }
+
+  private startRouteInsertDrag(event: LeafletMouseEvent): void {
+    if (this.renderedWaypoints.length < 2) return;
+    const mouseEvent = event.originalEvent as MouseEvent;
+    if (typeof mouseEvent.button === 'number' && mouseEvent.button !== 0) return;
+
+    const legIndex = this.closestLegIndex(event.latlng);
+    if (legIndex < 0) return;
+
+    const mapDraggingWasEnabled = this.map.dragging.enabled();
+    if (mapDraggingWasEnabled) this.map.dragging.disable();
+    this.routeInsertDrag = {
+      legIndex,
+      startPoint: this.map.latLngToContainerPoint(event.latlng),
+      latlng: event.latlng,
+      moved: false,
+      mapDraggingWasEnabled,
+    };
+    const element = this.routeHitLine.getElement();
+    if (element) element.style.cursor = 'grabbing';
+    L.DomEvent.stop(event.originalEvent);
+  }
+
+  private updateRouteInsertDrag(event: LeafletMouseEvent): void {
+    const drag = this.routeInsertDrag;
+    if (!drag) return;
+
+    drag.latlng = event.latlng;
+    if (this.map.latLngToContainerPoint(event.latlng).distanceTo(drag.startPoint) >= 4) {
+      drag.moved = true;
+    }
+    if (!drag.moved) return;
+
+    const preview = this.renderedWaypoints.map((waypoint) => L.latLng(waypoint.lat, waypoint.lon));
+    preview.splice(drag.legIndex + 1, 0, event.latlng);
+    this.routeLine.setLatLngs(preview);
+  }
+
+  private finishRouteInsertDrag(event: LeafletMouseEvent, callbacks: MapManagerCallbacks): void {
+    const drag = this.routeInsertDrag;
+    if (!drag) return;
+    this.routeInsertDrag = null;
+
+    if (drag.mapDraggingWasEnabled) this.map.dragging.enable();
+    const element = this.routeHitLine.getElement();
+    if (element) element.style.cursor = 'grab';
+
+    this.suppressNextMapClick = true;
+    window.setTimeout(() => {
+      this.suppressNextMapClick = false;
+    }, 0);
+
+    if (drag.moved) {
+      callbacks.onRouteLegInsert(drag.legIndex, event.latlng.lat, event.latlng.lng);
+    } else {
+      this.routeLine.setLatLngs(
+        this.renderedWaypoints.map((waypoint) => L.latLng(waypoint.lat, waypoint.lon)),
+      );
+    }
+    L.DomEvent.stop(event.originalEvent);
+  }
+
+  private closestLegIndex(latlng: L.LatLng): number {
+    if (this.renderedWaypoints.length < 2) return -1;
+    const target = this.map.latLngToContainerPoint(latlng);
+    let closestIndex = -1;
+    let closestDistance = Number.POSITIVE_INFINITY;
+
+    for (let index = 0; index < this.renderedWaypoints.length - 1; index += 1) {
+      const from = this.renderedWaypoints[index];
+      const to = this.renderedWaypoints[index + 1];
+      const start = this.map.latLngToContainerPoint([from.lat, from.lon]);
+      const end = this.map.latLngToContainerPoint([to.lat, to.lon]);
+      const distance = squaredDistanceToSegment(target, start, end);
+      if (distance < closestDistance) {
+        closestDistance = distance;
+        closestIndex = index;
+      }
+    }
+
+    return closestIndex;
   }
 
   private requestChartEdition(): void {
@@ -304,4 +431,22 @@ export class MapManager {
       iconAnchor: [23, 13],
     });
   }
+}
+
+function squaredDistanceToSegment(point: Point, start: Point, end: Point): number {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  if (dx === 0 && dy === 0) {
+    const px = point.x - start.x;
+    const py = point.y - start.y;
+    return px * px + py * py;
+  }
+
+  const projection = ((point.x - start.x) * dx + (point.y - start.y) * dy) / (dx * dx + dy * dy);
+  const t = Math.max(0, Math.min(1, projection));
+  const closestX = start.x + t * dx;
+  const closestY = start.y + t * dy;
+  const px = point.x - closestX;
+  const py = point.y - closestY;
+  return px * px + py * py;
 }
