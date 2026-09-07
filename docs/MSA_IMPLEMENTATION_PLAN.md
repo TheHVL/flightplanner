@@ -13,14 +13,15 @@ This is a project/training rule supplied for Flightplanner. The planner should d
 
 ## Current implementation
 
-The first safe version is intentionally pilot-driven:
+The current version is intentionally pilot-driven:
 
 - an optional map overlay shows a corridor 1 NM either side of each route leg;
 - the corridor includes 1 NM end caps around waypoints so the visual area represents points within 1 NM of the route centerline;
 - MSA is entered manually for each OFP leg after the pilot inspects the relevant chart/data;
 - PL is compared with the entered MSA and a warning is shown when `PL < MSA`;
 - affected manual MSA values are cleared when route geometry changes, so a value checked for an old corridor is not silently reused;
-- manual MSA state participates in Ctrl+Z/Cmd+Z undo.
+- manual MSA state participates in Ctrl+Z/Cmd+Z undo;
+- an optional C182T maximum-glide overlay visualizes approximate zero-wind reach from the modeled route altitude.
 
 No automatic terrain or obstacle value is currently presented as a complete MSA.
 
@@ -57,11 +58,6 @@ For performance, the planner should request a raster/window covering the 1 NM co
 
 The correct Norwegian source is Nasjonalt register over luftfartshindre (NRL). Since 1 July 2026, Kartverket requires approved access for NRL data. The public Flightplanner repository must therefore not contain copied restricted NRL data or private credentials.
 
-Official information:
-
-- https://www.kartverket.no/en/geodataarbeid/nrl
-- https://kartverket.no/om-kartverket/nyheter/geodataarbeid/2026/april/tilgang-til-nrl-data-krever-godkjenning-fra-1.-juli
-
 Recommended future approach:
 
 1. Keep the manual MSA workflow available even if automatic assistance is later added.
@@ -74,31 +70,57 @@ The planner should never label a result as a complete automatic MSA if it only u
 
 ## 2. Water and glide-to-land rule
 
-A separate land/water analysis should examine the route centerline and determine where it passes over water. Kartverket N50 areal-cover/water data is a suitable Norwegian source family for identifying land and water at useful planning resolution.
+The C182T POH Maximum Glide Figure 3-1 supplied for this project is now used for a visual still-air glide aid. The chart states:
 
-The C182T POH Maximum Glide Figure 3-1 supplied for this project has now been visually verified as suitable for a later still-air glide check. The chart states the conditions `propeller windmilling`, `flaps up`, and `zero wind`, and gives weight-dependent best-glide speeds. The first glide implementation must preserve those conditions in the UI rather than presenting the result as a wind-aware guarantee.
+- propeller windmilling;
+- flaps up;
+- zero wind;
+- best glide 76 KIAS at 3100 lb;
+- best glide 70 KIAS at 2600 lb;
+- best glide 58 KIAS at 2100 lb.
 
-A visual glide-to-land overlay is preferred before any binary website decision. For each sampled route position over water, a later implementation should:
-
-1. identify nearby land;
-2. determine horizontal distance to land;
-3. use verified C182T maximum-glide performance for available height above the relevant land/terrain;
-4. show the still-air reachable-land envelope visually;
-5. make it clear that wind can reduce or increase actual reach.
-
-A generic glide-ratio formula may be useful internally only if it is demonstrated to match the verified POH chart sufficiently well. Do not invent a glide ratio from cruise data.
-
-## 3. Proposed architecture
-
-Keep the aviation calculation independent from the UI:
+The plotted line runs approximately from 0 ft / 0 NM to 14,000 ft / 20 NM. Flightplanner models that plotted line as:
 
 ```text
-src/navigation/msaCorridor.ts   current visual 1 NM corridor geometry
+approximate glide distance [NM]
+= height above assumed landing surface [ft] / 700
+```
+
+The current map overlay samples the route and uses the Phase 6 modeled altitude. This means climb and descent portions use the modeled changing altitude rather than applying the full PL everywhere.
+
+For the current over-water planning aid, the landing surface is assumed to be at sea level. Therefore:
+
+```text
+height used for glide visualization
+= modeled route altitude MSL
+```
+
+This is appropriate only as a visual shoreline-reach aid. It does **not** mean that any land inside the shading is suitable or reachable in the presence of terrain, wind, obstacles or poor landing conditions.
+
+The implementation deliberately does not extrapolate Figure 3-1 above 14,000 ft. If the Phase 6 vertical profile contains overlapping climb/descent segments, the overlay is hidden because the altitude model is ambiguous.
+
+### Future land/water improvement
+
+A future land/water analysis can examine the route centerline and determine where it passes over water using a suitable Norwegian land-cover dataset. It could then identify the nearest shoreline and compare that distance with the C182T still-air envelope. A later wind-aware version could use forecast wind to produce a direction-dependent footprint, but the current source chart itself is explicitly zero wind.
+
+## 3. Architecture
+
+Current relevant modules:
+
+```text
+src/navigation/msaCorridor.ts       visual 1 NM corridor geometry
+src/navigation/glideEnvelope.ts     route-altitude sampling for glide shading
+src/performance/maximumGlide.ts     C182T POH Figure 3-1 source model
+src/navigation/verticalProfile.ts   modeled climb/descent/PL altitude profile
+```
+
+Future automatic MSA assistance can remain separate:
+
+```text
 src/msa/msa.ts                  future MSA rule and result model
 src/msa/terrainProvider.ts      future Kartverket DTM querying/caching
 src/msa/obstacleProvider.ts     future manual/authorized NRL provider interface
 src/msa/landProvider.ts         future land/water and nearest-land analysis
-src/msa/glide.ts                future C182T glide model
 src/components/MsaPanel.ts      future coverage/status/settings UI if needed
 ```
 
@@ -131,6 +153,8 @@ if PL and MSA are both entered:
 
 Manual MSA should be rechecked whenever the route geometry for that leg changes. Flightplanner therefore clears affected manual MSA values after geometry-changing edits.
 
+The glide overlay does not automatically change the MSA value. It is a separate visual aid for checking the over-water gliding-distance part of the project rule.
+
 If automatic terrain assistance is added later, the user must be able to inspect why a suggested value was produced and distinguish it from the manually accepted MSA.
 
 ## 5. Validation and tests
@@ -142,7 +166,12 @@ Current automated tests cover:
 - manual MSA storage;
 - manual MSA restoration through undo;
 - invalidation of manual MSA after waypoint geometry changes;
-- clearing old manual MSA when a route leg is split.
+- clearing old manual MSA when a route leg is split;
+- the C182T Figure 3-1 approximate straight-line glide model;
+- the three published best-glide speeds from the figure;
+- modeled glide altitude during a climb before TOC;
+- hiding the glide envelope when vertical profiles overlap;
+- no extrapolation above the Figure 3-1 chart height.
 
 Future automatic-terrain tests should cover:
 
@@ -158,10 +187,10 @@ Future automatic-terrain tests should cover:
 
 ## Recommended implementation order from here
 
-1. Keep and refine the current 1 NM visual corridor plus manual MSA workflow.
-2. Add a C182T still-air glide-to-land visualization using the verified POH maximum-glide chart.
-3. Add optional terrain-only assistance from Kartverket with explicit incomplete-data labelling.
-4. Add manual obstacle assistance and data-quality/status information.
+1. Keep and refine the current 1 NM visual corridor, manual MSA workflow and C182T still-air glide visualization.
+2. Add optional terrain-only assistance from Kartverket with explicit incomplete-data labelling.
+3. Add manual obstacle assistance and data-quality/status information.
+4. Add explicit land/water and nearest-shore analysis around over-water route sections.
 5. Add an authorized NRL provider only if access and terms permit it.
 6. Consider a wind-aware glide footprint later.
 
