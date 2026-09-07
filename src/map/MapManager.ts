@@ -11,6 +11,7 @@ import L, {
 } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import type { Coordinate, RouteLeg, Waypoint } from '../types';
+import { routeLegPath } from '../navigation/geodesy';
 import {
   buildLegCorridorPolygon,
   destinationCoordinate,
@@ -118,6 +119,10 @@ interface RouteShapeDrag {
   latlng: L.LatLng;
   moved: boolean;
   mapDraggingWasEnabled: boolean;
+}
+
+interface ArcGisLayerMetadata {
+  layers?: Array<{ name?: string }>;
 }
 
 export class MapManager {
@@ -274,15 +279,16 @@ export class MapManager {
     } as const;
 
     for (const leg of legs) {
-      for (let index = 0; index < leg.path.length - 1; index += 1) {
-        const polygon = buildLegCorridorPolygon(leg.path[index], leg.path[index + 1]);
+      const path = routeLegPath(leg);
+      for (let index = 0; index < path.length - 1; index += 1) {
+        const polygon = buildLegCorridorPolygon(path[index], path[index + 1]);
         L.polygon(
           polygon.map((point) => [point.lat, point.lon] as [number, number]),
           pathStyle,
         ).addTo(this.msaCorridorLayer);
       }
 
-      for (const point of leg.path) {
+      for (const point of path) {
         L.circle([point.lat, point.lon], {
           ...pathStyle,
           radius: MSA_CORRIDOR_HALF_WIDTH_METERS,
@@ -317,7 +323,7 @@ export class MapManager {
       ...leg,
       from: { ...leg.from },
       to: { ...leg.to },
-      path: leg.path.map((point) => ({ ...point })),
+      path: routeLegPath(leg).map((point) => ({ ...point })),
     }));
     const activeIds = new Set(waypoints.map((waypoint) => waypoint.id));
 
@@ -395,7 +401,6 @@ export class MapManager {
         offset: [0, -3],
         className: `vertical-line-label vertical-line-label--${item.type.toLowerCase()}`,
       });
-      line.bindPopup(item.title);
     }
   }
 
@@ -465,7 +470,7 @@ export class MapManager {
     this.renderedLegs.forEach((leg, legIndex) => {
       const path = overrideLegIndex === legIndex && overridePoint
         ? [leg.from, { lat: overridePoint.lat, lon: overridePoint.lng }, leg.to]
-        : leg.path;
+        : routeLegPath(leg);
       path.forEach((point, pointIndex) => {
         if (legIndex > 0 && pointIndex === 0) return;
         result.push(L.latLng(point.lat, point.lon));
@@ -481,9 +486,10 @@ export class MapManager {
     let closestDistance = Number.POSITIVE_INFINITY;
 
     for (const leg of this.renderedLegs) {
-      for (let pathIndex = 0; pathIndex < leg.path.length - 1; pathIndex += 1) {
-        const from = leg.path[pathIndex];
-        const to = leg.path[pathIndex + 1];
+      const path = routeLegPath(leg);
+      for (let pathIndex = 0; pathIndex < path.length - 1; pathIndex += 1) {
+        const from = path[pathIndex];
+        const to = path[pathIndex + 1];
         const start = this.map.latLngToContainerPoint([from.lat, from.lon]);
         const end = this.map.latLngToContainerPoint([to.lat, to.lon]);
         const distance = squaredDistanceToSegment(target, start, end);
@@ -538,10 +544,6 @@ export class MapManager {
       tooltipAnchor: [0, -4],
     });
   }
-}
-
-interface ArcGisLayerMetadata {
-  layers?: Array<{ name?: string }>;
 }
 
 function squaredDistanceToSegment(point: Point, start: Point, end: Point): number {
