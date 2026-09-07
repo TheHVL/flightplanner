@@ -31,7 +31,7 @@ root.innerHTML = `
           <div class="brand-subtitle">VFR · NORWAY · TRAINING</div>
         </div>
       </div>
-      <div class="phase-chip"><span></span> PHASE 7 · AIP &amp; CIRCUITS</div>
+      <div class="phase-chip"><span></span> PHASE 7 · AIP &amp; MSA</div>
     </header>
 
     <main class="workspace">
@@ -50,6 +50,10 @@ root.innerHTML = `
           </div>
           <div class="map-toolbar-right">
             <div class="map-note">Switch between Kartverket Norgeskart and Avinor ICAO 1:500 000 using the layer control on the map.</div>
+            <label class="msa-corridor-control" title="Show a visual corridor extending 1 NM either side of the route. Use it to inspect terrain and obstacles manually.">
+              <input id="msa-corridor-toggle" type="checkbox" />
+              <span>MSA ±1 NM</span>
+            </label>
             <label class="chart-detail-control">
               <span>ICAO detail</span>
               <select id="chart-detail" aria-label="ICAO chart detail">
@@ -91,6 +95,7 @@ const mapColumn = document.querySelector<HTMLElement>('#map-column');
 const mapExpandButton = document.querySelector<HTMLButtonElement>('#map-expand');
 const mapResizeHandle = document.querySelector<HTMLElement>('#map-resize-handle');
 const chartDetailSelect = document.querySelector<HTMLSelectElement>('#chart-detail');
+const msaCorridorToggle = document.querySelector<HTMLInputElement>('#msa-corridor-toggle');
 const tableElement = document.querySelector<HTMLElement>('#ofp-table');
 if (
   !workspace ||
@@ -104,6 +109,7 @@ if (
   !mapExpandButton ||
   !mapResizeHandle ||
   !chartDetailSelect ||
+  !msaCorridorToggle ||
   !tableElement
 ) {
   throw new Error('Failed to mount Flightplanner UI.');
@@ -135,6 +141,14 @@ chartDetailSelect.addEventListener('change', () => {
   mapManager.setChartDetail(mode);
 });
 
+const savedMsaCorridor = localStorage.getItem('flightplanner-msa-corridor') === 'true';
+msaCorridorToggle.checked = savedMsaCorridor;
+mapManager.setMsaCorridorVisible(savedMsaCorridor);
+msaCorridorToggle.addEventListener('change', () => {
+  localStorage.setItem('flightplanner-msa-corridor', String(msaCorridorToggle.checked));
+  mapManager.setMsaCorridorVisible(msaCorridorToggle.checked);
+});
+
 const MIN_WORKSPACE_HEIGHT = 480;
 const MAX_WORKSPACE_HEIGHT = 1000;
 const defaultWorkspaceHeight = Math.min(700, Math.max(560, window.innerHeight - 180));
@@ -144,9 +158,7 @@ const setWorkspaceHeight = (height: number, persist = false) => {
   const clamped = Math.round(Math.min(MAX_WORKSPACE_HEIGHT, Math.max(MIN_WORKSPACE_HEIGHT, height)));
   workspace.style.setProperty('--workspace-height', `${clamped}px`);
   mapResizeHandle.setAttribute('aria-valuenow', String(clamped));
-  if (persist) {
-    localStorage.setItem('flightplanner-workspace-height', String(clamped));
-  }
+  if (persist) localStorage.setItem('flightplanner-workspace-height', String(clamped));
   window.requestAnimationFrame(() => mapManager.invalidateSize());
 };
 
@@ -273,6 +285,7 @@ const render = () => {
   const waypoints = store.getWaypoints();
   routePanel.render();
   ofpTable.render();
+  mapManager.renderMsaCorridor(waypoints);
   mapManager.renderRoute(waypoints, (id, lat, lon) => store.updateWaypoint(id, { lat, lon }));
   renderVerticalProfileMarkers();
 };
