@@ -148,4 +148,47 @@ describe('FlightPlanStore', () => {
     store.undoLastAction();
     expect(store.getNavigationSettings().tasKt).toBe(130);
   });
+
+  it('stores a manual MSA for each leg and restores it through undo', () => {
+    const store = new FlightPlanStore();
+    const a = store.addWaypoint({ lat: 69, lon: 18 }, 'A');
+    const b = store.addWaypoint({ lat: 69.5, lon: 19 }, 'B');
+
+    store.setManualMsaFt(a.id, b.id, 3200);
+    expect(store.getManualMsaFt(a.id, b.id)).toBe(3200);
+
+    store.setManualMsaFt(a.id, b.id, 3700);
+    expect(store.getManualMsaFt(a.id, b.id)).toBe(3700);
+
+    store.undoLastAction();
+    expect(store.getManualMsaFt(a.id, b.id)).toBe(3200);
+  });
+
+  it('clears affected manual MSA values when route geometry changes', () => {
+    const store = new FlightPlanStore();
+    const a = store.addWaypoint({ lat: 69, lon: 18 }, 'A');
+    const b = store.addWaypoint({ lat: 69.5, lon: 19 }, 'B');
+    const c = store.addWaypoint({ lat: 70, lon: 20 }, 'C');
+    store.setManualMsaFt(a.id, b.id, 3000);
+    store.setManualMsaFt(b.id, c.id, 4000);
+
+    store.updateWaypoint(b.id, { lat: 69.6 });
+
+    expect(store.getManualMsaFt(a.id, b.id)).toBeNull();
+    expect(store.getManualMsaFt(b.id, c.id)).toBeNull();
+  });
+
+  it('does not inherit a manual MSA when a dragged route leg is split', () => {
+    const store = new FlightPlanStore();
+    const a = store.addWaypoint({ lat: 69, lon: 18 }, 'A');
+    const b = store.addWaypoint({ lat: 70, lon: 20 }, 'B');
+    store.setManualMsaFt(a.id, b.id, 4200);
+
+    const inserted = store.insertWaypointAt(1, { lat: 69.4, lon: 18.7 });
+
+    expect(inserted).not.toBeNull();
+    expect(store.getManualMsaFt(a.id, b.id)).toBeNull();
+    expect(store.getManualMsaFt(a.id, inserted!.id)).toBeNull();
+    expect(store.getManualMsaFt(inserted!.id, b.id)).toBeNull();
+  });
 });
