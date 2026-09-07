@@ -9,7 +9,8 @@ body.map-overlay-open { overflow: hidden; }
 }
 
 .chart-detail-control,
-.msa-corridor-control {
+.msa-corridor-control,
+.glide-envelope-control {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -21,9 +22,11 @@ body.map-overlay-open { overflow: hidden; }
 }
 
 .chart-detail-control span,
-.msa-corridor-control span { text-transform: uppercase; letter-spacing: 0.05em; }
+.msa-corridor-control span,
+.glide-envelope-control span { text-transform: uppercase; letter-spacing: 0.05em; }
 
-.msa-corridor-control {
+.msa-corridor-control,
+.glide-envelope-control {
   padding: 6px 8px;
   border: 1px solid #c9d3df;
   border-radius: 6px;
@@ -31,8 +34,10 @@ body.map-overlay-open { overflow: hidden; }
   cursor: pointer;
 }
 
-.msa-corridor-control:hover { background: #f7f9fb; }
+.msa-corridor-control:hover,
+.glide-envelope-control:hover { background: #f7f9fb; }
 .msa-corridor-control input { margin: 0; accent-color: #c46a12; }
+.glide-envelope-control input { margin: 0; accent-color: #16889a; }
 
 .chart-detail-control select {
   padding: 6px 24px 6px 8px;
@@ -57,6 +62,24 @@ body.map-overlay-open { overflow: hidden; }
 }
 
 .map-expand-button:hover { background: #f1f5f9; }
+
+.glide-assumption-bar {
+  flex: 0 0 auto;
+  padding: 7px 12px;
+  border-bottom: 1px solid #bdd7dc;
+  background: #eef9fa;
+  color: #365861;
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+.glide-assumption-bar strong { color: #145f6b; }
+.glide-status {
+  display: inline;
+  margin-left: 6px;
+  color: #1d5360;
+  font-weight: 800;
+}
 
 /* Desktop workspace height is user adjustable. The sidebar scrolls inside it so it cannot push the OFP down. */
 .workspace {
@@ -150,7 +173,7 @@ body.map-resizing { cursor: ns-resize; user-select: none; }
 .map-column--expanded .map-note { display: block; }
 .map-column--expanded .map-resize-handle { display: none; }
 
-@media (max-width: 1100px) {
+@media (max-width: 1180px) {
   .map-note { display: none; }
 }
 
@@ -166,15 +189,19 @@ body.map-resizing { cursor: ns-resize; user-select: none; }
   .map-column--expanded { inset: 4px; }
   .map-column--expanded .map { flex: 1 1 auto; min-height: 0; height: auto; }
   .map-column--expanded .map-note { display: none; }
+  .glide-assumption-bar { font-size: 8px; }
 }
 
-@media (max-width: 660px) {
-  .msa-corridor-control span { display: none; }
-  .msa-corridor-control { padding: 6px; }
+@media (max-width: 720px) {
+  .msa-corridor-control span,
+  .glide-envelope-control span { display: none; }
+  .msa-corridor-control,
+  .glide-envelope-control { padding: 6px; }
 }
 
 @media (max-width: 560px) {
   .map-toolbar { padding: 0 9px; }
   .chart-detail-control select { padding: 5px 18px 5px 6px; font-size: 9px; }
   .map-expand-button { font-size: 9px; }
+  .glide-assumption-bar { padding: 6px 9px; }
 }
