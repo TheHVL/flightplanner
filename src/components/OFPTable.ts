@@ -4,16 +4,15 @@ import {
   automaticVariationForLeg,
   roundVariationDeg,
 } from '../navigation/magneticVariation';
-import { solveWindTriangle, trueToMagnetic } from '../navigation/wind';
+import { trueToMagnetic } from '../navigation/wind';
 import {
-  calculateCruisePerformance,
-  type CruisePerformanceResult,
-} from '../performance/cruisePerformance';
+  calculateFuelPlanForStore,
+  FUEL_SETTINGS_CHANGED_EVENT,
+  type FuelLegPlan,
+} from '../fuel/fuelPlanning';
 
 interface LegRowResult {
   html: string;
-  fuelGal: number;
-  timeMinutes: number;
 }
 
 export class OFPTable {
@@ -22,47 +21,43 @@ export class OFPTable {
     private readonly store: FlightPlanStore,
   ) {
     this.element.addEventListener('change', (event) => this.handleChange(event));
+    if (typeof window !== 'undefined') {
+      window.addEventListener(FUEL_SETTINGS_CHANGED_EVENT, () => this.render());
+    }
   }
 
   render(): void {
     const legs = this.store.getLegs();
     const settings = this.store.getNavigationSettings();
-    const performanceSettings = this.store.getPerformanceSettings();
-    const weatherSettings = this.store.getWeatherSettings();
     const totalDistance = totalRouteDistanceNm(legs);
     const totalCircuitMinutes = this.store.getTotalWaypointActivityMinutes();
-
-    let cruisePerformance: CruisePerformanceResult | null = null;
-    let performanceError: string | null = null;
-    if (performanceSettings.usePohPerformance) {
-      try {
-        cruisePerformance = calculateCruisePerformance(performanceSettings);
-      } catch (error) {
-        performanceError = error instanceof Error ? error.message : 'POH cruise calculation failed.';
-      }
-    }
+    const fuelPlan = calculateFuelPlanForStore(this.store);
 
     let accumulatedDistanceNm = 0;
     let accumulatedTimeMinutes = 0;
-    let accumulatedFuelGal = 0;
+    let accumulatedFuelGal: number | null = 0;
+
     const rows = legs.map((leg, index) => {
-      const waypointActivityMinutes = index > 0 ? this.store.getWaypointActivityMinutes(leg.from.id) : 0;
-      accumulatedTimeMinutes += waypointActivityMinutes;
-      const row = this.legRow(
+      const legPlan = fuelPlan.legs[index];
+      accumulatedDistanceNm += leg.distanceNm;
+      accumulatedTimeMinutes += legPlan.totalTimeMin;
+      accumulatedFuelGal = accumulatedFuelGal !== null && legPlan.legFuelGal !== null
+        ? accumulatedFuelGal + legPlan.legFuelGal
+        : null;
+      const estimatedRemainingGal = fuelPlan.totalFuelOnboardGal !== null && accumulatedFuelGal !== null
+        ? fuelPlan.totalFuelOnboardGal - fuelPlan.startupTaxiTakeoffGal - accumulatedFuelGal
+        : null;
+
+      return this.legRow(
         leg,
+        legPlan,
         settings,
-        weatherSettings.useForecastWinds,
-        cruisePerformance,
-        performanceError,
         accumulatedDistanceNm,
         accumulatedTimeMinutes,
         accumulatedFuelGal,
-        waypointActivityMinutes,
-      );
-      accumulatedDistanceNm += leg.distanceNm;
-      accumulatedTimeMinutes += row.timeMinutes;
-      accumulatedFuelGal += row.fuelGal;
-      return row.html;
+        estimatedRemainingGal,
+        fuelPlan.startupTaxiTakeoffGal,
+      ).html;
     });
 
     this.element.innerHTML = `
@@ -100,12 +95,12 @@ export class OFPTable {
             <tr class="ofp-subhead-row">
               <th>DIR/VEL</th><th>WCA</th>
               <th title="Accumulated route distance from departure">DIST</th>
-              <th title="Accumulated flight time from departure, including configured circuit/pattern allowances">TIME</th>
-              <th title="Fuel flow in US gallons per hour">FF<br><span class="ofp-unit">GPH</span></th>
-              <th title="Fuel used on this leg">INT<br><span class="ofp-unit">GAL</span></th>
-              <th title="Accumulated cruise fuel used">ACC<br><span class="ofp-unit">GAL</span></th>
+              <th title="Accumulated route time including modeled climb/descent and configured circuit/pattern allowances">TIME</th>
+              <th title="Cruise fuel flow in US gallons per hour for this leg">FF<br><span class="ofp-unit">GPH</span></th>
+              <th title="Phase-aware fuel used on this leg">INT<br><span class="ofp-unit">GAL</span></th>
+              <th title="Accumulated enroute fuel used, excluding startup/taxi/takeoff allowance">ACC<br><span class="ofp-unit">GAL</span></th>
               <th title="Manual minimum safe altitude for this leg">MSA</th><th title="Planned level for this leg">PL</th>
-              <th>GS</th><th title="Distance for this leg">DIST</th><th title="Time for this leg">TIME</th>
+              <th>GS</th><th title="Distance for this leg">DIST</th><th title="Time for this leg including climb/descent and activity time">TIME</th>
               <th>ATO</th><th>DIFF</th>
               <th>EST</th><th>ACT</th>
             </tr>
@@ -121,81 +116,73 @@ export class OFPTable {
         <span>Distances shown to nearest 0.5 NM · headings/WCA shown to whole degrees</span>
         <span>MSA is entered manually. Use the ±1 NM map corridor to inspect terrain/obstacles.</span>
         <span class="msa-legend-warning">PL below entered MSA is highlighted.</span>
-        ${totalCircuitMinutes > 0 ? `<span>Circuit/pattern allowance in ACC TIME: +${this.formatActivityMinutes(totalCircuitMinutes)}. Circuit fuel is not yet included.</span>` : ''}
+        <span>Fuel INT/ACC now use modeled cruise, climb, descent and circuit phases where the required fuel-flow inputs are available.</span>
+        ${totalCircuitMinutes > 0 ? `<span>Circuit/pattern allowance: +${this.formatActivityMinutes(totalCircuitMinutes)} in ACC TIME${fuelPlan.circuitFuelGal === null ? '; enter Circuit FF to include its fuel' : `; ${fuelPlan.circuitFuelGal.toFixed(2)} gal included` }.</span>` : ''}
       </div>
     `;
   }
 
   private legRow(
     leg: ReturnType<FlightPlanStore['getLegs']>[number],
+    legPlan: FuelLegPlan,
     settings: ReturnType<FlightPlanStore['getNavigationSettings']>,
-    useForecastWinds: boolean,
-    cruisePerformance: CruisePerformanceResult | null,
-    performanceError: string | null,
-    accumulatedDistanceBeforeNm: number,
-    accumulatedTimeBeforeMinutes: number,
-    accumulatedFuelBeforeGal: number,
-    waypointActivityMinutes: number,
+    accumulatedDistanceNm: number,
+    accumulatedTimeMinutes: number,
+    accumulatedFuelGal: number | null,
+    estimatedRemainingGal: number | null,
+    startupTaxiTakeoffGal: number,
   ): LegRowResult {
     try {
-      if (performanceError) throw new Error(`POH performance: ${performanceError}`);
+      if (legPlan.performanceError) throw new Error(`POH performance: ${legPlan.performanceError}`);
 
-      const tasKt = cruisePerformance?.ktas ?? settings.tasKt;
-      const fuelFlowGph = cruisePerformance?.fuelFlowGph ?? null;
       const rawVariationDegEast = settings.automaticVariation
         ? automaticVariationForLeg(leg).variationDegEast
         : settings.variationDegEast;
       const variationDegEast = roundVariationDeg(rawVariationDegEast);
-      const forecast = this.store.getLegWeatherForecast(leg.from.id, leg.to.id);
-      const forecastActive = useForecastWinds && forecast !== null;
-      const windFromDeg = forecastActive ? forecast.windFromDeg : settings.windFromDeg;
-      const windSpeedKt = forecastActive ? forecast.windSpeedKt : settings.windSpeedKt;
-
-      const wind = solveWindTriangle({
-        trueTrackDeg: leg.trueTrackDeg,
-        tasKt,
-        windFromDeg,
-        windSpeedKt,
-      });
       const magneticTrack = trueToMagnetic(leg.trueTrackDeg, variationDegEast);
-      const magneticHeading = trueToMagnetic(wind.trueHeadingDeg, variationDegEast);
-      const timeHours = leg.distanceNm / wind.groundSpeedKt;
-      const timeMinutes = timeHours * 60;
-      const accumulatedDistanceNm = accumulatedDistanceBeforeNm + leg.distanceNm;
-      const accumulatedTimeMinutes = accumulatedTimeBeforeMinutes + timeMinutes;
-      const legFuelGal = fuelFlowGph === null ? 0 : fuelFlowGph * timeHours;
-      const accumulatedFuelGal = accumulatedFuelBeforeGal + legFuelGal;
+      const magneticHeading = trueToMagnetic(legPlan.trueHeadingDeg, variationDegEast);
       const variationLabel = `${Math.abs(variationDegEast)}°${variationDegEast >= 0 ? 'E' : 'W'}`;
       const plannedAltitudeFt = this.store.getPlannedAltitudeFt(leg.from.id, leg.to.id);
       const manualMsaFt = this.store.getManualMsaFt(leg.from.id, leg.to.id);
       const belowMsa = plannedAltitudeFt !== null && manualMsaFt !== null && plannedAltitudeFt < manualMsaFt;
-      const windTitle = forecastActive
+      const forecast = this.store.getLegWeatherForecast(leg.from.id, leg.to.id);
+      const windTitle = legPlan.forecastWindActive && forecast
         ? `${forecast.source}; ${Math.round(forecast.altitudeFt)} ft; ${new Date(forecast.validTimeUtc).toISOString().slice(11, 16)}Z; OAT ${forecast.temperatureC.toFixed(1)}°C`
         : 'Manual wind input';
-      const accumulatedTimeTitle = waypointActivityMinutes > 0
-        ? `Accumulated time from departure; includes +${this.formatActivityMinutes(waypointActivityMinutes)} circuit/pattern allowance at ${leg.from.name}`
-        : 'Accumulated time from departure';
       const altitudeWarning = belowMsa
         ? `Warning: planned level ${plannedAltitudeFt} ft is below entered MSA ${manualMsaFt} ft.`
         : 'Planned level for this leg in feet';
+      const performanceTitle = `Cruise performance at ${Math.round(legPlan.pressureAltitudeFt)} ft pressure-altitude proxy; OAT ${legPlan.oatC.toFixed(1)}°C (${legPlan.oatSource === 'forecast' ? 'route weather' : 'Phase 4 fallback'}).`;
+      const timeTitle = this.phaseTimeTitle(legPlan);
+      const fuelTitle = this.phaseFuelTitle(legPlan);
+      const accumulatedFuelTitle = accumulatedFuelGal === null
+        ? 'Accumulated fuel is incomplete because one or more required phase fuel-flow inputs are missing.'
+        : `Accumulated enroute fuel ${accumulatedFuelGal.toFixed(2)} gal. Startup/taxi/takeoff allowance of ${startupTaxiTakeoffGal.toFixed(1)} gal is tracked separately.`;
+      const remainingTitle = estimatedRemainingGal === null
+        ? 'Enter Fuel onboard and all required phase fuel flows to calculate estimated fuel remaining.'
+        : `Estimated fuel remaining after this leg, including subtraction of ${startupTaxiTakeoffGal.toFixed(1)} gal startup/taxi/takeoff allowance.`;
 
       return {
-        fuelGal: legFuelGal,
-        timeMinutes,
         html: `
         <tr class="${belowMsa ? 'ofp-row-warning' : ''}">
           <td><strong>${leg.from.name}</strong></td>
-          <td class="calculated">${tasKt.toFixed(0)}</td>
+          <td class="calculated" title="${performanceTitle}">${legPlan.tasKt.toFixed(0)}</td>
           <td class="calculated">${this.headingLabel(leg.trueTrackDeg)}</td>
           <td class="calculated" title="${settings.automaticVariation ? `WMM2025 at leg midpoint: ${rawVariationDegEast.toFixed(2)}°, rounded for OFP` : 'Manual variation override'}">${variationLabel}</td>
           <td class="calculated">${this.headingLabel(magneticTrack)}</td>
-          <td class="calculated" title="${windTitle}">${this.headingLabel(windFromDeg)}/${Math.round(windSpeedKt)}</td>
-          <td class="calculated" title="Exact WCA: ${wind.wcaDeg.toFixed(2)}°">${this.signedDegrees(wind.wcaDeg)}</td>
+          <td class="calculated" title="${windTitle}">${this.headingLabel(legPlan.windFromDeg)}/${Math.round(legPlan.windSpeedKt)}</td>
+          <td class="calculated" title="Exact WCA: ${legPlan.wcaDeg.toFixed(2)}°">${this.signedDegrees(legPlan.wcaDeg)}</td>
           <td class="calculated" title="Exact accumulated distance: ${accumulatedDistanceNm.toFixed(2)} NM">${this.distanceLabel(accumulatedDistanceNm)}</td>
-          <td class="calculated" title="${accumulatedTimeTitle}">${this.formatMinutes(accumulatedTimeMinutes)}</td>
-          ${fuelFlowGph === null
-            ? '<td class="pending">—</td><td class="pending">—</td><td class="pending">—</td>'
-            : `<td class="calculated" title="Fuel flow, US gal/hour">${fuelFlowGph.toFixed(1)}</td><td class="calculated" title="Fuel used on this leg, US gal">${legFuelGal.toFixed(2)}</td><td class="calculated" title="Accumulated cruise fuel used, US gal">${accumulatedFuelGal.toFixed(2)}</td>`}
+          <td class="calculated" title="Accumulated route time including modeled phase time">${this.formatMinutes(accumulatedTimeMinutes)}</td>
+          ${legPlan.cruiseFuelFlowGph === null
+            ? '<td class="pending" title="Enter Manual cruise FF when POH performance is disabled">—</td>'
+            : `<td class="calculated" title="Cruise fuel flow. ${performanceTitle}">${legPlan.cruiseFuelFlowGph.toFixed(1)}</td>`}
+          ${legPlan.legFuelGal === null
+            ? `<td class="pending" title="${legPlan.phaseWarning ?? 'Fuel input incomplete'}">—</td>`
+            : `<td class="calculated" title="${fuelTitle}">${legPlan.legFuelGal.toFixed(2)}</td>`}
+          ${accumulatedFuelGal === null
+            ? `<td class="pending" title="${accumulatedFuelTitle}">—</td>`
+            : `<td class="calculated" title="${accumulatedFuelTitle}">${accumulatedFuelGal.toFixed(2)}</td>`}
           <td><strong>${leg.to.name}</strong></td>
           <td class="editable-cell ${belowMsa ? 'msa-warning-cell' : ''}">
             <input
@@ -230,13 +217,14 @@ export class OFPTable {
             />
           </td>
           <td class="calculated">${this.headingLabel(magneticHeading)}</td>
-          <td class="calculated">${wind.groundSpeedKt.toFixed(0)}</td>
+          <td class="calculated" title="Cruise groundspeed. Climb/descent time uses the Phase 6 groundspeed settings.">${legPlan.groundSpeedKt.toFixed(0)}</td>
           <td class="calculated" title="Exact leg distance: ${leg.distanceNm.toFixed(2)} NM">${this.distanceLabel(leg.distanceNm)}</td>
-          <td class="calculated" title="Time for this leg only; circuit/pattern time is added separately to accumulated time">${this.formatMinutes(timeMinutes)}</td>
+          <td class="calculated" title="${timeTitle}">${this.formatMinutes(legPlan.totalTimeMin)}</td>
           <td class="pending">—</td>
           <td class="pending">—</td>
-          <td class="pending">—</td>
-          <td class="pending">—</td>
+          ${estimatedRemainingGal === null
+            ? `<td class="pending" title="${remainingTitle}">—</td>`
+            : `<td class="calculated ${estimatedRemainingGal < 0 ? 'fuel-negative' : ''}" title="${remainingTitle}">${estimatedRemainingGal.toFixed(1)}</td>`}
           <td class="pending">—</td>
           <td class="pending">—</td>
         </tr>`,
@@ -244,8 +232,6 @@ export class OFPTable {
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Navigation calculation failed.';
       return {
-        fuelGal: 0,
-        timeMinutes: 0,
         html: `<tr><td><strong>${leg.from.name}</strong></td><td colspan="24" class="calculation-error">${message}</td></tr>`,
       };
     }
@@ -277,6 +263,26 @@ export class OFPTable {
     const altitudeFt = Number(input.value);
     if (!Number.isFinite(altitudeFt)) return;
     this.store.setPlannedAltitudeFt(fromId, toId, altitudeFt);
+  }
+
+  private phaseTimeTitle(leg: FuelLegPlan): string {
+    const parts = [
+      `cruise ${this.formatMinutes(leg.cruiseTimeMin)}`,
+      leg.climbTimeMin > 0 ? `climb ${this.formatMinutes(leg.climbTimeMin)}` : '',
+      leg.descentTimeMin > 0 ? `descent ${this.formatMinutes(leg.descentTimeMin)}` : '',
+      leg.activityTimeMin > 0 ? `circuits/activity ${this.formatMinutes(leg.activityTimeMin)}` : '',
+    ].filter(Boolean);
+    return `Phase-aware leg time: ${parts.join(', ')}.`;
+  }
+
+  private phaseFuelTitle(leg: FuelLegPlan): string {
+    const component = (name: string, value: number | null) => value === null ? `${name} needs FF` : `${name} ${value.toFixed(2)} gal`;
+    return [
+      component('cruise', leg.cruiseFuelGal),
+      leg.climbTimeMin > 0 ? component('climb', leg.climbFuelGal) : '',
+      leg.descentTimeMin > 0 ? component('descent', leg.descentFuelGal) : '',
+      leg.activityTimeMin > 0 ? component('circuits', leg.circuitFuelGal) : '',
+    ].filter(Boolean).join(', ');
   }
 
   private headingLabel(value: number): string {
