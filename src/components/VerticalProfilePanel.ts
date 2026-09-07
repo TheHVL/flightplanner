@@ -5,7 +5,13 @@ import type {
 } from '../flightplan/FlightPlanStore';
 import { findAipAerodrome, normalizeIcao } from '../aip/aerodromes';
 import {
+  FUEL_SETTINGS_CHANGED_EVENT,
+  getFuelPlanningSettings,
+  saveFuelPlanningSettings,
+} from '../fuel/fuelPlanning';
+import {
   calculateRouteVerticalProfile,
+  type ClimbPerformanceMode,
   type RouteVerticalEvent,
 } from '../navigation/verticalProfile';
 
@@ -20,10 +26,13 @@ export class VerticalProfilePanel {
     this.element.addEventListener('change', (event) => this.handleChange(event));
     this.element.addEventListener('click', (event) => void this.handleClick(event));
     this.store.subscribe(() => this.render());
+    window.addEventListener(FUEL_SETTINGS_CHANGED_EVENT, () => this.render());
   }
 
   render(): void {
     const settings = this.store.getVerticalProfileSettings();
+    const performanceSettings = this.store.getPerformanceSettings();
+    const fuelSettings = getFuelPlanningSettings();
     const legs = this.store.getLegs();
     const waypoints = this.store.getWaypoints();
     const plannedAltitudesFt = legs.map((leg) => this.store.getPlannedAltitudeFt(leg.from.id, leg.to.id));
@@ -41,6 +50,8 @@ export class VerticalProfilePanel {
             elevationFt: constraint.elevationFt,
           })),
           ...settings,
+          climbPerformanceMode: fuelSettings.climbPerformanceMode,
+          climbOatC: performanceSettings.oatC,
         });
 
         const visibleEvents = result.events.filter((event) => event.onRoute);
@@ -65,6 +76,7 @@ export class VerticalProfilePanel {
     const departureName = waypoints[0]?.name ?? 'Departure';
     const destinationName = waypoints[waypoints.length - 1]?.name ?? 'Destination';
     const totalCircuitMinutes = this.store.getTotalWaypointActivityMinutes();
+    const manualClimb = fuelSettings.climbPerformanceMode === 'manual';
 
     this.element.innerHTML = `
       <div class="panel-heading">
@@ -73,23 +85,34 @@ export class VerticalProfilePanel {
           <h2>Vertical profile &amp; aerodromes</h2>
         </div>
       </div>
-      <p class="hint">TOC/TOD follows the planned level for each leg. A PL descent is never started before the waypoint where the lower outbound PL begins. Aerodrome elevation can be filled from the bundled Avinor AIP snapshot or entered manually.</p>
+      <p class="hint">TOC/TOD follows the planned level for each leg. A PL descent is never started before the waypoint where the lower outbound PL begins. Climb time, fuel and distance can now come directly from C182T POH Figure 5-8.</p>
+      <label class="vertical-climb-model">
+        <span>Climb performance</span>
+        <select data-climb-performance-mode aria-label="Climb performance model">
+          <option value="poh-normal-90" ${fuelSettings.climbPerformanceMode === 'poh-normal-90' ? 'selected' : ''}>POH normal climb - 90 KIAS</option>
+          <option value="poh-max-rate" ${fuelSettings.climbPerformanceMode === 'poh-max-rate' ? 'selected' : ''}>POH maximum rate of climb</option>
+          <option value="manual" ${fuelSettings.climbPerformanceMode === 'manual' ? 'selected' : ''}>Manual rate / groundspeed</option>
+        </select>
+      </label>
+      ${manualClimb
+        ? '<div class="vertical-poh-note"><strong>Manual climb:</strong> TOC uses the selected climb rate and climb groundspeed. Enter Manual climb FF in the fuel panel if climb fuel should be included.</div>'
+        : `<div class="vertical-poh-note"><strong>POH Figure 5-8:</strong> 3100 lb, flaps up, 2400 RPM, full throttle, mixture at Maximum Power Fuel Flow placard, cowl flaps OPEN. The table is standard-temperature and zero-wind. Time, fuel and distance are increased 10% for each 10°C that the Phase 4 OAT is above ISA at the target climb altitude. ${fuelSettings.climbPerformanceMode === 'poh-normal-90' ? 'Normal climb is published through 10,000 ft.' : 'Maximum-rate climb is published through 14,000 ft.'}</div>`}
       <div class="vertical-input-grid">
         ${this.numberField(`${departureName} elevation`, 'dep-elev', settings.departureElevationFt, 'ft', 0, 20000, 10)}
         ${this.numberField(`${destinationName} elevation`, 'dest-elev', settings.destinationElevationFt, 'ft', 0, 20000, 10)}
-        ${this.numberField('Climb rate', 'climb-rate', settings.climbRateFpm, 'ft/min', 100, 5000, 50)}
+        ${manualClimb ? this.numberField('Climb rate', 'climb-rate', settings.climbRateFpm, 'ft/min', 100, 5000, 50) : ''}
         ${this.numberField('Descent rate', 'descent-rate', settings.descentRateFpm, 'ft/min', 100, 5000, 50)}
-        ${this.numberField('Climb groundspeed', 'climb-gs', settings.climbGroundSpeedKt, 'kt', 20, 300, 1)}
+        ${manualClimb ? this.numberField('Climb groundspeed', 'climb-gs', settings.climbGroundSpeedKt, 'kt', 20, 300, 1) : ''}
         ${this.numberField('Descent groundspeed', 'descent-gs', settings.descentGroundSpeedKt, 'kt', 20, 300, 1)}
       </div>
       ${this.endpointAipControls('departure', departureName, settings.departureIcaoCode, settings.departureElevationFt)}
       ${this.endpointAipControls('destination', destinationName, settings.destinationIcaoCode, settings.destinationElevationFt)}
       ${this.waypointControls(waypoints, plannedAltitudesFt)}
       ${totalCircuitMinutes > 0
-        ? `<div class="vertical-circuit-total"><strong>Circuit allowance:</strong> ${this.minutesLabel(totalCircuitMinutes)} added to OFP accumulated time. Circuit fuel is not yet included.</div>`
+        ? `<div class="vertical-circuit-total"><strong>Circuit allowance:</strong> ${this.minutesLabel(totalCircuitMinutes)} added to OFP accumulated time. Fuel is included when Circuit FF is entered in the fuel panel.</div>`
         : ''}
       ${resultHtml}
-      <div class="nav-help vertical-help"><strong>How it works:</strong> Auto follows the PL before and after a waypoint. A higher outbound PL creates a TOC after the waypoint. A lower outbound PL creates a TOD on the outbound leg, never before that waypoint. Airport/T&amp;G descends to field elevation and climbs again. Circuits does the same and also adds the selected pattern time to OFP accumulated time. Off suppresses automatic vertical events at that waypoint.</div>
+      <div class="nav-help vertical-help"><strong>How it works:</strong> Auto follows the PL before and after a waypoint. A higher outbound PL creates a TOC after the waypoint. A lower outbound PL creates a TOD on the outbound leg, never before that waypoint. Airport/T&amp;G descends to field elevation and climbs again. Circuits does the same and also adds the selected pattern time. Off suppresses automatic vertical events at that waypoint. Until QNH conversion is added, entered elevations and PL are used as pressure-altitude proxies for POH climb calculations.</div>
     `;
   }
 
@@ -186,19 +209,34 @@ export class VerticalProfilePanel {
       : event.reason === 'pl-change'
         ? 'PL change'
         : event.reason;
+    const source = event.type === 'TOC'
+      ? event.performanceSource === 'poh-normal-90'
+        ? 'POH normal 90 KIAS'
+        : event.performanceSource === 'poh-max-rate'
+          ? 'POH max rate'
+          : 'manual climb'
+      : 'manual descent';
+    const fuel = event.fuelGal === null ? '' : ` · ${event.fuelGal.toFixed(2)} gal`;
 
     return `
       <div class="vertical-event-row vertical-event-row--${event.type.toLowerCase()}">
         <span class="vertical-event-badge">${event.type}</span>
         <div>
           <strong>${location}</strong>
-          <small>${Math.round(event.altitudeFromFt).toLocaleString()} → ${Math.round(event.altitudeToFt).toLocaleString()} ft · ${Math.round(event.timeMin)} min · ${reason}</small>
+          <small>${Math.round(event.altitudeFromFt).toLocaleString()} → ${Math.round(event.altitudeToFt).toLocaleString()} ft · ${event.timeMin.toFixed(1)} min${fuel} · ${reason} · ${source}</small>
         </div>
       </div>`;
   }
 
   private handleChange(event: Event): void {
     const target = event.target as HTMLInputElement | HTMLSelectElement;
+
+    if (target.dataset.climbPerformanceMode !== undefined) {
+      const mode = target.value as ClimbPerformanceMode;
+      const current = getFuelPlanningSettings();
+      saveFuelPlanningSettings({ ...current, climbPerformanceMode: mode });
+      return;
+    }
 
     const endpointCode = target.dataset.aipEndpointCode as 'departure' | 'destination' | undefined;
     if (endpointCode) {
