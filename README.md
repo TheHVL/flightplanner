@@ -19,7 +19,7 @@ Browser-based VFR flight planning for Norwegian flight training, with the Cessna
 - Manual MSA entry for every OFP leg, with a warning when PL is below the entered MSA.
 - Optional C182T zero-wind maximum-glide visualization based on POH Figure 3-1 and the Phase 6 modeled route altitude.
 - UiT-style operational flight-plan navigation log with accumulated distance/time and editable planned level (PL) per leg.
-- C182T POH cruise-performance preview with bounded interpolation and no extrapolation. Current mainline data coverage is sea level through 2,000 ft, 2200-2400 RPM, ISA -20°C to ISA +20°C.
+- Complete C182T POH Figure 5-9 cruise-performance model from sea level through 14,000 ft, 2000-2400 RPM where published, ISA -20°C to ISA +20°C, with bounded interpolation and no extrapolation.
 - Route weather preview using Open-Meteo pressure-level winds and temperature, interpolated by geopotential height and forecast time.
 - Automatic TOC/TOD across route altitude changes, including intermediate airport / touch-and-go handling.
 - Phase 7 AIP preview: aerodrome elevation lookup by ICAO code from an Avinor AIP-derived dataset.
@@ -29,6 +29,46 @@ Browser-based VFR flight planning for Norwegian flight training, with the Cessna
 When a route line with an existing PL is split by inserting a new waypoint, the old PL is carried onto both new legs so an editing operation does not silently discard the planned altitude. Weather forecasts for changed route geometry are invalidated and can then be refreshed.
 
 Manual MSA values are deliberately treated more conservatively. If a route leg is changed by dragging a waypoint or by inserting/reordering/removing points, affected manual MSA values are cleared so an MSA checked for the old corridor is not silently reused for new geometry.
+
+## C182T cruise performance
+
+Phase 4 uses Cessna Model 182T NAV III GFC 700 AFCS Figure 5-9 `CRUISE PERFORMANCE`, supplied for this project. All 11 sheets have been transcribed and verified visually.
+
+Published pressure-altitude tables loaded by the planner:
+
+```text
+Sea level
+2,000 ft
+4,000 ft
+6,000 ft
+8,000 ft
+10,000 ft
+12,000 ft
+14,000 ft
+```
+
+The source conditions are:
+
+```text
+3100 lb
+Recommended lean mixture
+Cowl flaps CLOSED
+```
+
+The source note states that maximum cruise power is 80% MCP and settings above 80% MCP are listed only to aid interpolation. Flightplanner preserves those values for interpolation and displays a warning when the selected result is above 80% MCP.
+
+The model interpolates only between published bracketing values for:
+
+```text
+pressure altitude
+RPM
+temperature offset from ISA
+manifold pressure
+```
+
+No extrapolation is allowed. Because the source tables become progressively smaller with altitude, not every RPM/MP combination exists at every altitude. For example, Figure 5-9 does not publish 2000 RPM at 14,000 ft. The planner rejects unsupported combinations rather than inventing a value.
+
+The current performance inputs are still one global cruise setup. A later enhancement can apply pressure altitude and forecast temperature separately to each route leg while retaining this same verified Figure 5-9 calculation engine.
 
 ## AIP aerodrome data
 
@@ -147,7 +187,7 @@ public/            Static deploy assets and fallback AIP dataset
 | 1 | Complete | Foundation, route editing, great-circle navigation, basic OFP |
 | 2 | Complete | Wind triangle, headings, WMM2025 magnetic variation |
 | 3 | Complete | Kartverket and Avinor ICAO map layers, quality/caching improvements |
-| 4 | In progress | C182T POH cruise database and interpolation |
+| 4 | Complete | Full C182T Figure 5-9 cruise database and bounded interpolation |
 | 5 | Preview | Route weather and per-leg forecast wind integration |
 | 6 | Advanced preview | Automatic multi-leg TOC/TOD, airports and touch-and-goes |
 | 7 | In progress | Norwegian AIP aerodrome elevation, circuit planning, route editing, manual MSA workflow, MSA corridor and C182T glide visualization |
