@@ -34,6 +34,10 @@ export function routeLegKey(fromId: string, toId: string): string {
   return `${fromId}->${toId}`;
 }
 
+export function routeLegPath(leg: RouteLeg): Coordinate[] {
+  return leg.path?.length && leg.path.length >= 2 ? leg.path : [leg.from, leg.to];
+}
+
 export function calculateRouteLegs(
   waypoints: Waypoint[],
   routeShapePoints: ReadonlyMap<string, Coordinate> = new Map(),
@@ -71,11 +75,12 @@ export function coordinateAtRouteDistance(legs: RouteLeg[], distanceFromDepartur
   let remaining = Math.min(routeDistanceNm, Math.max(0, distanceFromDepartureNm));
 
   for (const leg of legs) {
-    for (let index = 0; index < leg.path.length - 1; index += 1) {
-      const from = leg.path[index];
-      const to = leg.path[index + 1];
+    const path = routeLegPath(leg);
+    for (let index = 0; index < path.length - 1; index += 1) {
+      const from = path[index];
+      const to = path[index + 1];
       const segmentDistanceNm = greatCircleDistanceNm(from, to);
-      if (remaining <= segmentDistanceNm || (leg === legs[legs.length - 1] && index === leg.path.length - 2)) {
+      if (remaining <= segmentDistanceNm || (leg === legs[legs.length - 1] && index === path.length - 2)) {
         const fraction = segmentDistanceNm <= 1e-9 ? 0 : remaining / segmentDistanceNm;
         return interpolateGreatCircle(from, to, Math.min(1, Math.max(0, fraction)));
       }
@@ -94,11 +99,12 @@ export function trackAtRouteDistance(legs: RouteLeg[], distanceFromDepartureNm: 
   let remaining = Math.min(routeDistanceNm, Math.max(0, distanceFromDepartureNm));
 
   for (const leg of legs) {
-    for (let index = 0; index < leg.path.length - 1; index += 1) {
-      const from = leg.path[index];
-      const to = leg.path[index + 1];
+    const path = routeLegPath(leg);
+    for (let index = 0; index < path.length - 1; index += 1) {
+      const from = path[index];
+      const to = path[index + 1];
       const segmentDistanceNm = greatCircleDistanceNm(from, to);
-      if (remaining <= segmentDistanceNm || (leg === legs[legs.length - 1] && index === leg.path.length - 2)) {
+      if (remaining <= segmentDistanceNm || (leg === legs[legs.length - 1] && index === path.length - 2)) {
         return initialTrueTrackDeg(from, to);
       }
       remaining -= segmentDistanceNm;
