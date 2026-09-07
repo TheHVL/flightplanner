@@ -63,6 +63,7 @@ interface FlightPlanSnapshot {
   weatherSettings: WeatherSettings;
   verticalProfileSettings: VerticalProfileSettings;
   plannedAltitudesFt: Array<[string, number]>;
+  manualMsaFt: Array<[string, number]>;
   weatherForecasts: Array<[string, LegWeatherForecast]>;
   verticalWaypointConstraints: Array<[string, WaypointVerticalConstraint]>;
   automaticWaypointIds: string[];
@@ -117,6 +118,7 @@ export class FlightPlanStore {
   private weatherSettings: WeatherSettings = { ...DEFAULT_WEATHER_SETTINGS };
   private verticalProfileSettings: VerticalProfileSettings = { ...DEFAULT_VERTICAL_PROFILE_SETTINGS };
   private plannedAltitudesFt = new Map<string, number>();
+  private manualMsaFt = new Map<string, number>();
   private weatherForecasts = new Map<string, LegWeatherForecast>();
   private verticalWaypointConstraints = new Map<string, WaypointVerticalConstraint>();
   private automaticWaypointIds = new Set<string>();
@@ -182,6 +184,10 @@ export class FlightPlanStore {
 
   getPlannedAltitudeFt(fromId: string, toId: string): number | null {
     return this.plannedAltitudesFt.get(this.legKey(fromId, toId)) ?? null;
+  }
+
+  getManualMsaFt(fromId: string, toId: string): number | null {
+    return this.manualMsaFt.get(this.legKey(fromId, toId)) ?? null;
   }
 
   getLegWeatherForecast(fromId: string, toId: string): LegWeatherForecast | null {
@@ -296,15 +302,30 @@ export class FlightPlanStore {
       this.rememberUndo();
       this.plannedAltitudesFt.delete(key);
     } else {
-      if (!Number.isFinite(altitudeFt) || altitudeFt < 0 || altitudeFt > 30000) {
-        return;
-      }
+      if (!Number.isFinite(altitudeFt) || altitudeFt < 0 || altitudeFt > 30000) return;
       const rounded = Math.round(altitudeFt);
       if (current === rounded) return;
       this.rememberUndo();
       this.plannedAltitudesFt.set(key, rounded);
     }
     this.weatherForecasts.delete(key);
+    this.emit();
+  }
+
+  setManualMsaFt(fromId: string, toId: string, msaFt: number | null): void {
+    const key = this.legKey(fromId, toId);
+    const current = this.manualMsaFt.get(key) ?? null;
+    if (msaFt === null) {
+      if (current === null) return;
+      this.rememberUndo();
+      this.manualMsaFt.delete(key);
+    } else {
+      if (!Number.isFinite(msaFt) || msaFt < 0 || msaFt > 30000) return;
+      const rounded = Math.round(msaFt);
+      if (current === rounded) return;
+      this.rememberUndo();
+      this.manualMsaFt.set(key, rounded);
+    }
     this.emit();
   }
 
@@ -355,6 +376,7 @@ export class FlightPlanStore {
     this.renumberAutomaticWaypointNames();
 
     this.plannedAltitudesFt.delete(previousLegKey);
+    this.manualMsaFt.delete(previousLegKey);
     if (inheritedAltitudeFt !== null) {
       this.plannedAltitudesFt.set(this.legKey(from.id, id), inheritedAltitudeFt);
       this.plannedAltitudesFt.set(this.legKey(id, to.id), inheritedAltitudeFt);
@@ -374,6 +396,12 @@ export class FlightPlanStore {
 
     this.rememberUndo();
     if (patch.name !== undefined) this.automaticWaypointIds.delete(id);
+    if (
+      (patch.lat !== undefined && patch.lat !== existing.lat) ||
+      (patch.lon !== undefined && patch.lon !== existing.lon)
+    ) {
+      this.clearManualMsaForWaypoint(id);
+    }
     this.waypoints = this.waypoints.map((waypoint) =>
       waypoint.id === id ? { ...waypoint, ...patch } : waypoint,
     );
@@ -396,9 +424,7 @@ export class FlightPlanStore {
     const index = this.waypoints.findIndex((waypoint) => waypoint.id === id);
     const nextIndex = index + direction;
 
-    if (index < 0 || nextIndex < 0 || nextIndex >= this.waypoints.length) {
-      return;
-    }
+    if (index < 0 || nextIndex < 0 || nextIndex >= this.waypoints.length) return;
 
     this.rememberUndo();
     const reordered = [...this.waypoints];
@@ -410,13 +436,12 @@ export class FlightPlanStore {
   }
 
   clear(): void {
-    if (this.waypoints.length === 0) {
-      return;
-    }
+    if (this.waypoints.length === 0) return;
     this.rememberUndo();
     this.waypoints = [];
     this.automaticWaypointIds.clear();
     this.plannedAltitudesFt.clear();
+    this.manualMsaFt.clear();
     this.weatherForecasts.clear();
     this.verticalWaypointConstraints.clear();
     this.emit();
@@ -434,25 +459,30 @@ export class FlightPlanStore {
     return `${fromId}->${toId}`;
   }
 
+  private clearManualMsaForWaypoint(waypointId: string): void {
+    const index = this.waypoints.findIndex((waypoint) => waypoint.id === waypointId);
+    if (index < 0) return;
+    const previous = this.waypoints[index - 1];
+    const current = this.waypoints[index];
+    const next = this.waypoints[index + 1];
+    if (previous && current) this.manualMsaFt.delete(this.legKey(previous.id, current.id));
+    if (current && next) this.manualMsaFt.delete(this.legKey(current.id, next.id));
+  }
+
   private retainCurrentLegSettings(): void {
-    const activeKeys = new Set(
-      this.getLegs().map((leg) => this.legKey(leg.from.id, leg.to.id)),
-    );
+    const activeKeys = new Set(this.getLegs().map((leg) => this.legKey(leg.from.id, leg.to.id)));
     for (const key of this.plannedAltitudesFt.keys()) {
-      if (!activeKeys.has(key)) {
-        this.plannedAltitudesFt.delete(key);
-      }
+      if (!activeKeys.has(key)) this.plannedAltitudesFt.delete(key);
+    }
+    for (const key of this.manualMsaFt.keys()) {
+      if (!activeKeys.has(key)) this.manualMsaFt.delete(key);
     }
     for (const key of this.weatherForecasts.keys()) {
-      if (!activeKeys.has(key)) {
-        this.weatherForecasts.delete(key);
-      }
+      if (!activeKeys.has(key)) this.weatherForecasts.delete(key);
     }
     const activeWaypointIds = new Set(this.waypoints.map((waypoint) => waypoint.id));
     for (const waypointId of this.verticalWaypointConstraints.keys()) {
-      if (!activeWaypointIds.has(waypointId)) {
-        this.verticalWaypointConstraints.delete(waypointId);
-      }
+      if (!activeWaypointIds.has(waypointId)) this.verticalWaypointConstraints.delete(waypointId);
     }
   }
 
@@ -469,6 +499,7 @@ export class FlightPlanStore {
       weatherSettings: { ...this.weatherSettings },
       verticalProfileSettings: { ...this.verticalProfileSettings },
       plannedAltitudesFt: [...this.plannedAltitudesFt.entries()],
+      manualMsaFt: [...this.manualMsaFt.entries()],
       weatherForecasts: [...this.weatherForecasts.entries()].map(([key, forecast]) => [key, { ...forecast }]),
       verticalWaypointConstraints: [...this.verticalWaypointConstraints.entries()].map(([key, constraint]) => [key, { ...constraint }]),
       automaticWaypointIds: [...this.automaticWaypointIds],
@@ -482,6 +513,7 @@ export class FlightPlanStore {
     this.weatherSettings = { ...snapshot.weatherSettings };
     this.verticalProfileSettings = { ...snapshot.verticalProfileSettings };
     this.plannedAltitudesFt = new Map(snapshot.plannedAltitudesFt);
+    this.manualMsaFt = new Map(snapshot.manualMsaFt);
     this.weatherForecasts = new Map(
       snapshot.weatherForecasts.map(([key, forecast]) => [key, { ...forecast }]),
     );
