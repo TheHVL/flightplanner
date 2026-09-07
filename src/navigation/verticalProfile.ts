@@ -1,4 +1,5 @@
 import type { Coordinate, RouteLeg } from '../types';
+import { calculateC182TClimb, type C182TClimbProfile } from '../performance/climbPerformance';
 import { totalRouteDistanceNm } from './geodesy';
 
 export interface VerticalProfileInput {
@@ -34,6 +35,7 @@ export interface VerticalProfileResult {
 }
 
 export type VerticalWaypointMode = 'auto' | 'airport' | 'circuits' | 'none';
+export type ClimbPerformanceMode = 'manual' | 'poh-normal-90' | 'poh-max-rate';
 
 export interface VerticalWaypointConstraint {
   waypointId: string;
@@ -56,6 +58,8 @@ export interface RouteVerticalEvent {
   altitudeChangeFt: number;
   timeMin: number;
   distanceNm: number;
+  fuelGal: number | null;
+  performanceSource: ClimbPerformanceMode;
   routeDistanceNm: number;
   distanceFromWaypointNm: number;
   onRoute: boolean;
@@ -72,6 +76,8 @@ export interface RouteVerticalProfileInput {
   descentRateFpm: number;
   climbGroundSpeedKt: number;
   descentGroundSpeedKt: number;
+  climbPerformanceMode?: ClimbPerformanceMode;
+  climbOatC?: number | null;
 }
 
 export interface RouteVerticalProfileResult {
@@ -81,6 +87,7 @@ export interface RouteVerticalProfileResult {
   verticalDistanceNm: number;
   overlapDistanceNm: number;
   profilesOverlap: boolean;
+  climbPerformanceIncomplete: boolean;
   warnings: string[];
 }
 
@@ -100,6 +107,8 @@ export function calculateRouteVerticalProfile(input: RouteVerticalProfileInput):
     descentRateFpm,
     climbGroundSpeedKt,
     descentGroundSpeedKt,
+    climbPerformanceMode = 'manual',
+    climbOatC = null,
   } = input;
 
   if (legs.length === 0) throw new Error('Add at least two waypoints before calculating TOC/TOD.');
@@ -123,6 +132,7 @@ export function calculateRouteVerticalProfile(input: RouteVerticalProfileInput):
   const events: RouteVerticalEvent[] = [];
   const intervals: VerticalInterval[] = [];
   const warnings: string[] = [];
+  let climbPerformanceIncomplete = false;
 
   const waypointAt = (index: number) => index === 0 ? legs[0].from : legs[index - 1].to;
 
@@ -134,8 +144,36 @@ export function calculateRouteVerticalProfile(input: RouteVerticalProfileInput):
   ) => {
     const altitudeChangeFt = altitudeToFt - altitudeFromFt;
     if (altitudeChangeFt <= 0) return;
-    const timeMin = altitudeChangeFt / climbRateFpm;
-    const distanceNm = climbGroundSpeedKt * timeMin / 60;
+
+    let timeMin: number;
+    let distanceNm: number;
+    let fuelGal: number | null = null;
+    let performanceSource: ClimbPerformanceMode = 'manual';
+
+    if (climbPerformanceMode === 'manual') {
+      timeMin = altitudeChangeFt / climbRateFpm;
+      distanceNm = climbGroundSpeedKt * timeMin / 60;
+    } else {
+      const profile: C182TClimbProfile = climbPerformanceMode === 'poh-normal-90' ? 'normal-90' : 'max-rate';
+      try {
+        const climb = calculateC182TClimb({
+          profile,
+          startPressureAltitudeFt: altitudeFromFt,
+          endPressureAltitudeFt: altitudeToFt,
+          oatC: climbOatC,
+        });
+        timeMin = climb.timeMin;
+        distanceNm = climb.distanceNm;
+        fuelGal = climb.fuelUsedGal;
+        performanceSource = climbPerformanceMode;
+      } catch (error) {
+        climbPerformanceIncomplete = true;
+        const message = error instanceof Error ? error.message : 'POH Figure 5-8 climb performance could not be calculated.';
+        warnings.push(`${waypointAt(anchorIndex).name}: ${message}`);
+        return;
+      }
+    }
+
     const anchorDistanceNm = waypointDistancesNm[anchorIndex];
     const routeEventDistanceNm = anchorDistanceNm + distanceNm;
     const waypoint = waypointAt(anchorIndex);
@@ -152,6 +190,8 @@ export function calculateRouteVerticalProfile(input: RouteVerticalProfileInput):
       altitudeChangeFt,
       timeMin,
       distanceNm,
+      fuelGal,
+      performanceSource,
       routeDistanceNm: routeEventDistanceNm,
       distanceFromWaypointNm: distanceNm,
       onRoute,
@@ -191,6 +231,8 @@ export function calculateRouteVerticalProfile(input: RouteVerticalProfileInput):
       altitudeChangeFt,
       timeMin,
       distanceNm,
+      fuelGal: null,
+      performanceSource: 'manual',
       routeDistanceNm: routeEventDistanceNm,
       distanceFromWaypointNm: distanceNm,
       onRoute,
@@ -235,6 +277,8 @@ export function calculateRouteVerticalProfile(input: RouteVerticalProfileInput):
       altitudeChangeFt,
       timeMin,
       distanceNm,
+      fuelGal: null,
+      performanceSource: 'manual',
       routeDistanceNm: routeEventDistanceNm,
       distanceFromWaypointNm: Math.max(0, routeEventDistanceNm - anchorDistanceNm),
       onRoute,
@@ -339,6 +383,7 @@ export function calculateRouteVerticalProfile(input: RouteVerticalProfileInput):
     verticalDistanceNm: unionDistanceNm,
     overlapDistanceNm,
     profilesOverlap,
+    climbPerformanceIncomplete,
     warnings: unique(warnings),
   };
 }
