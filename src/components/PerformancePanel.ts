@@ -39,7 +39,7 @@ export class PerformancePanel {
       </div>
       <div id="performance-result" class="performance-result"></div>
       <div class="nav-help performance-source">
-        <strong>POH conditions:</strong> 3100 lb, recommended lean mixture, cowl flaps closed. Maximum cruise power is 80% MCP; values above 80% are retained only to support POH interpolation. At high altitude some RPM/MP combinations are not published, and the planner will reject them rather than extrapolate.
+        <strong>POH cruise conditions:</strong> 3100 lb, recommended lean mixture, cowl flaps closed. Maximum cruise power is 80% MCP; values above 80% are retained only to support POH interpolation. At high altitude some RPM/MP combinations are not published, and the planner will reject them rather than extrapolate.
       </div>
 
       <div class="fuel-planning-section">
@@ -47,18 +47,20 @@ export class PerformancePanel {
           <p class="eyebrow">FUEL · PHASE-AWARE</p>
           <h3>Trip fuel planning</h3>
         </div>
-        <p class="hint fuel-hint">Cruise fuel now follows each leg's PL and available route-weather OAT. Climb, descent and circuit fuel flow stay manual until verified C182T source data is supplied for those phases.</p>
+        <p class="hint fuel-hint">Cruise fuel follows each leg's PL and available route-weather OAT. When a POH climb profile is selected in the Vertical Profile panel, Figure 5-8 supplies climb time, fuel and zero-wind distance automatically. Descent and circuit fuel flow remain manual until verified source data is supplied.</p>
         <div class="nav-input-grid fuel-grid">
           ${this.fuelNumberField('startupTaxiTakeoffGal', 'Start/taxi/takeoff', fuelSettings.startupTaxiTakeoffGal, 'gal', 0.1, 0, 20, false)}
           ${this.fuelNumberField('manualCruiseFuelFlowGph', 'Manual cruise FF', fuelSettings.manualCruiseFuelFlowGph, 'GPH', 0.1, 0, 40)}
-          ${this.fuelNumberField('climbFuelFlowGph', 'Climb FF', fuelSettings.climbFuelFlowGph, 'GPH', 0.1, 0, 40)}
+          ${fuelSettings.climbPerformanceMode === 'manual'
+            ? this.fuelNumberField('climbFuelFlowGph', 'Manual climb FF', fuelSettings.climbFuelFlowGph, 'GPH', 0.1, 0, 40)
+            : ''}
           ${this.fuelNumberField('descentFuelFlowGph', 'Descent FF', fuelSettings.descentFuelFlowGph, 'GPH', 0.1, 0, 40)}
           ${this.fuelNumberField('circuitFuelFlowGph', 'Circuit FF', fuelSettings.circuitFuelFlowGph, 'GPH', 0.1, 0, 40)}
           ${this.fuelNumberField('totalFuelOnboardGal', 'Fuel onboard', fuelSettings.totalFuelOnboardGal, 'gal', 0.1, 0, 100)}
         </div>
         <div id="fuel-result" class="fuel-result"></div>
         <div class="nav-help fuel-source">
-          <strong>Source/assumptions:</strong> the UiT OFP v4.2 fuel-requirements box states that Trip Fuel includes 1.7 US gal for startup, taxi and takeoff, so 1.7 gal is the default allowance here. Figure 5-9 supplies cruise fuel flow only. PL is currently used as a pressure-altitude proxy until QNH conversion is added.
+          <strong>Source/assumptions:</strong> the UiT OFP v4.2 fuel-requirements box states that Trip Fuel includes 1.7 US gal for startup, taxi and takeoff, so 1.7 gal is the default allowance. Figure 5-8 supplies climb fuel when a POH climb profile is selected. Figure 5-9 supplies cruise fuel flow. PL/elevation are currently used as pressure-altitude proxies until QNH conversion is added.
         </div>
       </div>
     `;
