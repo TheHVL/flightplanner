@@ -267,7 +267,7 @@ export class MapManager {
         direction: 'top',
       });
       const element = this.routeHitLine.getElement();
-      if (element) element.style.cursor = 'grab';
+      if (element) (element as SVGElement).style.cursor = 'grab';
     }
   }
 
@@ -317,7 +317,7 @@ export class MapManager {
       mapDraggingWasEnabled,
     };
     const element = this.routeHitLine.getElement();
-    if (element) element.style.cursor = 'grabbing';
+    if (element) (element as SVGElement).style.cursor = 'grabbing';
     L.DomEvent.stop(event.originalEvent);
   }
 
@@ -343,7 +343,7 @@ export class MapManager {
 
     if (drag.mapDraggingWasEnabled) this.map.dragging.enable();
     const element = this.routeHitLine.getElement();
-    if (element) element.style.cursor = 'grab';
+    if (element) (element as SVGElement).style.cursor = 'grab';
 
     this.suppressNextMapClick = true;
     window.setTimeout(() => {
