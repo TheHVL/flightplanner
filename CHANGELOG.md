@@ -23,6 +23,52 @@ Displayed OFP values may be rounded for readability. Internal calculations keep 
 
 ---
 
+## PR #19, route-line waypoint insertion, undo history and MSA design
+
+### Added / changed
+
+- Route legs now have a wide invisible interaction line. Dragging a route leg bends the route as a preview and inserts a new waypoint at the release position.
+- The inserted waypoint is placed in route order between the two waypoints that formed the dragged leg rather than appended to the end.
+- If the original leg had a planned level, that PL is copied to both new split legs so inserting a point does not silently lose the altitude plan.
+- Route weather data is invalidated after insertion because the route geometry changed.
+- Added planner-state undo history with up to 50 snapshots.
+- Ctrl+Z on Windows/Linux and Cmd+Z on macOS restore the previous planner state. If a form control is focused, it is blurred first so the edit is committed before the planner undo is applied.
+- Undo restores route waypoints, automatic/manual waypoint-name status, navigation settings, performance settings, weather settings, vertical-profile settings, planned altitudes, weather forecast state and intermediate airport/circuit constraints.
+- Added `docs/MSA_IMPLEMENTATION_PLAN.md` describing the proposed daytime-VFR MSA architecture for this project.
+
+### MSA proposal documented, not yet calculated in the application
+
+The project rule supplied for the planned MSA feature is:
+
+```text
+Obstacle/terrain MSA = highest controlling elevation within 1 NM of route + 500 ft
+```
+
+When above water, the proposal adds a separate glide-to-land requirement. For a simple constant still-air glide-ratio model, if later supported by verified aircraft data:
+
+```text
+required height above landing point [ft]
+  = distance to land [NM] × 6076.12 / glide ratio
+
+required glide altitude MSL
+  = landing-point elevation MSL + required height above landing point
+
+leg MSA = max(obstacle/terrain MSA, glide-to-land requirement)
+```
+
+No glide ratio has been invented or taken from the cruise tables. The C182T glide model must be based on separately verified POH glide data before this calculation is implemented.
+
+### Data-access note
+
+- Kartverket terrain/elevation data is available through national elevation-model services and is the proposed source for terrain corridor analysis.
+- Nasjonalt register over luftfartshindre (NRL) is the appropriate source family for man-made obstacles, but Kartverket requires approved access from 1 July 2026.
+- The public repository must not contain restricted NRL data or credentials.
+- A first MSA implementation should therefore be terrain-only with a clear incomplete-data warning plus manual obstacle override, unless an approved obstacle-data integration is established.
+
+No new operational MSA value is exposed by this PR. The implementation plan deliberately separates the design from an unverified obstacle/glide calculation.
+
+---
+
 ## PR #17, fix Avinor AIP current-issue detection
 
 ### Fixed
