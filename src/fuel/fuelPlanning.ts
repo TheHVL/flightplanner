@@ -176,9 +176,10 @@ export function calculateRouteFuelPlan(input: RouteFuelPlanInput): RouteFuelPlan
   }
 
   const warnings: string[] = [];
-  const phaseModelAvailable = verticalProfile !== null && !verticalProfile.profilesOverlap;
-  if (verticalProfile?.profilesOverlap) {
-    warnings.push('Vertical profiles overlap, so climb/descent fuel is not applied until the profile is resolved.');
+  const profilesOverlap = verticalProfile?.profilesOverlap ?? false;
+  const phaseModelAvailable = verticalProfile !== null && !profilesOverlap;
+  if (profilesOverlap) {
+    warnings.push('Vertical profiles overlap, so climb/descent fuel and complete trip-fuel totals are withheld until the profile is resolved.');
   }
   const segments = phaseModelAvailable ? verticalSegments(verticalProfile!, legs) : [];
   const cumulativeDistances = cumulativeLegDistances(legs);
@@ -238,24 +239,26 @@ export function calculateRouteFuelPlan(input: RouteFuelPlanInput): RouteFuelPlan
     const totalTimeMin = cruiseTimeMin + phase.climbTimeMin + phase.descentTimeMin + activityTimeMin;
 
     const cruiseFuelGal = phaseFuel(cruiseTimeMin, cruiseFuelFlowGph);
-    const climbFuelGal = phaseModelAvailable
-      ? phaseFuel(phase.climbTimeMin, fuelSettings.climbFuelFlowGph)
-      : phase.climbTimeMin > EPSILON ? null : 0;
-    const descentFuelGal = phaseModelAvailable
-      ? phaseFuel(phase.descentTimeMin, fuelSettings.descentFuelFlowGph)
-      : phase.descentTimeMin > EPSILON ? null : 0;
+    const climbFuelGal = profilesOverlap
+      ? null
+      : phaseFuel(phase.climbTimeMin, fuelSettings.climbFuelFlowGph);
+    const descentFuelGal = profilesOverlap
+      ? null
+      : phaseFuel(phase.descentTimeMin, fuelSettings.descentFuelFlowGph);
     const circuitFuelGal = phaseFuel(activityTimeMin, fuelSettings.circuitFuelFlowGph);
-    const legFuelGal = sumIfKnown([cruiseFuelGal, climbFuelGal, descentFuelGal, circuitFuelGal]);
+    const legFuelGal = profilesOverlap
+      ? null
+      : sumIfKnown([cruiseFuelGal, climbFuelGal, descentFuelGal, circuitFuelGal]);
 
     const missingPhases: string[] = [];
     if (cruiseTimeMin > EPSILON && cruiseFuelFlowGph === null) missingPhases.push('cruise FF');
     if (phase.climbTimeMin > EPSILON && fuelSettings.climbFuelFlowGph === null) missingPhases.push('climb FF');
     if (phase.descentTimeMin > EPSILON && fuelSettings.descentFuelFlowGph === null) missingPhases.push('descent FF');
     if (activityTimeMin > EPSILON && fuelSettings.circuitFuelFlowGph === null) missingPhases.push('circuit FF');
-    const phaseWarning = missingPhases.length > 0
-      ? `Enter ${missingPhases.join(', ')} to complete fuel for this leg.`
-      : verticalProfile?.profilesOverlap
-        ? 'Vertical profiles overlap, so phase-aware climb/descent fuel is unavailable.'
+    const phaseWarning = profilesOverlap
+      ? 'Vertical profiles overlap, so phase-aware climb/descent fuel is unavailable.'
+      : missingPhases.length > 0
+        ? `Enter ${missingPhases.join(', ')} to complete fuel for this leg.`
         : null;
 
     return {
@@ -291,10 +294,10 @@ export function calculateRouteFuelPlan(input: RouteFuelPlanInput): RouteFuelPlan
   });
 
   const cruiseFuelGal = sumComponent(legPlans.map((leg) => leg.cruiseFuelGal));
-  const climbFuelGal = sumComponent(legPlans.map((leg) => leg.climbFuelGal));
-  const descentFuelGal = sumComponent(legPlans.map((leg) => leg.descentFuelGal));
+  const climbFuelGal = profilesOverlap ? null : sumComponent(legPlans.map((leg) => leg.climbFuelGal));
+  const descentFuelGal = profilesOverlap ? null : sumComponent(legPlans.map((leg) => leg.descentFuelGal));
   const circuitFuelGal = sumComponent(legPlans.map((leg) => leg.circuitFuelGal));
-  const enrouteFuelGal = sumComponent(legPlans.map((leg) => leg.legFuelGal));
+  const enrouteFuelGal = profilesOverlap ? null : sumComponent(legPlans.map((leg) => leg.legFuelGal));
   const tripFuelGal = enrouteFuelGal === null
     ? null
     : fuelSettings.startupTaxiTakeoffGal + enrouteFuelGal;
@@ -302,9 +305,10 @@ export function calculateRouteFuelPlan(input: RouteFuelPlanInput): RouteFuelPlan
     ? fuelSettings.totalFuelOnboardGal - tripFuelGal
     : null;
 
-  for (const leg of legPlans) {
+  for (const [index, leg] of legPlans.entries()) {
     if (leg.performanceError) {
-      warnings.push(`${leg.fromId} -> ${leg.toId}: ${leg.performanceError}`);
+      const routeLeg = legs[index];
+      warnings.push(`${routeLeg.from.name} -> ${routeLeg.to.name}: ${leg.performanceError}`);
     }
     if (leg.phaseWarning) warnings.push(leg.phaseWarning);
   }
