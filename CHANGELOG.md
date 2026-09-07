@@ -23,6 +23,15 @@ Displayed OFP values may be rounded for readability. Internal calculations keep 
 
 ---
 
+## 2026-09-07, collapsible sidebar scrolling fix
+
+- Fixed a regression introduced by the collapsible phase wrappers where opened sections could shrink to fit the fixed-height desktop workspace.
+- The accordion wrappers now keep their natural height, so the left planning column becomes the single vertical scroll container when one or several phases are taller than the available workspace.
+- Long Phase 6/7 content, including large intermediate-waypoint lists, can therefore be reached by scrolling the sidebar rather than being clipped.
+- Mobile behavior remains document-page scrolling rather than an independent fixed-height sidebar.
+
+---
+
 ## 2026-09-07, route shaping and planning UX
 
 ### Added / changed
