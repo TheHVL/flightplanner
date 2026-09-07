@@ -119,6 +119,7 @@ const ofpTable = new OFPTable(tableElement, store);
 const mapManager = new MapManager(mapElement, {
   onMapClick: (lat, lon) => store.addWaypoint({ lat, lon }),
   onWaypointMoved: (id, lat, lon) => store.updateWaypoint(id, { lat, lon }),
+  onRouteLegInsert: (legIndex, lat, lon) => store.insertWaypointAt(legIndex + 1, { lat, lon }),
 });
 
 const isChartDetailMode = (value: string | null): value is ChartDetailMode =>
@@ -209,6 +210,26 @@ mapExpandButton.addEventListener('click', () => {
 });
 
 document.addEventListener('keydown', (event) => {
+  const undoShortcut =
+    (event.ctrlKey || event.metaKey) &&
+    !event.altKey &&
+    !event.shiftKey &&
+    event.key.toLowerCase() === 'z';
+
+  if (undoShortcut) {
+    event.preventDefault();
+    const target = event.target;
+    if (
+      target instanceof HTMLInputElement ||
+      target instanceof HTMLTextAreaElement ||
+      target instanceof HTMLSelectElement
+    ) {
+      target.blur();
+    }
+    store.undoLastAction();
+    return;
+  }
+
   if (event.key === 'Escape' && mapColumn.classList.contains('map-column--expanded')) {
     setMapExpanded(false);
   }
