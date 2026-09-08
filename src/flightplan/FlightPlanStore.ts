@@ -29,6 +29,11 @@ export interface VerticalLegWind {
   windSpeedKt: number;
 }
 
+export interface ManualLegWind extends VerticalLegWind {
+  fromId: string;
+  toId: string;
+}
+
 export interface VerticalProfileSettings {
   departureElevationFt: number;
   destinationElevationFt: number;
@@ -75,6 +80,7 @@ interface FlightPlanSnapshot {
   verticalProfileSettings: VerticalProfileSettings;
   plannedAltitudesFt: Array<[string, number]>;
   manualMsaFt: Array<[string, number]>;
+  manualLegWinds: Array<[string, VerticalLegWind]>;
   weatherForecasts: Array<[string, LegWeatherForecast]>;
   verticalWaypointConstraints: Array<[string, WaypointVerticalConstraint]>;
   automaticWaypointIds: string[];
@@ -121,6 +127,7 @@ const DEFAULT_WAYPOINT_VERTICAL_CONSTRAINT: WaypointVerticalConstraint = {
 };
 
 const MAX_UNDO_STEPS = 50;
+const MANUAL_LEG_WIND_SOURCE = 'Manual per-leg wind backup';
 
 export class FlightPlanStore {
   private waypoints: Waypoint[] = [];
@@ -130,6 +137,7 @@ export class FlightPlanStore {
   private verticalProfileSettings: VerticalProfileSettings = { ...DEFAULT_VERTICAL_PROFILE_SETTINGS };
   private plannedAltitudesFt = new Map<string, number>();
   private manualMsaFt = new Map<string, number>();
+  private manualLegWinds = new Map<string, VerticalLegWind>();
   private weatherForecasts = new Map<string, LegWeatherForecast>();
   private verticalWaypointConstraints = new Map<string, WaypointVerticalConstraint>();
   private automaticWaypointIds = new Set<string>();
@@ -215,15 +223,45 @@ export class FlightPlanStore {
     return this.manualMsaFt.get(this.legKey(fromId, toId)) ?? null;
   }
 
+  getManualLegWind(fromId: string, toId: string): VerticalLegWind | null {
+    const wind = this.manualLegWinds.get(this.legKey(fromId, toId));
+    return wind ? { ...wind } : null;
+  }
+
+  getManualLegWinds(): ManualLegWind[] {
+    return this.getLegs()
+      .map((leg) => {
+        const wind = this.getManualLegWind(leg.from.id, leg.to.id);
+        return wind ? { fromId: leg.from.id, toId: leg.to.id, ...wind } : null;
+      })
+      .filter((wind): wind is ManualLegWind => wind !== null);
+  }
+
   getLegWeatherForecast(fromId: string, toId: string): LegWeatherForecast | null {
-    const forecast = this.weatherForecasts.get(this.legKey(fromId, toId));
-    return forecast ? { ...forecast } : null;
+    const key = this.legKey(fromId, toId);
+    const forecast = this.weatherForecasts.get(key);
+    if (forecast) return { ...forecast };
+
+    const manualWind = this.manualLegWinds.get(key);
+    if (!manualWind) return null;
+
+    return {
+      fromId,
+      toId,
+      altitudeFt: this.getPlannedAltitudeFt(fromId, toId) ?? this.performanceSettings.pressureAltitudeFt,
+      validTimeUtc: manualWindValidTime(this.weatherSettings.departureTimeUtc),
+      windFromDeg: manualWind.windFromDeg,
+      windSpeedKt: manualWind.windSpeedKt,
+      temperatureC: this.performanceSettings.oatC,
+      source: MANUAL_LEG_WIND_SOURCE,
+    };
   }
 
   getWeatherForecasts(): LegWeatherForecast[] {
     return this.getLegs()
-      .map((leg) => this.getLegWeatherForecast(leg.from.id, leg.to.id))
-      .filter((forecast): forecast is LegWeatherForecast => forecast !== null);
+      .map((leg) => this.weatherForecasts.get(this.legKey(leg.from.id, leg.to.id)))
+      .filter((forecast): forecast is LegWeatherForecast => forecast !== undefined)
+      .map((forecast) => ({ ...forecast }));
   }
 
   updateNavigationSettings(patch: Partial<NavigationSettings>): void {
@@ -355,6 +393,39 @@ export class FlightPlanStore {
     this.emit();
   }
 
+  setManualLegWind(
+    fromId: string,
+    toId: string,
+    wind: VerticalLegWind | null,
+  ): void {
+    const key = this.legKey(fromId, toId);
+    const current = this.manualLegWinds.get(key) ?? null;
+    if (wind === null) {
+      if (current === null) return;
+      this.rememberUndo();
+      this.manualLegWinds.delete(key);
+      this.emit();
+      return;
+    }
+
+    if (
+      !Number.isFinite(wind.windFromDeg) || wind.windFromDeg < 0 || wind.windFromDeg > 359 ||
+      !Number.isFinite(wind.windSpeedKt) || wind.windSpeedKt < 0 || wind.windSpeedKt > 150
+    ) {
+      return;
+    }
+
+    const next: VerticalLegWind = {
+      windFromDeg: Math.round(wind.windFromDeg) % 360,
+      windSpeedKt: Math.round(wind.windSpeedKt),
+    };
+    if (current && shallowEqual(current, next)) return;
+
+    this.rememberUndo();
+    this.manualLegWinds.set(key, next);
+    this.emit();
+  }
+
   subscribe(listener: Listener): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
@@ -385,6 +456,7 @@ export class FlightPlanStore {
     const to = this.waypoints[index];
     const previousLegKey = this.legKey(from.id, to.id);
     const inheritedAltitudeFt = this.plannedAltitudesFt.get(previousLegKey) ?? null;
+    const inheritedManualWind = this.manualLegWinds.get(previousLegKey) ?? null;
 
     this.rememberUndo();
     const id = crypto.randomUUID();
@@ -403,9 +475,14 @@ export class FlightPlanStore {
 
     this.plannedAltitudesFt.delete(previousLegKey);
     this.manualMsaFt.delete(previousLegKey);
+    this.manualLegWinds.delete(previousLegKey);
     if (inheritedAltitudeFt !== null) {
       this.plannedAltitudesFt.set(this.legKey(from.id, id), inheritedAltitudeFt);
       this.plannedAltitudesFt.set(this.legKey(id, to.id), inheritedAltitudeFt);
+    }
+    if (inheritedManualWind !== null) {
+      this.manualLegWinds.set(this.legKey(from.id, id), { ...inheritedManualWind });
+      this.manualLegWinds.set(this.legKey(id, to.id), { ...inheritedManualWind });
     }
     this.weatherForecasts.clear();
     this.emit();
@@ -426,7 +503,7 @@ export class FlightPlanStore {
       (patch.lat !== undefined && patch.lat !== existing.lat) ||
       (patch.lon !== undefined && patch.lon !== existing.lon)
     ) {
-      this.clearManualMsaForWaypoint(id);
+      this.clearManualLegSettingsForWaypoint(id);
     }
     this.waypoints = this.waypoints.map((waypoint) =>
       waypoint.id === id ? { ...waypoint, ...patch } : waypoint,
@@ -468,6 +545,7 @@ export class FlightPlanStore {
     this.automaticWaypointIds.clear();
     this.plannedAltitudesFt.clear();
     this.manualMsaFt.clear();
+    this.manualLegWinds.clear();
     this.weatherForecasts.clear();
     this.verticalWaypointConstraints.clear();
     this.emit();
@@ -485,14 +563,22 @@ export class FlightPlanStore {
     return `${fromId}->${toId}`;
   }
 
-  private clearManualMsaForWaypoint(waypointId: string): void {
+  private clearManualLegSettingsForWaypoint(waypointId: string): void {
     const index = this.waypoints.findIndex((waypoint) => waypoint.id === waypointId);
     if (index < 0) return;
     const previous = this.waypoints[index - 1];
     const current = this.waypoints[index];
     const next = this.waypoints[index + 1];
-    if (previous && current) this.manualMsaFt.delete(this.legKey(previous.id, current.id));
-    if (current && next) this.manualMsaFt.delete(this.legKey(current.id, next.id));
+    if (previous && current) {
+      const key = this.legKey(previous.id, current.id);
+      this.manualMsaFt.delete(key);
+      this.manualLegWinds.delete(key);
+    }
+    if (current && next) {
+      const key = this.legKey(current.id, next.id);
+      this.manualMsaFt.delete(key);
+      this.manualLegWinds.delete(key);
+    }
   }
 
   private retainCurrentLegSettings(): void {
@@ -502,6 +588,9 @@ export class FlightPlanStore {
     }
     for (const key of this.manualMsaFt.keys()) {
       if (!activeKeys.has(key)) this.manualMsaFt.delete(key);
+    }
+    for (const key of this.manualLegWinds.keys()) {
+      if (!activeKeys.has(key)) this.manualLegWinds.delete(key);
     }
     for (const key of this.weatherForecasts.keys()) {
       if (!activeKeys.has(key)) this.weatherForecasts.delete(key);
@@ -526,6 +615,7 @@ export class FlightPlanStore {
       verticalProfileSettings: { ...this.verticalProfileSettings },
       plannedAltitudesFt: [...this.plannedAltitudesFt.entries()],
       manualMsaFt: [...this.manualMsaFt.entries()],
+      manualLegWinds: [...this.manualLegWinds.entries()].map(([key, wind]) => [key, { ...wind }]),
       weatherForecasts: [...this.weatherForecasts.entries()].map(([key, forecast]) => [key, { ...forecast }]),
       verticalWaypointConstraints: [...this.verticalWaypointConstraints.entries()].map(([key, constraint]) => [key, { ...constraint }]),
       automaticWaypointIds: [...this.automaticWaypointIds],
@@ -540,6 +630,9 @@ export class FlightPlanStore {
     this.verticalProfileSettings = { ...snapshot.verticalProfileSettings };
     this.plannedAltitudesFt = new Map(snapshot.plannedAltitudesFt);
     this.manualMsaFt = new Map(snapshot.manualMsaFt);
+    this.manualLegWinds = new Map(
+      snapshot.manualLegWinds.map(([key, wind]) => [key, { ...wind }]),
+    );
     this.weatherForecasts = new Map(
       snapshot.weatherForecasts.map(([key, forecast]) => [key, { ...forecast }]),
     );
@@ -565,6 +658,12 @@ function shallowEqual<T extends object>(a: T, b: T): boolean {
 
 function normalizeIcao(value: string): string {
   return value.trim().toUpperCase().replace(/[^A-Z]/g, '').slice(0, 4);
+}
+
+function manualWindValidTime(value: string): string {
+  if (!value) return new Date().toISOString();
+  const suffix = value.endsWith('Z') ? '' : ':00Z';
+  return `${value}${suffix}`;
 }
 
 function nextWholeUtcHour(): string {
