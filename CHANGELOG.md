@@ -23,6 +23,43 @@ Displayed OFP values may be rounded for readability. Internal calculations keep 
 
 ---
 
+## 2026-09-08, exact vertical-profile conflict diagnostics
+
+### Added / changed
+
+- Added pairwise analysis of overlapping climb/descent route intervals rather than only reporting a single total-overlap number.
+- The Vertical Profile panel now identifies the exact TOC/TOD transitions involved, including waypoint relationship, altitude change and shared route distance.
+- Each conflict includes targeted guidance about which planning inputs are most relevant to review.
+- The conflicting route section is sampled along the actual plotted route geometry, including shaped route bends, and highlighted with a red dashed band on the map.
+- Existing behavior remains conservative: complete climb/descent/trip fuel stays withheld while the vertical profile overlaps.
+- Added automated tests for exact TOC/TOD conflict identification and valid non-overlapping profiles.
+
+### Conflict interval model
+
+For a TOC event:
+
+```text
+vertical interval = [TOC route distance - climb ground distance, TOC route distance]
+```
+
+For a TOD event:
+
+```text
+vertical interval = [TOD route distance, TOD route distance + descent ground distance]
+```
+
+For every pair of vertical intervals:
+
+```text
+conflict start = max(interval A start, interval B start)
+conflict end   = min(interval A end, interval B end)
+conflict distance = conflict end - conflict start
+```
+
+A conflict is reported only when `conflict distance > 0` after clipping the intervals to the plotted route.
+
+---
+
 ## 2026-09-07, collapsible sidebar scrolling fix
 
 - Fixed a regression introduced by the collapsible phase wrappers where opened sections could shrink to fit the fixed-height desktop workspace.

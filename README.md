@@ -26,6 +26,7 @@ Browser-based VFR flight planning for Norwegian flight training, with the Cessna
 - Optional fuel-onboard entry and estimated fuel remaining in the OFP.
 - Route weather preview using Open-Meteo pressure-level winds and temperature, interpolated by geopotential height and forecast time.
 - Automatic TOC/TOD across route altitude changes, including intermediate airport / touch-and-go handling. TOC/TOD are displayed on the map as short lines perpendicular to the plotted route.
+- Exact vertical-profile conflict diagnostics identify which climb/descent transitions overlap, how much route they share, and highlight the conflicting route section in red on the map.
 - Phase 7 AIP preview: aerodrome elevation lookup by ICAO code from an Avinor AIP-derived dataset.
 - Circuit/pattern planning at intermediate airports, with configurable circuit count and minutes per circuit. The planner labels the standard circuit altitude as 1000 ft AGL.
 - Collapsible planning sections in the sidebar, with each section remembering whether it was open or closed.
@@ -182,7 +183,7 @@ Estimated remaining after leg n
 - accumulated enroute fuel through leg n
 ```
 
-If the vertical profile overlaps, or a required phase input is missing, complete trip fuel is withheld instead of presenting a misleading total. In particular, the warning `Vertical profiles overlap` means the selected climb/descent geometry occupies the same route section and must be resolved before complete climb/descent/trip fuel is shown.
+If the vertical profile overlaps, or a required phase input is missing, complete trip fuel is withheld instead of presenting a misleading total. The Vertical Profile panel now identifies the exact transitions involved in each overlap and highlights the overlapping route section on the map, so the generic fuel warning can be traced to the underlying geometry.
 
 ## Airport / T&G and circuits
 
@@ -217,6 +218,8 @@ Each leg has a planned level in the OFP. At an ordinary waypoint:
 - Airport + circuits uses the same vertical logic and adds a user-selected time allowance for pattern work.
 
 TOC and TOD are drawn as short map lines perpendicular to the local plotted route rather than large circular markers.
+
+When vertical intervals overlap, Flightplanner calculates every pair of conflicting TOC/TOD transitions. The Vertical Profile panel shows the transitions, their altitude changes, the shared route distance and suggested settings to review. The overlapping route section is sampled along the actual plotted path and drawn as a red dashed highlight behind the TOC/TOD markers.
 
 ## MSA workflow
 
@@ -254,7 +257,7 @@ The overlay uses the modeled route altitude, follows the plotted route path, ass
 ## Architecture
 
 ```text
-src/navigation/    Great-circle, wind, magnetic, MSA-corridor, glide-envelope and vertical-profile math
+src/navigation/    Great-circle, wind, magnetic, MSA-corridor, glide-envelope, vertical-profile and vertical-conflict math
 src/performance/   C182T cruise, climb and maximum-glide source models and interpolation
 src/fuel/          Phase-aware route fuel planning and persisted fuel inputs
 src/weather/       Route forecast sampling/interpolation
@@ -276,7 +279,7 @@ public/            Static deploy assets and fallback AIP dataset
 | 3 | Complete | Kartverket and Avinor ICAO map layers, quality/caching improvements |
 | 4 | Complete | Full C182T Figure 5-9 cruise model plus Figure 5-8 climb model |
 | 5 | Preview | Route weather and per-leg forecast wind integration |
-| 6 | Advanced preview | Automatic multi-leg TOC/TOD, airports and touch-and-goes, phase TAS and wind-aware vertical geometry |
+| 6 | Advanced preview | Automatic multi-leg TOC/TOD, airports and touch-and-goes, phase TAS, wind-aware vertical geometry and exact overlap diagnostics |
 | 7 | In progress | Norwegian AIP aerodrome elevation, circuit planning, route shaping, manual MSA workflow and C182T glide visualization |
 | 8 | Planned | OFP polish, save/load/export/print and broader validation |
 

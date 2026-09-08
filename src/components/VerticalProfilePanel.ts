@@ -14,6 +14,11 @@ import {
   type ClimbPerformanceMode,
   type RouteVerticalEvent,
 } from '../navigation/verticalProfile';
+import {
+  calculateVerticalProfileConflicts,
+  formatVerticalConflict,
+  verticalConflictAdvice,
+} from '../navigation/verticalConflicts';
 
 export class VerticalProfilePanel {
   private readonly aipStatus = new Map<string, string>();
@@ -55,12 +60,28 @@ export class VerticalProfilePanel {
         });
 
         const visibleEvents = result.events.filter((event) => event.onRoute);
+        const conflicts = calculateVerticalProfileConflicts(result);
         resultHtml = `
           <div class="vertical-overview">
             <div><span>TOC/TOD</span><strong>${visibleEvents.length}</strong></div>
             <div><span>Vertical flight</span><strong>${this.halfNm(result.verticalDistanceNm)} NM</strong></div>
             <div><span>Level flight</span><strong>${this.halfNm(result.levelDistanceNm)} NM</strong></div>
           </div>
+          ${conflicts.length > 0
+            ? `<div class="vertical-conflict-panel">
+                <div class="vertical-conflict-heading">
+                  <span>VERTICAL PROFILE CONFLICT</span>
+                  <strong>${this.halfNm(result.overlapDistanceNm)} NM total overlap</strong>
+                </div>
+                ${conflicts.map((conflict, index) => `
+                  <div class="vertical-conflict-item">
+                    <strong>Conflict ${index + 1}: ${this.escape(formatVerticalConflict(conflict))}</strong>
+                    <small>Route section ${this.halfNm(conflict.startNm)}-${this.halfNm(conflict.endNm)} NM from departure.</small>
+                    <p>${this.escape(verticalConflictAdvice(conflict))}</p>
+                  </div>
+                `).join('')}
+              </div>`
+            : ''}
           ${visibleEvents.length > 0
             ? `<div class="vertical-events">${visibleEvents.map((event) => this.eventRow(event)).join('')}</div>`
             : '<div class="vertical-empty">No climb or descent is currently required by the entered PL values and waypoint settings.</div>'}
