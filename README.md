@@ -25,6 +25,7 @@ Browser-based VFR flight planning for Norwegian flight training, with the Cessna
 - Phase-aware fuel planning that separates cruise, climb, descent, circuit/pattern, and startup/taxi/takeoff fuel.
 - Optional fuel-onboard entry and estimated fuel remaining in the OFP.
 - Route weather preview using Open-Meteo pressure-level winds and temperature, interpolated by geopotential height and forecast time.
+- Manual wind backup for every route leg, with fetched forecast first, manual leg wind second, and the global Phase 2 wind as final fallback.
 - Automatic TOC/TOD across route altitude changes, including intermediate airport / touch-and-go handling. TOC/TOD are displayed on the map as short lines perpendicular to the plotted route.
 - Exact vertical-profile conflict diagnostics identify which climb/descent transitions overlap, how much route they share, and highlight the conflicting route section in red on the map.
 - Phase 7 AIP preview: aerodrome elevation lookup by ICAO code from an Avinor AIP-derived dataset.
@@ -185,6 +186,24 @@ Estimated remaining after leg n
 
 If the vertical profile overlaps, or a required phase input is missing, complete trip fuel is withheld instead of presenting a misleading total. The Vertical Profile panel now identifies the exact transitions involved in each overlap and highlights the overlapping route section on the map, so the generic fuel warning can be traced to the underlying geometry.
 
+## Per-leg wind backup
+
+The Phase 5 weather panel supports a manual wind direction and speed for every route leg. This provides a fallback if model weather is unavailable or a leg needs to be entered manually from another planning source.
+
+When `Use per-leg route winds in calculations` is enabled, wind selection for each leg is:
+
+```text
+1. Fetched route forecast for that leg, if available
+2. Manual per-leg wind backup, if entered
+3. Global manual wind from Phase 2
+```
+
+Manual leg wind is entered as meteorological direction FROM true north and speed in knots. A fetched forecast does not delete the saved manual backup, so the backup becomes active automatically if that fetched leg forecast later becomes unavailable. If per-leg route winds are disabled, the global Phase 2 manual wind is used.
+
+Manual leg winds participate in planner undo. Moving a waypoint clears manual winds on the affected legs because the route geometry has changed. If a legacy leg is split by waypoint insertion, its manual wind is copied to both split legs until reviewed.
+
+The manual backup contains wind only. When it is used without fetched route weather, Phase 4 OAT remains the temperature fallback for performance calculations.
+
 ## Airport / T&G and circuits
 
 At an intermediate airport:
@@ -263,7 +282,7 @@ src/fuel/          Phase-aware route fuel planning and persisted fuel inputs
 src/weather/       Route forecast sampling/interpolation
 src/aip/           AIP aerodrome catalog lookup
 src/map/           Leaflet map and ICAO chart quality logic
-src/flightplan/    Route/planning state, manual MSA, undo and non-waypoint route shaping
+src/flightplan/    Route/planning state, manual MSA, manual leg winds, undo and non-waypoint route shaping
 src/components/    UI panels and OFP presentation
 docs/              Design/implementation proposals such as automatic MSA
 scripts/           Build-time AIP data refresh
@@ -278,7 +297,7 @@ public/            Static deploy assets and fallback AIP dataset
 | 2 | Complete | Wind triangle, headings, WMM2025 magnetic variation |
 | 3 | Complete | Kartverket and Avinor ICAO map layers, quality/caching improvements |
 | 4 | Complete | Full C182T Figure 5-9 cruise model plus Figure 5-8 climb model |
-| 5 | Preview | Route weather and per-leg forecast wind integration |
+| 5 | Preview | Route weather, per-leg forecast wind integration and manual per-leg wind backup |
 | 6 | Advanced preview | Automatic multi-leg TOC/TOD, airports and touch-and-goes, phase TAS, wind-aware vertical geometry and exact overlap diagnostics |
 | 7 | In progress | Norwegian AIP aerodrome elevation, circuit planning, route shaping, manual MSA workflow and C182T glide visualization |
 | 8 | Planned | OFP polish, save/load/export/print and broader validation |
