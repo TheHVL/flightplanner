@@ -38,6 +38,12 @@ export interface VerticalProfileMapMarker {
   title: string;
 }
 
+export interface VerticalConflictMapSegment {
+  id: string;
+  coordinates: Coordinate[];
+  title: string;
+}
+
 export interface GlideEnvelopeMapSample {
   lat: number;
   lon: number;
@@ -133,6 +139,7 @@ export class MapManager {
   private readonly routeLine: Polyline;
   private readonly routeHitLine: Polyline;
   private readonly verticalProfileLayer: LayerGroup;
+  private readonly verticalConflictLayer: LayerGroup;
   private readonly msaCorridorLayer: LayerGroup;
   private readonly glideEnvelopeLayer: LayerGroup;
   private chartEdition: string | null = null;
@@ -161,6 +168,11 @@ export class MapManager {
     msaPane.style.zIndex = '390';
     msaPane.style.pointerEvents = 'none';
     this.msaCorridorLayer = L.layerGroup();
+
+    const conflictPane = this.map.createPane('vertical-conflict-pane');
+    conflictPane.style.zIndex = '610';
+    conflictPane.style.pointerEvents = 'none';
+    this.verticalConflictLayer = L.layerGroup().addTo(this.map);
 
     const verticalPane = this.map.createPane('vertical-profile-pane');
     verticalPane.style.zIndex = '620';
@@ -375,6 +387,24 @@ export class MapManager {
       });
       const element = this.routeHitLine.getElement();
       if (element) (element as SVGElement).style.cursor = 'grab';
+    }
+  }
+
+  renderVerticalProfileConflicts(segments: VerticalConflictMapSegment[]): void {
+    this.verticalConflictLayer.clearLayers();
+    for (const segment of segments) {
+      if (segment.coordinates.length < 2) continue;
+      L.polyline(
+        segment.coordinates.map((point) => [point.lat, point.lon] as [number, number]),
+        {
+          pane: 'vertical-conflict-pane',
+          color: '#dc2626',
+          weight: 10,
+          opacity: 0.48,
+          dashArray: '8 7',
+          interactive: false,
+        },
+      ).addTo(this.verticalConflictLayer);
     }
   }
 
