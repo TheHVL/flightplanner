@@ -17,6 +17,7 @@ import { FUEL_SETTINGS_CHANGED_EVENT, getFuelPlanningSettings } from './fuel/fue
 import { buildC182TGlideEnvelopeSamples } from './navigation/glideEnvelope';
 import { coordinateAtRouteDistance, trackAtRouteDistance } from './navigation/geodesy';
 import { calculateRouteVerticalProfile } from './navigation/verticalProfile';
+import { calculateVerticalProfileConflicts, formatVerticalConflict } from './navigation/verticalConflicts';
 
 if ('serviceWorker' in navigator) {
   const serviceWorkerUrl = new URL('sw.js', document.baseURI).toString();
@@ -347,13 +348,37 @@ const calculateCurrentVerticalProfile = () => {
   return { legs, plannedAltitudesFt, profile };
 };
 
+const sampleRouteSection = (
+  legs: ReturnType<FlightPlanStore['getLegs']>,
+  startNm: number,
+  endNm: number,
+) => {
+  const distanceNm = Math.max(0, endNm - startNm);
+  const steps = Math.max(1, Math.ceil(distanceNm / 0.5));
+  return Array.from({ length: steps + 1 }, (_, index) => {
+    const routeDistanceNm = startNm + distanceNm * (index / steps);
+    return coordinateAtRouteDistance(legs, routeDistanceNm);
+  }).filter((coordinate): coordinate is NonNullable<typeof coordinate> => coordinate !== null);
+};
+
 const renderVerticalProfileMarkers = () => {
   try {
     const current = calculateCurrentVerticalProfile();
     if (!current) {
       mapManager.renderVerticalProfileMarkers([]);
+      mapManager.renderVerticalProfileConflicts([]);
       return;
     }
+
+    const conflicts = calculateVerticalProfileConflicts(current.profile);
+    mapManager.renderVerticalProfileConflicts(
+      conflicts.map((conflict) => ({
+        id: conflict.id,
+        coordinates: sampleRouteSection(current.legs, conflict.startNm, conflict.endNm),
+        title: formatVerticalConflict(conflict),
+      })),
+    );
+
     mapManager.renderVerticalProfileMarkers(
       current.profile.events
         .filter((event) => event.onRoute)
@@ -372,6 +397,7 @@ const renderVerticalProfileMarkers = () => {
     );
   } catch {
     mapManager.renderVerticalProfileMarkers([]);
+    mapManager.renderVerticalProfileConflicts([]);
   }
 };
 
