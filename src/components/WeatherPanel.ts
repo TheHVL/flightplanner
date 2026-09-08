@@ -20,7 +20,10 @@ export class WeatherPanel {
   render(): void {
     const settings = this.store.getWeatherSettings();
     const forecasts = this.store.getWeatherForecasts();
+    const manualWinds = this.store.getManualLegWinds();
     const legs = this.store.getLegs();
+    const hasPerLegWindSource = forecasts.length > 0 || manualWinds.length > 0;
+
     this.element.innerHTML = `
       <div class="panel-heading">
         <div>
@@ -28,7 +31,7 @@ export class WeatherPanel {
           <h2>Route weather</h2>
         </div>
       </div>
-      <p class="hint">Fetches model winds and temperature at each leg midpoint and planned level. This is forecast model guidance, not a replacement for official aviation weather briefing products.</p>
+      <p class="hint">Fetches model winds and temperature at each leg midpoint and planned level. You can also enter a manual wind for every leg as a backup. This is planning guidance, not a replacement for official aviation weather briefing products.</p>
       <div class="weather-controls">
         <label class="weather-time-field">
           <span>Departure time UTC</span>
@@ -39,32 +42,106 @@ export class WeatherPanel {
         </button>
       </div>
       <label class="nav-toggle weather-toggle">
-        <input type="checkbox" data-weather-use ${settings.useForecastWinds ? 'checked' : ''} ${forecasts.length === 0 ? 'disabled' : ''} />
-        <span>Use fetched winds in the OFP wind triangle</span>
+        <input type="checkbox" data-weather-use ${settings.useForecastWinds ? 'checked' : ''} ${hasPerLegWindSource ? '' : 'disabled'} />
+        <span>Use per-leg route winds in calculations</span>
       </label>
+      <div class="weather-priority-note">
+        <strong>Wind priority:</strong> fetched forecast for the leg → manual leg backup → global Phase 2 manual wind. Manual leg winds remain stored if a forecast is fetched later.
+      </div>
       <div class="weather-status">${this.statusMessage}</div>
       ${forecasts.length > 0 ? this.forecastList(forecasts) : ''}
-      <div class="nav-help weather-source"><strong>Source:</strong> Open-Meteo pressure-level forecast. Altitude interpolation uses geopotential height; time is interpolated between hourly forecast steps.</div>
+      ${legs.length > 0 ? this.manualWindList() : ''}
+      <div class="nav-help weather-source"><strong>Forecast source:</strong> Open-Meteo pressure-level forecast. Altitude interpolation uses geopotential height; time is interpolated between hourly forecast steps. Manual leg wind direction is FROM true north.</div>
     `;
   }
 
   private forecastList(forecasts: LegWeatherForecast[]): string {
     const legs = this.store.getLegs();
-    return `<div class="weather-list">${forecasts.map((forecast) => {
-      const leg = legs.find((candidate) => candidate.from.id === forecast.fromId && candidate.to.id === forecast.toId);
-      const name = leg ? `${leg.from.name} → ${leg.to.name}` : 'Route leg';
-      return `
-        <div class="weather-row">
-          <div>
-            <strong>${name}</strong>
-            <span>${Math.round(forecast.altitudeFt)} ft · ${this.formatUtc(forecast.validTimeUtc)}</span>
-          </div>
-          <div class="weather-values">
-            <strong>${String(Math.round(forecast.windFromDeg) % 360).padStart(3, '0')}°/${Math.round(forecast.windSpeedKt)} kt</strong>
-            <span>${forecast.temperatureC >= 0 ? '+' : ''}${forecast.temperatureC.toFixed(1)}°C</span>
-          </div>
-        </div>`;
-    }).join('')}</div>`;
+    return `
+      <div class="weather-section-heading">
+        <strong>Fetched route forecast</strong>
+        <span>When enabled, a fetched value has priority over the manual backup for the same leg.</span>
+      </div>
+      <div class="weather-list">${forecasts.map((forecast) => {
+        const leg = legs.find((candidate) => candidate.from.id === forecast.fromId && candidate.to.id === forecast.toId);
+        const name = leg ? `${leg.from.name} → ${leg.to.name}` : 'Route leg';
+        return `
+          <div class="weather-row">
+            <div>
+              <strong>${name}</strong>
+              <span>${Math.round(forecast.altitudeFt)} ft · ${this.formatUtc(forecast.validTimeUtc)}</span>
+            </div>
+            <div class="weather-values">
+              <strong>${String(Math.round(forecast.windFromDeg) % 360).padStart(3, '0')}°/${Math.round(forecast.windSpeedKt)} kt</strong>
+              <span>${forecast.temperatureC >= 0 ? '+' : ''}${forecast.temperatureC.toFixed(1)}°C</span>
+            </div>
+          </div>`;
+      }).join('')}</div>`;
+  }
+
+  private manualWindList(): string {
+    const legs = this.store.getLegs();
+    const forecasts = this.store.getWeatherForecasts();
+    const forecastKeys = new Set(forecasts.map((forecast) => `${forecast.fromId}->${forecast.toId}`));
+
+    return `
+      <div class="weather-section-heading weather-section-heading--manual">
+        <strong>Manual wind backup by leg</strong>
+        <span>Leave a leg blank to fall back to the global Phase 2 wind. Entering a backup does not override a fetched forecast while per-leg route winds are enabled.</span>
+      </div>
+      <div class="manual-wind-list">
+        ${legs.map((leg) => {
+          const manual = this.store.getManualLegWind(leg.from.id, leg.to.id);
+          const hasForecast = forecastKeys.has(`${leg.from.id}->${leg.to.id}`);
+          const status = hasForecast
+            ? manual ? 'Forecast primary · manual backup saved' : 'Forecast primary · no manual backup'
+            : manual ? 'Manual backup available' : 'Global Phase 2 fallback';
+          return `
+            <div class="manual-wind-row">
+              <div class="manual-wind-leg">
+                <strong>${leg.from.name} → ${leg.to.name}</strong>
+                <span>${status}</span>
+              </div>
+              <label>
+                <span>From °T</span>
+                <input
+                  type="number"
+                  min="0"
+                  max="359"
+                  step="1"
+                  placeholder="—"
+                  data-manual-wind-from-id="${leg.from.id}"
+                  data-manual-wind-to-id="${leg.to.id}"
+                  data-manual-wind-field="direction"
+                  value="${manual?.windFromDeg ?? ''}"
+                  aria-label="Manual wind direction ${leg.from.name} to ${leg.to.name}"
+                />
+              </label>
+              <label>
+                <span>Speed kt</span>
+                <input
+                  type="number"
+                  min="0"
+                  max="150"
+                  step="1"
+                  placeholder="—"
+                  data-manual-wind-from-id="${leg.from.id}"
+                  data-manual-wind-to-id="${leg.to.id}"
+                  data-manual-wind-field="speed"
+                  value="${manual?.windSpeedKt ?? ''}"
+                  aria-label="Manual wind speed ${leg.from.name} to ${leg.to.name}"
+                />
+              </label>
+              <button
+                class="manual-wind-clear"
+                type="button"
+                data-manual-wind-clear-from="${leg.from.id}"
+                data-manual-wind-clear-to="${leg.to.id}"
+                ${manual ? '' : 'disabled'}
+              >Clear</button>
+            </div>`;
+        }).join('')}
+      </div>`;
   }
 
   private handleChange(event: Event): void {
@@ -72,17 +149,49 @@ export class WeatherPanel {
     if (input.matches('[data-weather-time]')) {
       this.store.updateWeatherSettings({ departureTimeUtc: input.value });
       this.store.clearWeatherForecasts();
-      this.statusMessage = 'Departure time changed. Fetch the route forecast again.';
+      this.statusMessage = 'Departure time changed. Fetch the route forecast again. Manual leg wind backups were kept.';
       this.render();
       return;
     }
     if (input.matches('[data-weather-use]')) {
       this.store.updateWeatherSettings({ useForecastWinds: input.checked });
+      return;
     }
+
+    const fromId = input.dataset.manualWindFromId;
+    const toId = input.dataset.manualWindToId;
+    const field = input.dataset.manualWindField;
+    if (!fromId || !toId || !field) return;
+
+    if (input.value.trim() === '') {
+      this.store.setManualLegWind(fromId, toId, null);
+      return;
+    }
+
+    const value = Number(input.value);
+    if (!Number.isFinite(value)) return;
+    const current = this.store.getManualLegWind(fromId, toId);
+    const globalWind = this.store.getNavigationSettings();
+    const next = {
+      windFromDeg: current?.windFromDeg ?? globalWind.windFromDeg,
+      windSpeedKt: current?.windSpeedKt ?? globalWind.windSpeedKt,
+    };
+    if (field === 'direction') next.windFromDeg = value;
+    if (field === 'speed') next.windSpeedKt = value;
+    this.store.setManualLegWind(fromId, toId, next);
   }
 
   private async handleClick(event: Event): Promise<void> {
-    const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-weather-fetch]');
+    const target = event.target as HTMLElement;
+    const clearButton = target.closest<HTMLButtonElement>('[data-manual-wind-clear-from]');
+    if (clearButton) {
+      const fromId = clearButton.dataset.manualWindClearFrom;
+      const toId = clearButton.dataset.manualWindClearTo;
+      if (fromId && toId) this.store.setManualLegWind(fromId, toId, null);
+      return;
+    }
+
+    const button = target.closest<HTMLButtonElement>('[data-weather-fetch]');
     if (!button || this.loading) return;
     await this.fetchRouteForecast();
   }
@@ -155,10 +264,11 @@ export class WeatherPanel {
       }
 
       this.store.setRouteWeatherForecasts(forecasts);
-      this.statusMessage = `Forecast loaded for ${forecasts.length} leg${forecasts.length === 1 ? '' : 's'}. Enable “Use fetched winds” to apply it to the OFP.`;
+      this.statusMessage = `Forecast loaded for ${forecasts.length} leg${forecasts.length === 1 ? '' : 's'}. Enable “Use per-leg route winds” to apply forecast values with manual leg winds as automatic backups.`;
     } catch (error) {
       this.store.clearWeatherForecasts();
-      this.statusMessage = error instanceof Error ? error.message : 'Route weather fetch failed.';
+      const message = error instanceof Error ? error.message : 'Route weather fetch failed.';
+      this.statusMessage = `${message} Manual leg wind backups were kept.`;
     } finally {
       this.loading = false;
       this.render();
