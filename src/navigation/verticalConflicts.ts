@@ -50,10 +50,11 @@ export function calculateVerticalProfileConflicts(
       const overlapDistanceNm = endNm - startNm;
       if (overlapDistanceNm <= EPSILON) continue;
 
+      const [firstEvent, secondEvent] = orderedConflictEvents(first.event, second.event);
       conflicts.push({
-        id: `${first.event.id}__${second.event.id}`,
-        firstEvent: first.event,
-        secondEvent: second.event,
+        id: `${firstEvent.id}__${secondEvent.id}`,
+        firstEvent,
+        secondEvent,
         startNm,
         endNm,
         overlapDistanceNm,
@@ -82,6 +83,14 @@ export function verticalConflictAdvice(conflict: VerticalProfileConflict): strin
 export function formatVerticalEvent(event: RouteVerticalEvent): string {
   const location = `${event.type} ${event.position} ${event.waypointName}`;
   return `${location} (${Math.round(event.altitudeFromFt).toLocaleString()} → ${Math.round(event.altitudeToFt).toLocaleString()} ft)`;
+}
+
+function orderedConflictEvents(
+  first: RouteVerticalEvent,
+  second: RouteVerticalEvent,
+): [RouteVerticalEvent, RouteVerticalEvent] {
+  if (first.type === second.type) return [first, second];
+  return first.type === 'TOC' ? [first, second] : [second, first];
 }
 
 function clamp(value: number, min: number, max: number): number {
