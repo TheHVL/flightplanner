@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { FlightPlanStore } from '../src/flightplan/FlightPlanStore';
+import { calculateFuelPlanForStore } from '../src/fuel/fuelPlanning';
 
 beforeEach(() => {
   vi.stubGlobal('crypto', { randomUUID: vi.fn(() => Math.random().toString(36).slice(2)) });
@@ -33,6 +34,21 @@ describe('manual per-leg wind backup', () => {
     expect(store.getVerticalProfileSettings().legWinds).toEqual([
       { windFromDeg: 260, windSpeedKt: 22 },
     ]);
+  });
+
+  it('feeds the manual leg backup into the OFP/fuel navigation calculation', () => {
+    const store = new FlightPlanStore();
+    const a = store.addWaypoint({ lat: 69, lon: 18 }, 'A');
+    const b = store.addWaypoint({ lat: 69.1, lon: 18.5 }, 'B');
+    store.setPlannedAltitudeFt(a.id, b.id, 2500);
+    store.setManualLegWind(a.id, b.id, { windFromDeg: 245, windSpeedKt: 17 });
+    store.updateWeatherSettings({ useForecastWinds: true });
+
+    const plan = calculateFuelPlanForStore(store);
+
+    expect(plan.legs[0].forecastWindActive).toBe(true);
+    expect(plan.legs[0].windFromDeg).toBe(245);
+    expect(plan.legs[0].windSpeedKt).toBe(17);
   });
 
   it('gives a fetched forecast priority over the manual backup for the same leg', () => {
