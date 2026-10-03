@@ -72,7 +72,7 @@ export interface LegWeatherForecast {
   source: string;
 }
 
-interface FlightPlanSnapshot {
+export interface FlightPlanWorkingDraftState {
   waypoints: Waypoint[];
   navigationSettings: NavigationSettings;
   performanceSettings: PerformanceSettings;
@@ -81,9 +81,12 @@ interface FlightPlanSnapshot {
   plannedAltitudesFt: Array<[string, number]>;
   manualMsaFt: Array<[string, number]>;
   manualLegWinds: Array<[string, VerticalLegWind]>;
-  weatherForecasts: Array<[string, LegWeatherForecast]>;
   verticalWaypointConstraints: Array<[string, WaypointVerticalConstraint]>;
   automaticWaypointIds: string[];
+}
+
+interface FlightPlanSnapshot extends FlightPlanWorkingDraftState {
+  weatherForecasts: Array<[string, LegWeatherForecast]>;
 }
 
 const DEFAULT_NAVIGATION_SETTINGS: NavigationSettings = {
@@ -180,6 +183,49 @@ export class FlightPlanStore {
       this.getLegWeatherForecast(leg.from.id, leg.to.id)?.temperatureC ?? this.performanceSettings.oatC,
     );
     return { ...this.verticalProfileSettings, legWinds, legOatC };
+  }
+
+  exportWorkingDraftState(): FlightPlanWorkingDraftState {
+    return {
+      waypoints: this.waypoints.map((waypoint) => ({ ...waypoint })),
+      navigationSettings: { ...this.navigationSettings },
+      performanceSettings: { ...this.performanceSettings },
+      weatherSettings: { ...this.weatherSettings },
+      verticalProfileSettings: { ...this.verticalProfileSettings },
+      plannedAltitudesFt: [...this.plannedAltitudesFt.entries()],
+      manualMsaFt: [...this.manualMsaFt.entries()],
+      manualLegWinds: [...this.manualLegWinds.entries()].map(([key, wind]) => [key, { ...wind }]),
+      verticalWaypointConstraints: [...this.verticalWaypointConstraints.entries()].map(([key, constraint]) => [key, { ...constraint }]),
+      automaticWaypointIds: [...this.automaticWaypointIds],
+    };
+  }
+
+  restoreWorkingDraftState(value: unknown): boolean {
+    const draft = parseWorkingDraftState(value);
+    if (!draft) return false;
+
+    this.waypoints = draft.waypoints.map((waypoint) => ({ ...waypoint }));
+    this.navigationSettings = { ...draft.navigationSettings };
+    this.performanceSettings = { ...draft.performanceSettings };
+    this.weatherSettings = { ...draft.weatherSettings };
+    this.verticalProfileSettings = { ...draft.verticalProfileSettings };
+    this.plannedAltitudesFt = new Map(draft.plannedAltitudesFt);
+    this.manualMsaFt = new Map(draft.manualMsaFt);
+    this.manualLegWinds = new Map(
+      draft.manualLegWinds.map(([key, wind]) => [key, { ...wind }]),
+    );
+    this.verticalWaypointConstraints = new Map(
+      draft.verticalWaypointConstraints.map(([key, constraint]) => [key, { ...constraint }]),
+    );
+    // Forecast responses are intentionally not persisted. They must be fetched again
+    // for the restored route, time and altitude inputs.
+    this.weatherForecasts.clear();
+    this.automaticWaypointIds = new Set(draft.automaticWaypointIds);
+    this.undoStack = [];
+    this.renumberAutomaticWaypointNames();
+    this.retainCurrentLegSettings();
+    this.emit();
+    return true;
   }
 
   canUndo(): boolean {
@@ -645,6 +691,162 @@ export class FlightPlanStore {
   private emit(): void {
     this.listeners.forEach((listener) => listener());
   }
+}
+
+function parseWorkingDraftState(value: unknown): FlightPlanWorkingDraftState | null {
+  if (!isRecord(value)) return null;
+  if (
+    !Array.isArray(value.waypoints) ||
+    !isNavigationSettings(value.navigationSettings) ||
+    !isPerformanceSettings(value.performanceSettings) ||
+    !isWeatherSettings(value.weatherSettings) ||
+    !isVerticalProfileSettings(value.verticalProfileSettings) ||
+    !Array.isArray(value.plannedAltitudesFt) ||
+    !Array.isArray(value.manualMsaFt) ||
+    !Array.isArray(value.manualLegWinds) ||
+    !Array.isArray(value.verticalWaypointConstraints) ||
+    !Array.isArray(value.automaticWaypointIds)
+  ) return null;
+
+  const waypoints: Waypoint[] = [];
+  const waypointIds = new Set<string>();
+  for (const item of value.waypoints) {
+    if (!isRecord(item) || typeof item.id !== 'string' || item.id.length === 0 || waypointIds.has(item.id)) return null;
+    if (typeof item.name !== 'string' || !validCoordinate(item.lat, item.lon)) return null;
+    const waypoint: Waypoint = { id: item.id, name: item.name, lat: item.lat as number, lon: item.lon as number };
+    if (item.altitudeFt !== undefined) {
+      if (!finiteInRange(item.altitudeFt, -2000, 60000)) return null;
+      waypoint.altitudeFt = item.altitudeFt as number;
+    }
+    waypoints.push(waypoint);
+    waypointIds.add(item.id);
+  }
+
+  const activeLegKeys = new Set(
+    waypoints.slice(0, -1).map((waypoint, index) => `${waypoint.id}->${waypoints[index + 1].id}`),
+  );
+
+  const plannedAltitudesFt = parseNumberEntries(value.plannedAltitudesFt, activeLegKeys, 0, 30000);
+  const manualMsaFt = parseNumberEntries(value.manualMsaFt, activeLegKeys, 0, 30000);
+  if (!plannedAltitudesFt || !manualMsaFt) return null;
+
+  const manualLegWinds: Array<[string, VerticalLegWind]> = [];
+  for (const entry of value.manualLegWinds) {
+    if (!Array.isArray(entry) || entry.length !== 2 || typeof entry[0] !== 'string' || !activeLegKeys.has(entry[0])) return null;
+    const wind = entry[1];
+    if (!isRecord(wind) || !finiteInRange(wind.windFromDeg, 0, 359) || !finiteInRange(wind.windSpeedKt, 0, 150)) return null;
+    manualLegWinds.push([entry[0], { windFromDeg: wind.windFromDeg as number, windSpeedKt: wind.windSpeedKt as number }]);
+  }
+
+  const verticalWaypointConstraints: Array<[string, WaypointVerticalConstraint]> = [];
+  for (const entry of value.verticalWaypointConstraints) {
+    if (!Array.isArray(entry) || entry.length !== 2 || typeof entry[0] !== 'string' || !waypointIds.has(entry[0])) return null;
+    const constraint = parseWaypointVerticalConstraint(entry[1]);
+    if (!constraint) return null;
+    verticalWaypointConstraints.push([entry[0], constraint]);
+  }
+
+  const automaticWaypointIds: string[] = [];
+  for (const id of value.automaticWaypointIds) {
+    if (typeof id !== 'string' || !waypointIds.has(id)) return null;
+    automaticWaypointIds.push(id);
+  }
+
+  return {
+    waypoints,
+    navigationSettings: { ...value.navigationSettings } as NavigationSettings,
+    performanceSettings: { ...value.performanceSettings } as PerformanceSettings,
+    weatherSettings: { ...value.weatherSettings } as WeatherSettings,
+    verticalProfileSettings: { ...value.verticalProfileSettings } as VerticalProfileSettings,
+    plannedAltitudesFt,
+    manualMsaFt,
+    manualLegWinds,
+    verticalWaypointConstraints,
+    automaticWaypointIds,
+  };
+}
+
+function parseNumberEntries(
+  value: unknown[],
+  activeKeys: Set<string>,
+  min: number,
+  max: number,
+): Array<[string, number]> | null {
+  const result: Array<[string, number]> = [];
+  for (const entry of value) {
+    if (
+      !Array.isArray(entry) ||
+      entry.length !== 2 ||
+      typeof entry[0] !== 'string' ||
+      !activeKeys.has(entry[0]) ||
+      !finiteInRange(entry[1], min, max)
+    ) return null;
+    result.push([entry[0], entry[1] as number]);
+  }
+  return result;
+}
+
+function parseWaypointVerticalConstraint(value: unknown): WaypointVerticalConstraint | null {
+  if (!isRecord(value)) return null;
+  if (!['auto', 'airport', 'circuits', 'none'].includes(String(value.mode))) return null;
+  if (value.elevationFt !== null && !finiteInRange(value.elevationFt, 0, 20000)) return null;
+  if (typeof value.icaoCode !== 'string') return null;
+  if (!finiteInRange(value.circuitCount, 1, 20) || !finiteInRange(value.minutesPerCircuit, 1, 30)) return null;
+  return {
+    mode: value.mode as WaypointVerticalMode,
+    elevationFt: value.elevationFt as number | null,
+    icaoCode: normalizeIcao(value.icaoCode),
+    circuitCount: value.circuitCount as number,
+    minutesPerCircuit: value.minutesPerCircuit as number,
+  };
+}
+
+function isNavigationSettings(value: unknown): value is NavigationSettings {
+  return isRecord(value) &&
+    finiteInRange(value.tasKt, 1, 400) &&
+    finiteInRange(value.windFromDeg, 0, 359) &&
+    finiteInRange(value.windSpeedKt, 0, 200) &&
+    finiteInRange(value.variationDegEast, -180, 180) &&
+    typeof value.automaticVariation === 'boolean';
+}
+
+function isPerformanceSettings(value: unknown): value is PerformanceSettings {
+  return isRecord(value) &&
+    typeof value.usePohPerformance === 'boolean' &&
+    finiteInRange(value.pressureAltitudeFt, 0, 14000) &&
+    finiteInRange(value.oatC, -60, 50) &&
+    finiteInRange(value.rpm, 2000, 2400) &&
+    finiteInRange(value.manifoldPressureInHg, 15, 27);
+}
+
+function isWeatherSettings(value: unknown): value is WeatherSettings {
+  return isRecord(value) &&
+    typeof value.useForecastWinds === 'boolean' &&
+    typeof value.departureTimeUtc === 'string';
+}
+
+function isVerticalProfileSettings(value: unknown): value is VerticalProfileSettings {
+  return isRecord(value) &&
+    finiteInRange(value.departureElevationFt, 0, 20000) &&
+    finiteInRange(value.destinationElevationFt, 0, 20000) &&
+    typeof value.departureIcaoCode === 'string' &&
+    typeof value.destinationIcaoCode === 'string' &&
+    finiteInRange(value.climbRateFpm, 1, 5000) &&
+    finiteInRange(value.descentRateFpm, 1, 5000) &&
+    finiteInRange(value.climbGroundSpeedKt, 1, 300) &&
+    finiteInRange(value.descentGroundSpeedKt, 1, 300);
+}
+
+function validCoordinate(lat: unknown, lon: unknown): boolean {
+  return finiteInRange(lat, -90, 90) && finiteInRange(lon, -180, 180);
+}
+
+function finiteInRange(value: unknown, min: number, max: number): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function hasPatchDifference<T extends object>(current: T, patch: Partial<T>): boolean {

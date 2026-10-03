@@ -49,7 +49,8 @@ body.map-overlay-open { overflow: hidden; }
   font-weight: 800;
 }
 
-.map-expand-button {
+.map-expand-button,
+.map-delete-route-button {
   flex: 0 0 auto;
   padding: 7px 10px;
   border: 1px solid #c9d3df;
@@ -62,6 +63,22 @@ body.map-overlay-open { overflow: hidden; }
 }
 
 .map-expand-button:hover { background: #f1f5f9; }
+
+.map-delete-route-button {
+  border-color: #e2b8b2;
+  color: #a52a20;
+}
+
+.map-delete-route-button:hover:not(:disabled) {
+  border-color: #d99b93;
+  background: #fff3f1;
+}
+
+.map-delete-route-button:disabled {
+  color: #9aa5b4;
+  border-color: #d9e0e8;
+  background: #f7f9fb;
+}
 
 .glide-assumption-bar {
   flex: 0 0 auto;
@@ -187,7 +204,8 @@ body.map-resizing { cursor: ns-resize; user-select: none; }
   .map-resize-handle { display: none; }
   .map-toolbar-right { gap: 8px; }
   .chart-detail-control span { display: none; }
-  .map-expand-button { padding: 6px 8px; }
+  .map-expand-button,
+  .map-delete-route-button { padding: 6px 8px; }
   .map-column--expanded { inset: 4px; }
   .map-column--expanded .map { flex: 1 1 auto; min-height: 0; height: auto; }
   .map-column--expanded .map-note { display: none; }
@@ -204,6 +222,7 @@ body.map-resizing { cursor: ns-resize; user-select: none; }
 @media (max-width: 560px) {
   .map-toolbar { padding: 0 9px; }
   .chart-detail-control select { padding: 5px 18px 5px 6px; font-size: 9px; }
-  .map-expand-button { font-size: 9px; }
+  .map-expand-button,
+  .map-delete-route-button { font-size: 9px; }
   .glide-assumption-bar { padding: 6px 9px; }
 }
