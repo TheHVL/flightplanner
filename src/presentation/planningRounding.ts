@@ -13,6 +13,7 @@ export function ceilPlanningMinutes(minutes: number): number {
   if (!Number.isFinite(minutes) || minutes < 0) {
     throw new Error('Planning time must be a finite non-negative number.');
   }
+  if (minutes <= ROUNDING_EPSILON) return 0;
   return Math.ceil(minutes - ROUNDING_EPSILON);
 }
 
@@ -20,6 +21,7 @@ export function ceilFuelUsageGal(gallons: number): number {
   if (!Number.isFinite(gallons) || gallons < 0) {
     throw new Error('Fuel usage must be a finite non-negative number.');
   }
+  if (gallons <= ROUNDING_EPSILON) return 0;
   return Math.ceil(gallons - ROUNDING_EPSILON);
 }
 
