@@ -22,6 +22,7 @@ Browser-based VFR flight planning for Norwegian flight training, with the Cessna
 - Manual MSA entry for every OFP leg, with a warning when PL is below the entered MSA.
 - Optional C182T zero-wind maximum-glide visualization based on POH Figure 3-1 and the modeled route altitude. The overlay follows the plotted route path.
 - UiT-style operational flight-plan navigation log with accumulated distance/time and editable planned level (PL) per leg.
+- Individual OFP leg distance is displayed rounded upward to the next whole NM; accumulated and total route distance remain shown to the nearest 0.5 NM. Internal calculations retain exact distance.
 - A solid horizontal separator is drawn across the OFP after every intermediate waypoint selected as `Airport / T&G`, making the start of the next flight-plan sector easy to identify.
 - Complete C182T POH Figure 5-9 cruise-performance model from sea level through 14,000 ft, 2000-2400 RPM where published, ISA -20°C to ISA +20°C, with bounded interpolation and no extrapolation.
 - C182T POH Figure 5-8 climb-performance model with selectable Normal Climb 90 KIAS and Maximum Rate of Climb profiles.
