@@ -46,15 +46,27 @@ export function restoreWorkingRoute(
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return false;
     const parsed: unknown = JSON.parse(raw);
-    if (!isStoredWorkingRoute(parsed)) return false;
+    if (!isStoredWorkingRoute(parsed)) {
+      window.localStorage.removeItem(STORAGE_KEY);
+      return false;
+    }
 
-    if (!store.restoreWorkingDraftState(parsed.flightPlan)) return false;
+    if (!store.restoreWorkingDraftState(parsed.flightPlan)) {
+      window.localStorage.removeItem(STORAGE_KEY);
+      return false;
+    }
     if (!routeShapes.restoreShapeDraft(parsed.routeShapes)) {
       store.clear();
+      window.localStorage.removeItem(STORAGE_KEY);
       return false;
     }
     return true;
   } catch {
+    try {
+      window.localStorage.removeItem(STORAGE_KEY);
+    } catch {
+      // Ignore storage cleanup failures.
+    }
     return false;
   }
 }
