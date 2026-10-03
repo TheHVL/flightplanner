@@ -23,6 +23,28 @@ Displayed OFP values may be rounded for readability. Internal calculations keep 
 
 ---
 
+## 2026-10-03, conservative OFP rounding and manual climb fuel-flow access
+
+### Added / changed
+
+- Calculated planning time is now displayed rounded upward to the next whole minute in the OFP and vertical-profile summaries.
+- Calculated fuel usage is now displayed rounded upward to the next whole US gallon in OFP INT/ACC cells, phase summaries and trip-fuel usage metrics.
+- Display rounding is presentation-only. Navigation, performance, fuel remaining and all internal calculations continue to use unrounded values.
+- Manual climb FF is now always visible in Phase 4 trip fuel planning.
+- When `Manual rate / TAS` is selected in the Vertical Profile panel, Manual climb FF is also shown directly beside the manual climb rate and TAS inputs.
+- Added focused tests for upward time/fuel presentation rounding and floating-point boundary handling.
+
+### Display convention
+
+```text
+displayed time [min] = ceil(exact calculated time [min])
+displayed fuel used [gal] = ceil(exact calculated fuel used [gal])
+```
+
+A small numerical epsilon is applied before `ceil` so floating-point noise immediately above an exact integer does not create a false extra minute or gallon.
+
+---
+
 ## 2026-09-08, exact vertical-profile conflict diagnostics
 
 ### Added / changed

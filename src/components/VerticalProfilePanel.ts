@@ -19,6 +19,10 @@ import {
   formatVerticalConflict,
   verticalConflictAdvice,
 } from '../navigation/verticalConflicts';
+import {
+  ceilFuelUsageGal,
+  formatPlanningMinutesLabel,
+} from '../presentation/planningRounding';
 
 export class VerticalProfilePanel {
   private readonly aipStatus = new Map<string, string>();
@@ -116,7 +120,7 @@ export class VerticalProfilePanel {
         </select>
       </label>
       ${manualClimb
-        ? '<div class="vertical-poh-note"><strong>Manual climb:</strong> climb time uses the selected rate. The entered climb TAS is combined with the active leg wind to place TOC. Enter Manual climb FF in the fuel panel if climb fuel should be included.</div>'
+        ? '<div class="vertical-poh-note"><strong>Manual climb:</strong> climb time uses the selected rate. The entered climb TAS is combined with the active leg wind to place TOC. Enter Manual climb FF below to include climb fuel. The same value is also available in Phase 4 trip fuel planning.</div>'
         : `<div class="vertical-poh-note"><strong>POH Figure 5-8:</strong> 3100 lb, flaps up, 2400 RPM, full throttle, mixture at Maximum Power Fuel Flow placard, cowl flaps OPEN. The POH table gives zero-wind air distance, time and fuel. Flightplanner derives average climb TAS from air distance/time, then applies the active per-leg wind to place TOC on the ground track. Time/fuel/distance are increased 10% for each 10°C above ISA, using route-weather OAT where available and Phase 4 OAT as fallback. ${fuelSettings.climbPerformanceMode === 'poh-normal-90' ? 'Normal climb is published through 10,000 ft.' : 'Maximum-rate climb is published through 14,000 ft.'}</div>`}
       <div class="vertical-input-grid">
         ${this.numberField(`${departureName} elevation`, 'dep-elev', settings.departureElevationFt, 'ft', 0, 20000, 10)}
@@ -124,6 +128,7 @@ export class VerticalProfilePanel {
         ${manualClimb ? this.numberField('Climb rate', 'climb-rate', settings.climbRateFpm, 'ft/min', 100, 5000, 50) : ''}
         ${this.numberField('Descent rate', 'descent-rate', settings.descentRateFpm, 'ft/min', 100, 5000, 50)}
         ${manualClimb ? this.numberField('Manual climb TAS', 'climb-gs', settings.climbGroundSpeedKt, 'kt', 20, 300, 1) : ''}
+        ${manualClimb ? this.nullableNumberField('Manual climb FF', 'climb-ff', fuelSettings.climbFuelFlowGph, 'GPH', 0, 40, 0.1) : ''}
         ${this.numberField('Descent TAS', 'descent-gs', settings.descentGroundSpeedKt, 'kt', 20, 300, 1)}
       </div>
       ${this.endpointAipControls('departure', departureName, settings.departureIcaoCode, settings.departureElevationFt)}
@@ -237,7 +242,7 @@ export class VerticalProfilePanel {
           ? 'POH max rate'
           : 'manual climb'
       : 'manual descent';
-    const fuel = event.fuelGal === null ? '' : ` · ${event.fuelGal.toFixed(2)} gal`;
+    const fuel = event.fuelGal === null ? '' : ` · ${ceilFuelUsageGal(event.fuelGal)} gal`;
     const zeroWind = event.zeroWindDistanceNm === null ? '' : ` · POH zero-wind ${event.zeroWindDistanceNm.toFixed(1)} NM`;
 
     return `
@@ -245,7 +250,7 @@ export class VerticalProfilePanel {
         <span class="vertical-event-badge">${event.type}</span>
         <div>
           <strong>${location}</strong>
-          <small>${Math.round(event.altitudeFromFt).toLocaleString()} → ${Math.round(event.altitudeToFt).toLocaleString()} ft · ${event.timeMin.toFixed(1)} min${fuel} · ${Math.round(event.phaseTasKt)} KTAS${zeroWind} · ${reason} · ${source}</small>
+          <small>${Math.round(event.altitudeFromFt).toLocaleString()} → ${Math.round(event.altitudeToFt).toLocaleString()} ft · ${formatPlanningMinutesLabel(event.timeMin)}${fuel} · ${Math.round(event.phaseTasKt)} KTAS${zeroWind} · ${reason} · ${source}</small>
         </div>
       </div>`;
   }
@@ -306,6 +311,15 @@ export class VerticalProfilePanel {
 
     const field = target.dataset.verticalField;
     if (!field) return;
+
+    if (field === 'climb-ff') {
+      const value = target.value.trim() === '' ? null : Number(target.value);
+      if (value !== null && !Number.isFinite(value)) return;
+      const current = getFuelPlanningSettings();
+      saveFuelPlanningSettings({ ...current, climbFuelFlowGph: value });
+      return;
+    }
+
     const value = Number(target.value);
     if (!Number.isFinite(value)) return;
 
@@ -403,6 +417,25 @@ export class VerticalProfilePanel {
       </label>`;
   }
 
+  private nullableNumberField(
+    label: string,
+    field: string,
+    value: number | null,
+    unit: string,
+    min: number,
+    max: number,
+    step: number,
+  ): string {
+    return `
+      <label class="vertical-field">
+        <span>${this.escape(label)}</span>
+        <div class="vertical-input-wrap">
+          <input type="number" data-vertical-field="${field}" value="${value ?? ''}" min="${min}" max="${max}" step="${step}" placeholder="optional" />
+          <em>${unit}</em>
+        </div>
+      </label>`;
+  }
+
   private icaoSuggestion(value: string): string {
     const normalized = normalizeIcao(value);
     return normalized.length === 4 ? normalized : '';
@@ -417,8 +450,7 @@ export class VerticalProfilePanel {
   }
 
   private minutesLabel(value: number): string {
-    if (Number.isInteger(value)) return `${value} min`;
-    return `${value.toFixed(1)} min`;
+    return formatPlanningMinutesLabel(value);
   }
 
   private escape(value: string): string {

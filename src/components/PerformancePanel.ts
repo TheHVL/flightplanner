@@ -1,7 +1,9 @@
 import type { FlightPlanStore, PerformanceSettings } from '../flightplan/FlightPlanStore';
 import { calculateCruisePerformance } from '../performance/cruisePerformance';
+import { ceilFuelUsageGal } from '../presentation/planningRounding';
 import {
   calculateFuelPlanForStore,
+  FUEL_SETTINGS_CHANGED_EVENT,
   getFuelPlanningSettings,
   saveFuelPlanningSettings,
   type FuelPlanningSettings,
@@ -14,6 +16,9 @@ export class PerformancePanel {
   ) {
     this.element.addEventListener('input', (event) => this.handleInput(event));
     this.store.subscribe(() => this.refreshFuelResult());
+    if (typeof window !== 'undefined') {
+      window.addEventListener(FUEL_SETTINGS_CHANGED_EVENT, () => this.syncFuelSettings());
+    }
   }
 
   render(): void {
@@ -47,20 +52,18 @@ export class PerformancePanel {
           <p class="eyebrow">FUEL · PHASE-AWARE</p>
           <h3>Trip fuel planning</h3>
         </div>
-        <p class="hint fuel-hint">Cruise fuel follows each leg's PL and available route-weather OAT. When a POH climb profile is selected in the Vertical Profile panel, Figure 5-8 supplies climb time, fuel and zero-wind distance automatically. Descent and circuit fuel flow remain manual until verified source data is supplied.</p>
+        <p class="hint fuel-hint">Cruise fuel follows each leg's PL and available route-weather OAT. When a POH climb profile is selected in the Vertical Profile panel, Figure 5-8 supplies climb time, fuel and zero-wind distance automatically. Manual climb FF is used only with Manual rate / TAS. Descent and circuit fuel flow remain manual until verified source data is supplied.</p>
         <div class="nav-input-grid fuel-grid">
           ${this.fuelNumberField('startupTaxiTakeoffGal', 'Start/taxi/takeoff', fuelSettings.startupTaxiTakeoffGal, 'gal', 0.1, 0, 20, false)}
           ${this.fuelNumberField('manualCruiseFuelFlowGph', 'Manual cruise FF', fuelSettings.manualCruiseFuelFlowGph, 'GPH', 0.1, 0, 40)}
-          ${fuelSettings.climbPerformanceMode === 'manual'
-            ? this.fuelNumberField('climbFuelFlowGph', 'Manual climb FF', fuelSettings.climbFuelFlowGph, 'GPH', 0.1, 0, 40)
-            : ''}
+          ${this.fuelNumberField('climbFuelFlowGph', 'Manual climb FF', fuelSettings.climbFuelFlowGph, 'GPH', 0.1, 0, 40)}
           ${this.fuelNumberField('descentFuelFlowGph', 'Descent FF', fuelSettings.descentFuelFlowGph, 'GPH', 0.1, 0, 40)}
           ${this.fuelNumberField('circuitFuelFlowGph', 'Circuit FF', fuelSettings.circuitFuelFlowGph, 'GPH', 0.1, 0, 40)}
           ${this.fuelNumberField('totalFuelOnboardGal', 'Fuel onboard', fuelSettings.totalFuelOnboardGal, 'gal', 0.1, 0, 100)}
         </div>
         <div id="fuel-result" class="fuel-result"></div>
         <div class="nav-help fuel-source">
-          <strong>Source/assumptions:</strong> the UiT OFP v4.2 fuel-requirements box states that Trip Fuel includes 1.7 US gal for startup, taxi and takeoff, so 1.7 gal is the default allowance. Figure 5-8 supplies climb fuel when a POH climb profile is selected. Figure 5-9 supplies cruise fuel flow. PL/elevation are currently used as pressure-altitude proxies until QNH conversion is added.
+          <strong>Source/assumptions:</strong> the UiT OFP v4.2 fuel-requirements box states that Trip Fuel includes 1.7 US gal for startup, taxi and takeoff, so 1.7 gal is the default allowance. Figure 5-8 supplies climb fuel when a POH climb profile is selected. Figure 5-9 supplies cruise fuel flow. Calculated fuel usage is displayed rounded up to the next whole US gallon, while internal calculations retain full precision. PL/elevation are currently used as pressure-altitude proxies until QNH conversion is added.
         </div>
       </div>
     `;
@@ -152,6 +155,15 @@ export class PerformancePanel {
     this.refreshFuelResult();
   }
 
+  private syncFuelSettings(): void {
+    const settings = getFuelPlanningSettings();
+    const climbFuelInput = this.element.querySelector<HTMLInputElement>('[data-fuel-field="climbFuelFlowGph"]');
+    if (climbFuelInput && document.activeElement !== climbFuelInput) {
+      climbFuelInput.value = settings.climbFuelFlowGph === null ? '' : String(settings.climbFuelFlowGph);
+    }
+    this.refreshFuelResult();
+  }
+
   private refreshResult(): void {
     const resultElement = this.element.querySelector<HTMLElement>('#performance-result');
     if (!resultElement) return;
@@ -186,26 +198,32 @@ export class PerformancePanel {
         return;
       }
 
-      const metric = (label: string, value: number | null) => `
+      const usageMetric = (label: string, value: number | null) => `
         <div class="fuel-metric">
           <span>${label}</span>
-          <strong>${value === null ? 'NEEDS INPUT' : `${value.toFixed(2)} GAL`}</strong>
+          <strong>${value === null ? 'NEEDS INPUT' : `${ceilFuelUsageGal(value)} GAL`}</strong>
+        </div>
+      `;
+      const remainingMetric = (label: string, value: number | null) => `
+        <div class="fuel-metric">
+          <span>${label}</span>
+          <strong>${value === null ? 'NEEDS INPUT' : `${value.toFixed(1)} GAL`}</strong>
         </div>
       `;
       const landing = plan.totalFuelOnboardGal === null
         ? '<div class="fuel-metric"><span>Est. landing fuel</span><strong>ENTER ONBOARD</strong></div>'
-        : metric('Est. landing fuel', plan.landingFuelGal);
+        : remainingMetric('Est. landing fuel', plan.landingFuelGal);
       const warningHtml = plan.warnings.length > 0
         ? `<div class="fuel-warning">${plan.warnings.slice(0, 4).join(' ')}</div>`
         : '';
 
       resultElement.innerHTML = `
-        ${metric('Cruise', plan.cruiseFuelGal)}
-        ${metric('Climb', plan.climbFuelGal)}
-        ${metric('Descent', plan.descentFuelGal)}
-        ${metric('Circuits', plan.circuitFuelGal)}
-        ${metric('Start/taxi/takeoff', plan.startupTaxiTakeoffGal)}
-        <div class="fuel-metric fuel-metric--total"><span>Trip fuel</span><strong>${plan.tripFuelGal === null ? 'NEEDS INPUT' : `${plan.tripFuelGal.toFixed(2)} GAL`}</strong></div>
+        ${usageMetric('Cruise', plan.cruiseFuelGal)}
+        ${usageMetric('Climb', plan.climbFuelGal)}
+        ${usageMetric('Descent', plan.descentFuelGal)}
+        ${usageMetric('Circuits', plan.circuitFuelGal)}
+        ${usageMetric('Start/taxi/takeoff', plan.startupTaxiTakeoffGal)}
+        <div class="fuel-metric fuel-metric--total"><span>Trip fuel</span><strong>${plan.tripFuelGal === null ? 'NEEDS INPUT' : `${ceilFuelUsageGal(plan.tripFuelGal)} GAL`}</strong></div>
         ${landing}
         ${warningHtml}
       `;

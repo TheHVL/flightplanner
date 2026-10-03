@@ -23,6 +23,7 @@ Browser-based VFR flight planning for Norwegian flight training, with the Cessna
 - Complete C182T POH Figure 5-9 cruise-performance model from sea level through 14,000 ft, 2000-2400 RPM where published, ISA -20°C to ISA +20°C, with bounded interpolation and no extrapolation.
 - C182T POH Figure 5-8 climb-performance model with selectable Normal Climb 90 KIAS and Maximum Rate of Climb profiles.
 - Phase-aware fuel planning that separates cruise, climb, descent, circuit/pattern, and startup/taxi/takeoff fuel.
+- OFP/planning displays round calculated time upward to the next whole minute and calculated fuel used upward to the next whole US gallon, while internal calculations retain full precision.
 - Optional fuel-onboard entry and estimated fuel remaining in the OFP.
 - Route weather preview using Open-Meteo pressure-level winds and temperature, interpolated by geopotential height and forecast time.
 - Manual wind backup for every route leg, with fetched forecast first, manual leg wind second, and the global Phase 2 wind as final fallback.
@@ -159,9 +160,18 @@ For each route leg, the horizontal distance is split into modeled climb, cruise 
 
 Cruise fuel flow comes from Figure 5-9 when POH performance is enabled. If POH performance is disabled, a manual cruise fuel-flow field is available.
 
-When either POH climb profile is selected, climb time and climb fuel come from Figure 5-8. The POH zero-wind distance is used to derive climb TAS, then active wind determines the ground distance occupied by the climb. Manual climb rate/TAS and climb FF remain available through Manual climb mode.
+When either POH climb profile is selected, climb time and climb fuel come from Figure 5-8. The POH zero-wind distance is used to derive climb TAS, then active wind determines the ground distance occupied by the climb. Manual climb rate/TAS and climb FF remain available through Manual climb mode. When Manual rate / TAS is selected, Manual climb FF is shown directly beside the manual climb inputs in the Vertical Profile panel and is also available in Phase 4 trip fuel planning.
 
 The supplied climb and cruise sources do **not** provide descent or circuit fuel-flow data. Flightplanner therefore does not invent those values. Descent FF and Circuit FF remain manual inputs until a verified C182T source or UTSA planning standard is provided.
+
+Display rounding is presentation-only:
+
+```text
+displayed planning time = ceil(exact calculated minutes)
+displayed fuel used = ceil(exact calculated US gallons)
+```
+
+Fuel remaining and all internal time/fuel calculations continue to use unrounded values.
 
 Fuel formulas:
 
