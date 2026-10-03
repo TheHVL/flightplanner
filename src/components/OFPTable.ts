@@ -15,6 +15,7 @@ import {
   FUEL_SETTINGS_CHANGED_EVENT,
   type FuelLegPlan,
 } from '../fuel/fuelPlanning';
+import { isOfpTouchAndGoBoundary } from './ofpTouchAndGoBoundary';
 
 interface LegRowResult {
   html: string;
@@ -124,6 +125,7 @@ export class OFPTable {
         <span class="msa-legend-warning">PL below entered MSA is highlighted.</span>
         <span>Fuel INT/ACC uses modeled cruise, climb, descent and circuit phases where the required fuel-flow inputs are available.</span>
         <span>Displayed planning time is rounded up to the next whole minute. Displayed fuel used is rounded up to the next whole US gallon. Calculations retain full precision.</span>
+        <span class="ofp-touch-and-go-legend"><i></i> Solid line = Airport / T&amp;G boundary and start of the next OFP sector.</span>
         ${totalCircuitMinutes > 0 ? `<span>Circuit/pattern allowance: +${this.formatActivityMinutes(totalCircuitMinutes)} in ACC TIME${fuelPlan.circuitFuelGal === null ? '; enter Circuit FF to include its fuel' : `; ${ceilFuelUsageGal(fuelPlan.circuitFuelGal)} gal included` }.</span>` : ''}
       </div>
     `;
@@ -139,6 +141,11 @@ export class OFPTable {
     estimatedRemainingGal: number | null,
     startupTaxiTakeoffGal: number,
   ): LegRowResult {
+    const isTouchAndGoBoundary = isOfpTouchAndGoBoundary(
+      this.store.getWaypointVerticalConstraint(leg.to.id).mode,
+    );
+    const boundaryClass = isTouchAndGoBoundary ? 'ofp-touch-and-go-boundary' : '';
+
     try {
       if (legPlan.performanceError) throw new Error(`POH performance: ${legPlan.performanceError}`);
 
@@ -177,7 +184,7 @@ export class OFPTable {
 
       return {
         html: `
-        <tr class="${belowMsa ? 'ofp-row-warning' : ''}">
+        <tr class="${[belowMsa ? 'ofp-row-warning' : '', boundaryClass].filter(Boolean).join(' ')}">
           <td><strong>${leg.from.name}</strong></td>
           <td class="calculated" title="${tasTitle}">${legPlan.tasKt.toFixed(0)}</td>
           <td class="calculated">${this.headingLabel(leg.trueTrackDeg)}</td>
@@ -245,7 +252,7 @@ export class OFPTable {
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Navigation calculation failed.';
       return {
-        html: `<tr><td><strong>${leg.from.name}</strong></td><td colspan="24" class="calculation-error">${message}</td></tr>`,
+        html: `<tr class="${boundaryClass}"><td><strong>${leg.from.name}</strong></td><td colspan="24" class="calculation-error">${message}</td></tr>`,
       };
     }
   }
