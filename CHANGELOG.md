@@ -23,6 +23,32 @@ Displayed OFP values may be rounded for readability. Internal calculations keep 
 
 ---
 
+## 2026-10-03, route autosave and map delete control
+
+### Added / changed
+
+- Added a dedicated `Delete route` button to the map toolbar. It is disabled when no route exists and asks for confirmation before clearing the route.
+- Added a versioned browser-local working-route draft so a route is automatically restored after a page reload.
+- The working draft preserves waypoint identity/order/names/coordinates, route-shaping bends, PL, manual MSA, manual per-leg winds, vertical waypoint behavior, navigation settings, performance settings, weather settings and vertical-profile inputs.
+- Fetched route-weather responses are deliberately not restored because they may be stale for the restored route/time. They must be fetched again.
+- Clearing the route removes the saved working-route draft, so the next reload starts with an empty route.
+- Invalid or incompatible saved drafts are rejected and removed rather than partially applied.
+- Added automated tests for route restoration, route-shape restoration and clearing the saved draft.
+
+### Persistence boundary
+
+The browser saves planning inputs, not derived navigation/performance output:
+
+```text
+persisted:
+waypoints + route shapes + route planning inputs
+
+not persisted:
+calculated legs, TOC/TOD output, glide output, fetched weather responses
+```
+
+---
+
 ## 2026-10-03, conservative OFP rounding and manual climb fuel-flow access
 
 ### Added / changed
