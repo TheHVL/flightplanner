@@ -11,6 +11,8 @@ Browser-based VFR flight planning for Norwegian flight training, with the Cessna
 - Click the map to append a waypoint and drag markers to move them.
 - Drag a route line between existing waypoints to shape the flown path without creating another OFP waypoint. The shaped path changes flown distance, time and fuel, while TT/MT/MH remain based on the direct waypoint-to-waypoint course.
 - Reorder, rename and delete route waypoints.
+- Delete the complete route from a dedicated button in the map toolbar, with confirmation before removal.
+- Automatically autosave the current working route in the browser and restore it after a page reload, including waypoints, route-shaping bends, PL, MSA, manual leg winds, vertical waypoint behavior and the current planning inputs. Fetched weather responses are deliberately not restored and must be loaded again.
 - Ctrl+Z on Windows/Linux and Cmd+Z on macOS undo the latest planner-state action. An immediately preceding line-shape drag can also be undone.
 - Great-circle direct leg distance and initial true track.
 - Automatic WMM2025 magnetic variation per leg, with manual override.
