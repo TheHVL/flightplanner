@@ -23,6 +23,18 @@ Displayed OFP values may be rounded for readability. Internal calculations keep 
 
 ---
 
+## 2026-10-03, OFP touch-and-go sector separators
+
+### Added / changed
+
+- Added a solid horizontal separator across the OFP after every intermediate waypoint explicitly selected as `Airport / T&G`.
+- The separator sits after the leg arriving at that airport, so the row immediately below is visually the start of the next OFP/flight-plan sector.
+- Added an OFP legend entry explaining the separator.
+- `Airport + circuits` does not create this separator, because it is a separate activity mode rather than the explicit `Airport / T&G` sector-boundary selection.
+- Added a focused test for the boundary-mode rule.
+
+---
+
 ## 2026-10-03, route autosave and map delete control
 
 ### Added / changed
