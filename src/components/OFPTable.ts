@@ -6,6 +6,11 @@ import {
 } from '../navigation/magneticVariation';
 import { trueToMagnetic } from '../navigation/wind';
 import {
+  ceilFuelUsageGal,
+  formatPlanningMinutesLabel,
+  formatPlanningTime,
+} from '../presentation/planningRounding';
+import {
   calculateFuelPlanForStore,
   FUEL_SETTINGS_CHANGED_EVENT,
   type FuelLegPlan,
@@ -118,7 +123,8 @@ export class OFPTable {
         <span>MSA is entered manually. Use the ±1 NM map corridor to inspect terrain/obstacles.</span>
         <span class="msa-legend-warning">PL below entered MSA is highlighted.</span>
         <span>Fuel INT/ACC uses modeled cruise, climb, descent and circuit phases where the required fuel-flow inputs are available.</span>
-        ${totalCircuitMinutes > 0 ? `<span>Circuit/pattern allowance: +${this.formatActivityMinutes(totalCircuitMinutes)} in ACC TIME${fuelPlan.circuitFuelGal === null ? '; enter Circuit FF to include its fuel' : `; ${fuelPlan.circuitFuelGal.toFixed(2)} gal included` }.</span>` : ''}
+        <span>Displayed planning time is rounded up to the next whole minute. Displayed fuel used is rounded up to the next whole US gallon. Calculations retain full precision.</span>
+        ${totalCircuitMinutes > 0 ? `<span>Circuit/pattern allowance: +${this.formatActivityMinutes(totalCircuitMinutes)} in ACC TIME${fuelPlan.circuitFuelGal === null ? '; enter Circuit FF to include its fuel' : `; ${ceilFuelUsageGal(fuelPlan.circuitFuelGal)} gal included` }.</span>` : ''}
       </div>
     `;
   }
@@ -186,10 +192,10 @@ export class OFPTable {
             : `<td class="calculated" title="Cruise fuel flow. ${performanceTitle}">${legPlan.cruiseFuelFlowGph.toFixed(1)}</td>`}
           ${legPlan.legFuelGal === null
             ? `<td class="pending" title="${legPlan.phaseWarning ?? 'Fuel input incomplete'}">—</td>`
-            : `<td class="calculated" title="${fuelTitle}">${legPlan.legFuelGal.toFixed(2)}</td>`}
+            : `<td class="calculated" title="${fuelTitle}">${ceilFuelUsageGal(legPlan.legFuelGal)}</td>`}
           ${accumulatedFuelGal === null
             ? `<td class="pending" title="${accumulatedFuelTitle}">—</td>`
-            : `<td class="calculated" title="${accumulatedFuelTitle}">${accumulatedFuelGal.toFixed(2)}</td>`}
+            : `<td class="calculated" title="${accumulatedFuelTitle}">${ceilFuelUsageGal(accumulatedFuelGal)}</td>`}
           <td><strong>${leg.to.name}</strong></td>
           <td class="editable-cell ${belowMsa ? 'msa-warning-cell' : ''}">
             <input
@@ -283,7 +289,7 @@ export class OFPTable {
   }
 
   private phaseFuelTitle(leg: FuelLegPlan): string {
-    const component = (name: string, value: number | null) => value === null ? `${name} needs FF` : `${name} ${value.toFixed(2)} gal`;
+    const component = (name: string, value: number | null) => value === null ? `${name} needs FF` : `${name} ${ceilFuelUsageGal(value)} gal`;
     return [
       component('cruise', leg.cruiseFuelGal),
       leg.climbTimeMin > 0 ? component('climb', leg.climbFuelGal) : '',
@@ -307,16 +313,10 @@ export class OFPTable {
   }
 
   private formatMinutes(minutes: number): string {
-    const totalSeconds = Math.round(minutes * 60);
-    const hours = Math.floor(totalSeconds / 3600);
-    const mins = Math.floor((totalSeconds % 3600) / 60);
-    const secs = totalSeconds % 60;
-    return hours > 0
-      ? `${hours}:${String(mins).padStart(2, '0')}`
-      : `${mins}:${String(secs).padStart(2, '0')}`;
+    return formatPlanningTime(minutes);
   }
 
   private formatActivityMinutes(minutes: number): string {
-    return Number.isInteger(minutes) ? `${minutes} min` : `${minutes.toFixed(1)} min`;
+    return formatPlanningMinutesLabel(minutes);
   }
 }
