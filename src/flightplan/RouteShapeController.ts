@@ -4,6 +4,12 @@ import { calculateRouteLegs, routeLegKey } from '../navigation/geodesy';
 
 export const ROUTE_SHAPE_CHANGED_EVENT = 'flightplanner-route-shape-changed';
 
+export interface RouteShapeDraft {
+  fromId: string;
+  toId: string;
+  coordinate: Coordinate;
+}
+
 interface ShapeUndo {
   key: string;
   previousShape: Coordinate | null;
@@ -102,6 +108,63 @@ export class RouteShapeController {
 
     this.emit();
     return true;
+  }
+
+  getShapeDraft(): RouteShapeDraft[] {
+    return [...this.shapes.entries()]
+      .map(([key, coordinate]) => {
+        const [fromId, toId] = key.split('->');
+        return fromId && toId ? { fromId, toId, coordinate: { ...coordinate } } : null;
+      })
+      .filter((shape): shape is RouteShapeDraft => shape !== null);
+  }
+
+  restoreShapeDraft(value: unknown): boolean {
+    if (!Array.isArray(value)) return false;
+
+    const activeKeys = new Set(
+      this.store.getWaypoints()
+        .slice(0, -1)
+        .map((waypoint, index, waypoints) => routeLegKey(waypoint.id, waypoints[index + 1].id)),
+    );
+    const restored = new Map<string, Coordinate>();
+
+    for (const item of value) {
+      if (
+        typeof item !== 'object' ||
+        item === null ||
+        !('fromId' in item) ||
+        !('toId' in item) ||
+        !('coordinate' in item)
+      ) return false;
+
+      const fromId = (item as { fromId?: unknown }).fromId;
+      const toId = (item as { toId?: unknown }).toId;
+      const coordinate = (item as { coordinate?: unknown }).coordinate;
+      if (typeof fromId !== 'string' || typeof toId !== 'string') return false;
+      if (typeof coordinate !== 'object' || coordinate === null) return false;
+
+      const lat = (coordinate as { lat?: unknown }).lat;
+      const lon = (coordinate as { lon?: unknown }).lon;
+      if (typeof lat !== 'number' || typeof lon !== 'number' || !isValidCoordinate({ lat, lon })) return false;
+
+      const key = routeLegKey(fromId, toId);
+      if (!activeKeys.has(key)) return false;
+      restored.set(key, { lat, lon });
+    }
+
+    this.shapes.clear();
+    for (const [key, coordinate] of restored) this.shapes.set(key, coordinate);
+    this.immediateUndo = null;
+    this.emit();
+    return true;
+  }
+
+  clearAllShapes(): void {
+    if (this.shapes.size === 0) return;
+    this.shapes.clear();
+    this.immediateUndo = null;
+    this.emit();
   }
 
   hasAnyShapes(): boolean {
