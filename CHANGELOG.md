@@ -23,6 +23,23 @@ Displayed OFP values may be rounded for readability. Internal calculations keep 
 
 ---
 
+## 2026-10-03, whole-NM OFP leg-distance rounding
+
+### Added / changed
+
+- The OFP leg `DIST` column now rounds every individual leg upward to the next whole nautical mile, so half-NM values are no longer shown there.
+- Exact route geometry remains unchanged and all navigation, time and fuel calculations continue to use full-precision leg distance.
+- Accumulated and total route distance still use the existing nearest-0.5-NM display convention.
+- Added tests for upward whole-NM leg-distance rounding and floating-point integer boundaries.
+
+### Display convention
+
+```text
+displayed OFP leg distance [NM] = ceil(exact leg distance [NM])
+```
+
+---
+
 ## 2026-10-03, OFP touch-and-go sector separators
 
 ### Added / changed
