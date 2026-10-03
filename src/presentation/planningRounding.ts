@@ -3,8 +3,9 @@
  *
  * Internal navigation, performance and fuel calculations retain full precision.
  * These helpers implement the conservative display convention requested for the
- * OFP and planning summaries: time rounds upward to the next whole minute and
- * fuel used rounds upward to the next whole US gallon.
+ * OFP and planning summaries: time rounds upward to the next whole minute,
+ * fuel used rounds upward to the next whole US gallon, and individual OFP leg
+ * distance rounds upward to the next whole nautical mile.
  */
 
 const ROUNDING_EPSILON = 1e-9;
@@ -23,6 +24,14 @@ export function ceilFuelUsageGal(gallons: number): number {
   }
   if (gallons <= ROUNDING_EPSILON) return 0;
   return Math.ceil(gallons - ROUNDING_EPSILON);
+}
+
+export function ceilLegDistanceNm(distanceNm: number): number {
+  if (!Number.isFinite(distanceNm) || distanceNm < 0) {
+    throw new Error('Leg distance must be a finite non-negative number.');
+  }
+  if (distanceNm <= ROUNDING_EPSILON) return 0;
+  return Math.ceil(distanceNm - ROUNDING_EPSILON);
 }
 
 export function formatPlanningTime(minutes: number): string {
