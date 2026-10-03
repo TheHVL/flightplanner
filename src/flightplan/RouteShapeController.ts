@@ -122,10 +122,11 @@ export class RouteShapeController {
   restoreShapeDraft(value: unknown): boolean {
     if (!Array.isArray(value)) return false;
 
+    const waypoints = this.store.getWaypoints();
     const activeKeys = new Set(
-      this.store.getWaypoints()
+      waypoints
         .slice(0, -1)
-        .map((waypoint, index, waypoints) => routeLegKey(waypoint.id, waypoints[index + 1].id)),
+        .map((waypoint, index) => routeLegKey(waypoint.id, waypoints[index + 1].id)),
     );
     const restored = new Map<string, Coordinate>();
 
