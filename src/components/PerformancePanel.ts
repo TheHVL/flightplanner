@@ -3,6 +3,7 @@ import { calculateCruisePerformance } from '../performance/cruisePerformance';
 import { ceilFuelUsageGal } from '../presentation/planningRounding';
 import {
   calculateFuelPlanForStore,
+  FUEL_SETTINGS_CHANGED_EVENT,
   getFuelPlanningSettings,
   saveFuelPlanningSettings,
   type FuelPlanningSettings,
@@ -15,6 +16,9 @@ export class PerformancePanel {
   ) {
     this.element.addEventListener('input', (event) => this.handleInput(event));
     this.store.subscribe(() => this.refreshFuelResult());
+    if (typeof window !== 'undefined') {
+      window.addEventListener(FUEL_SETTINGS_CHANGED_EVENT, () => this.syncFuelSettings());
+    }
   }
 
   render(): void {
@@ -148,6 +152,15 @@ export class PerformancePanel {
         : value,
     } as FuelPlanningSettings;
     saveFuelPlanningSettings(next);
+    this.refreshFuelResult();
+  }
+
+  private syncFuelSettings(): void {
+    const settings = getFuelPlanningSettings();
+    const climbFuelInput = this.element.querySelector<HTMLInputElement>('[data-fuel-field="climbFuelFlowGph"]');
+    if (climbFuelInput && document.activeElement !== climbFuelInput) {
+      climbFuelInput.value = settings.climbFuelFlowGph === null ? '' : String(settings.climbFuelFlowGph);
+    }
     this.refreshFuelResult();
   }
 
