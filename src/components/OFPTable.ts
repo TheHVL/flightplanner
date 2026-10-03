@@ -7,6 +7,7 @@ import {
 import { trueToMagnetic } from '../navigation/wind';
 import {
   ceilFuelUsageGal,
+  ceilLegDistanceNm,
   formatPlanningMinutesLabel,
   formatPlanningTime,
 } from '../presentation/planningRounding';
@@ -119,7 +120,7 @@ export class OFPTable {
       <div class="table-legend">
         <span><i class="dot calculated-dot"></i> Calculated</span>
         <span><i class="dot pending-dot"></i> Added in later phases</span>
-        <span>Distances shown to nearest 0.5 NM · headings/WCA shown to whole degrees</span>
+        <span>Leg DIST rounds up to the next whole NM. Accumulated/total distance remains shown to nearest 0.5 NM · headings/WCA shown to whole degrees</span>
         <span>TAS shows cruise TAS when a cruise portion exists; an all-climb/descent row shows that phase TAS. GS is whole-leg effective GS from flown distance / flight time.</span>
         <span>MSA is entered manually. Use the ±1 NM map corridor to inspect terrain/obstacles.</span>
         <span class="msa-legend-warning">PL below entered MSA is highlighted.</span>
@@ -238,7 +239,7 @@ export class OFPTable {
           </td>
           <td class="calculated">${this.headingLabel(magneticHeading)}</td>
           <td class="calculated" title="${gsTitle}">${legPlan.groundSpeedKt.toFixed(0)}</td>
-          <td class="calculated" title="Exact leg distance: ${leg.distanceNm.toFixed(2)} NM">${this.distanceLabel(leg.distanceNm)}</td>
+          <td class="calculated" title="Exact leg distance: ${leg.distanceNm.toFixed(2)} NM; displayed leg distance is rounded upward to the next whole NM">${ceilLegDistanceNm(leg.distanceNm)}</td>
           <td class="calculated" title="${timeTitle}">${this.formatMinutes(legPlan.totalTimeMin)}</td>
           <td class="pending">—</td>
           <td class="pending">—</td>

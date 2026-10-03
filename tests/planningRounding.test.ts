@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   ceilFuelUsageGal,
+  ceilLegDistanceNm,
   ceilPlanningMinutes,
   formatPlanningTime,
 } from '../src/presentation/planningRounding';
@@ -21,8 +22,17 @@ describe('planning display rounding', () => {
     expect(ceilFuelUsageGal(1.6)).toBe(2);
   });
 
+  it('rounds individual OFP leg distance upward to the nearest whole NM', () => {
+    expect(ceilLegDistanceNm(0)).toBe(0);
+    expect(ceilLegDistanceNm(12)).toBe(12);
+    expect(ceilLegDistanceNm(12.01)).toBe(13);
+    expect(ceilLegDistanceNm(12.5)).toBe(13);
+    expect(ceilLegDistanceNm(12.99)).toBe(13);
+  });
+
   it('does not bump values that only differ from an integer by floating-point noise', () => {
     expect(ceilPlanningMinutes(6.000000000000001)).toBe(6);
     expect(ceilFuelUsageGal(2.000000000000001)).toBe(2);
+    expect(ceilLegDistanceNm(12.000000000000001)).toBe(12);
   });
 });
