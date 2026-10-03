@@ -6,6 +6,7 @@ import './phase6.css';
 import './uxEnhancements.css';
 import { FlightPlanStore } from './flightplan/FlightPlanStore';
 import { ROUTE_SHAPE_CHANGED_EVENT, RouteShapeController } from './flightplan/RouteShapeController';
+import { restoreWorkingRoute, saveWorkingRoute } from './flightplan/workingRoutePersistence';
 import { MapManager, type ChartDetailMode } from './map/MapManager';
 import { RoutePanel } from './components/RoutePanel';
 import { NavigationPanel } from './components/NavigationPanel';
@@ -98,6 +99,7 @@ root.innerHTML = `
                 <option value="fast">Fast</option>
               </select>
             </label>
+            <button id="map-delete-route" class="map-delete-route-button" type="button" disabled>Delete route</button>
             <button id="map-expand" class="map-expand-button" type="button" aria-pressed="false">⛶ Expand map</button>
           </div>
         </div>
@@ -135,6 +137,7 @@ const weatherElement = document.querySelector<HTMLElement>('#weather-panel');
 const verticalProfileElement = document.querySelector<HTMLElement>('#vertical-profile-panel');
 const mapElement = document.querySelector<HTMLElement>('#map');
 const mapColumn = document.querySelector<HTMLElement>('#map-column');
+const mapDeleteRouteButton = document.querySelector<HTMLButtonElement>('#map-delete-route');
 const mapExpandButton = document.querySelector<HTMLButtonElement>('#map-expand');
 const mapResizeHandle = document.querySelector<HTMLElement>('#map-resize-handle');
 const chartDetailSelect = document.querySelector<HTMLSelectElement>('#chart-detail');
@@ -154,6 +157,7 @@ if (
   !verticalProfileElement ||
   !mapElement ||
   !mapColumn ||
+  !mapDeleteRouteButton ||
   !mapExpandButton ||
   !mapResizeHandle ||
   !chartDetailSelect ||
@@ -173,6 +177,7 @@ window.setTimeout(() => warningAck.focus(), 0);
 
 const store = new FlightPlanStore();
 const routeShapeController = new RouteShapeController(store);
+restoreWorkingRoute(store, routeShapeController);
 const routePanel = new RoutePanel(routeElement, store);
 const navigationPanel = new NavigationPanel(navigationElement, store);
 const performancePanel = new PerformancePanel(performanceElement, store);
@@ -296,6 +301,14 @@ const setMapExpanded = (expanded: boolean) => {
   mapExpandButton.textContent = expanded ? '× Exit large map' : '⛶ Expand map';
   window.requestAnimationFrame(() => mapManager.invalidateSize());
 };
+
+mapDeleteRouteButton.addEventListener('click', () => {
+  if (store.getWaypoints().length === 0) return;
+  const confirmed = window.confirm('Delete the entire route and its route-specific planning data?');
+  if (!confirmed) return;
+  routeShapeController.clearAllShapes();
+  store.clear();
+});
 
 mapExpandButton.addEventListener('click', () => {
   setMapExpanded(!mapColumn.classList.contains('map-column--expanded'));
@@ -479,6 +492,7 @@ const fixOfpFuelRemainingColumn = () => {
 const render = () => {
   const waypoints = store.getWaypoints();
   const legs = store.getLegs();
+  mapDeleteRouteButton.disabled = waypoints.length === 0;
   routePanel.render();
   ofpTable.render();
   enhanceVerticalPanel();
@@ -489,7 +503,13 @@ const render = () => {
   renderGlideEnvelope();
 };
 
-store.subscribe(render);
+store.subscribe(() => {
+  saveWorkingRoute(store, routeShapeController);
+  render();
+});
 window.addEventListener(FUEL_SETTINGS_CHANGED_EVENT, render);
-window.addEventListener(ROUTE_SHAPE_CHANGED_EVENT, render);
+window.addEventListener(ROUTE_SHAPE_CHANGED_EVENT, () => {
+  saveWorkingRoute(store, routeShapeController);
+  render();
+});
 render();
