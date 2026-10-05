@@ -21,6 +21,7 @@ Browser-based VFR flight planning for Norwegian flight training, with the Cessna
 - Optional visual MSA corridor extending 1 NM either side of the plotted route, including shaped route sections.
 - Manual MSA entry for every OFP leg, with a warning when PL is below the entered MSA.
 - Optional C182T zero-wind maximum-glide visualization based on POH Figure 3-1 and the modeled route altitude. The overlay follows the plotted route path.
+- Automatic land/water and coastline screening for the glide overlay. Sampled over-water route sections are checked against a bundled Natural Earth 1:10m land mask: red route sections have no coastline inside the modeled zero-wind glide range, while amber dashed sections have 1 NM or less modeled coastline margin.
 - UiT-style operational flight-plan navigation log with accumulated distance/time and editable planned level (PL) per leg.
 - Individual OFP leg distance is displayed rounded upward to the next whole NM; accumulated and total route distance remain shown to the nearest 0.5 NM. Internal calculations retain exact distance.
 - A solid horizontal separator is drawn across the OFP after every intermediate waypoint selected as `Airport / T&G`, making the start of the next flight-plan sector easy to identify.
@@ -60,6 +61,30 @@ The longer shaped distance is used for route distance, phase placement, time and
 Changing the flown geometry invalidates route-weather samples and clears a manual MSA for the affected leg because those values were checked against the previous geometry.
 
 Current limitation: a route leg supports one shaping bend at a time. The bend is a planning aid rather than a new navigation fix.
+
+## Glide coastline screening
+
+When the `C182T glide` overlay is enabled, Flightplanner also performs a coarse automatic coastline screening pass along the same modeled route samples.
+
+For every sampled route position:
+
+```text
+if point is on land:
+    no over-water warning
+
+if point is over water:
+    find nearest coastline inside modeled POH zero-wind glide range
+
+    coastline not found inside range -> red route section
+    coastline margin <= 1 NM          -> amber dashed route section
+    coastline margin > 1 NM           -> no route warning
+```
+
+The land mask is loaded only when the glide overlay is used. It is a clipped copy of Natural Earth `ne_10m_land` covering northern Europe and the Nordic region. Natural Earth data is public domain.
+
+**Important limitation:** Natural Earth 1:10m is generalized cartographic data. It can omit small islands and fine shoreline/fjord detail. The result is therefore a screening aid only. It does not prove that land is actually reachable, does not account for terrain between the aircraft and shoreline, does not assess landing suitability, and retains the existing POH Figure 3-1 assumptions of zero wind, propeller windmilling and flaps up.
+
+The coastline analysis is deliberately kept separate from the future terrain-assisted MSA work. A route can have coastline inside the theoretical glide radius while terrain still makes that shoreline unreachable.
 
 ## C182T cruise performance
 

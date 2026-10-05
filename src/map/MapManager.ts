@@ -50,6 +50,12 @@ export interface GlideEnvelopeMapSample {
   glideRangeNm: number;
 }
 
+export interface GlideCoastlineMapSegment {
+  severity: 'marginal' | 'unreachable';
+  from: Coordinate;
+  to: Coordinate;
+}
+
 export type { ChartDetailMode } from './icaoQuality';
 
 const WEB_MERCATOR_HALF_WORLD = 20037508.342789244;
@@ -142,6 +148,7 @@ export class MapManager {
   private readonly verticalConflictLayer: LayerGroup;
   private readonly msaCorridorLayer: LayerGroup;
   private readonly glideEnvelopeLayer: LayerGroup;
+  private readonly glideCoastlineLayer: LayerGroup;
   private chartEdition: string | null = null;
   private renderedWaypoints: Waypoint[] = [];
   private renderedLegs: RouteLeg[] = [];
@@ -163,6 +170,11 @@ export class MapManager {
     glidePane.style.zIndex = '385';
     glidePane.style.pointerEvents = 'none';
     this.glideEnvelopeLayer = L.layerGroup();
+
+    const glideCoastlinePane = this.map.createPane('glide-coastline-pane');
+    glideCoastlinePane.style.zIndex = '605';
+    glideCoastlinePane.style.pointerEvents = 'none';
+    this.glideCoastlineLayer = L.layerGroup();
 
     const msaPane = this.map.createPane('msa-corridor-pane');
     msaPane.style.zIndex = '390';
@@ -272,8 +284,13 @@ export class MapManager {
   setGlideEnvelopeVisible(visible: boolean): void {
     if (this.glideEnvelopeVisible === visible) return;
     this.glideEnvelopeVisible = visible;
-    if (visible) this.glideEnvelopeLayer.addTo(this.map);
-    else this.glideEnvelopeLayer.removeFrom(this.map);
+    if (visible) {
+      this.glideEnvelopeLayer.addTo(this.map);
+      this.glideCoastlineLayer.addTo(this.map);
+    } else {
+      this.glideEnvelopeLayer.removeFrom(this.map);
+      this.glideCoastlineLayer.removeFrom(this.map);
+    }
   }
 
   renderMsaCorridor(legs: RouteLeg[]): void {
@@ -322,6 +339,28 @@ export class MapManager {
         fillOpacity: 0.065,
         interactive: false,
       }).addTo(this.glideEnvelopeLayer);
+    }
+  }
+
+  renderGlideCoastlineSegments(segments: GlideCoastlineMapSegment[]): void {
+    this.glideCoastlineLayer.clearLayers();
+    for (const segment of segments) {
+      const unreachable = segment.severity === 'unreachable';
+      L.polyline(
+        [
+          [segment.from.lat, segment.from.lon],
+          [segment.to.lat, segment.to.lon],
+        ],
+        {
+          pane: 'glide-coastline-pane',
+          color: unreachable ? '#c62828' : '#d97706',
+          weight: unreachable ? 7 : 6,
+          opacity: 0.92,
+          dashArray: unreachable ? undefined : '8 6',
+          lineCap: 'round',
+          interactive: false,
+        },
+      ).addTo(this.glideCoastlineLayer);
     }
   }
 
