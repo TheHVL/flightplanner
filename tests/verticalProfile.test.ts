@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { modeledAltitudeFtAtRouteDistance } from '../src/navigation/glideEnvelope';
 import { calculateRouteLegs } from '../src/navigation/geodesy';
 import {
   calculateRouteVerticalProfile,
@@ -113,13 +114,13 @@ describe('vertical profile', () => {
     const climbAtB = result.events.find((event) => event.type === 'TOC' && event.waypointName === 'B');
     const descentAtC = result.events.find((event) => event.type === 'TOD' && event.reason === 'pl-change' && event.waypointName === 'C');
     expect(climbAtB?.distanceFromWaypointNm).toBeCloseTo(5, 8);
-    expect(descentAtC?.position).toBe('after');
-    expect(descentAtC?.routeDistanceNm).toBeGreaterThanOrEqual(
+    expect(descentAtC?.position).toBe('before');
+    expect(descentAtC?.routeDistanceNm).toBeLessThan(
       legs[0].distanceNm + legs[1].distanceNm,
     );
   });
 
-  it('never starts a lower outbound PL descent before the waypoint where that PL begins', () => {
+  it('warns when reaching the lower PL would require descending before the plotted route starts', () => {
     const legs = calculateRouteLegs([
       waypoint('WP02', 0, 0),
       waypoint('WP03', 0, 1),
@@ -142,10 +143,38 @@ describe('vertical profile', () => {
     const plTod = result.events.find((event) => event.type === 'TOD' && event.reason === 'pl-change');
     expect(plTod).toBeDefined();
     expect(plTod?.waypointName).toBe('WP03');
-    expect(plTod?.position).toBe('after');
-    expect(plTod?.routeDistanceNm).toBeCloseTo(wp03DistanceNm, 8);
-    expect(plTod?.routeDistanceNm).toBeGreaterThanOrEqual(wp03DistanceNm);
-    expect(result.warnings.some((warning) => warning.includes('never before it'))).toBe(true);
+    expect(plTod?.position).toBe('before');
+    expect(plTod!.routeDistanceNm + plTod!.distanceNm).toBeCloseTo(wp03DistanceNm, 8);
+    expect(plTod?.routeDistanceNm).toBeLessThan(0);
+    expect(result.warnings.some((warning) => warning.includes('before the plotted route starts'))).toBe(true);
+  });
+
+  it('reaches a low arrival level before Berg and avoids an overlap with the airport pattern visit', () => {
+    const legs = calculateRouteLegs([
+      waypoint('ENDU', 69.05576, 18.54036),
+      waypoint('Berg', 69.60, 19.15),
+      waypoint('Breivika', 69.67, 18.98),
+      waypoint('ENTC', 69.68333, 18.91892),
+      waypoint('ENDU-return', 69.05576, 18.54036),
+    ]);
+    const result = calculateRouteVerticalProfile({
+      legs, plannedAltitudesFt: [4500, 1000, 1000, 4500],
+      waypointConstraints: [{ waypointId: 'ENTC', mode: 'circuits', elevationFt: 31 }],
+      ...automaticSettings, departureElevationFt: 252, destinationElevationFt: 252,
+      climbGroundSpeedKt: 90, descentGroundSpeedKt: 120,
+    });
+    const entry = result.events.find(event => event.reason === 'pl-change' && event.waypointName === 'Berg')!;
+    const arrival = result.events.find(event => event.reason === 'airport' && event.type === 'TOD')!;
+    expect(entry.altitudeToFt).toBe(1000);
+    expect(entry.routeDistanceNm + entry.distanceNm).toBeCloseTo(legs[0].distanceNm, 6);
+    expect(arrival.altitudeFromFt).toBe(1000);
+    expect(arrival.altitudeToFt).toBe(31);
+    expect(arrival.routeDistanceNm).toBeGreaterThan(entry.routeDistanceNm + entry.distanceNm);
+    expect(result.profilesOverlap).toBe(false);
+    const airportDistance = legs.slice(0, 3).reduce((sum, leg) => sum + leg.distanceNm, 0);
+    for (let distance = legs[0].distanceNm; distance < airportDistance; distance += 0.1) {
+      expect(modeledAltitudeFtAtRouteDistance(legs, [4500, 1000, 1000, 4500], result.events, distance)).toBeLessThanOrEqual(1000);
+    }
   });
 
   it('creates both TOD and TOC around an intermediate airport touch-and-go', () => {

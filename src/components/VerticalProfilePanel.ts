@@ -136,17 +136,34 @@ export class VerticalProfilePanel {
       ${this.endpointAipControls('departure', departureName, settings.departureIcaoCode, settings.departureElevationFt)}
       ${this.endpointAipControls('destination', destinationName, settings.destinationIcaoCode, settings.destinationElevationFt)}
       </details>
-      ${waypoints.length > 2 ? `<details class="menu-subsection" data-menu-section="airport-visits"><summary>Intermediate airport visits &amp; circuits</summary>${this.waypointControls(waypoints, plannedAltitudesFt)}</details>` : ''}
+      ${waypoints.length > 2 ? `<details class="menu-subsection" data-menu-section="airport-visits"><summary>Intermediate airport visits &amp; pattern</summary>${this.waypointControls(waypoints, plannedAltitudesFt)}</details>` : ''}
+      ${this.arrivalPatternControls(waypoints)}
       ${totalCircuitMinutes > 0
-        ? `<div class="vertical-circuit-total"><strong>Circuit allowance:</strong> ${this.minutesLabel(totalCircuitMinutes)} added to OFP accumulated time. Fuel is included when Circuit FF is entered in the fuel panel.</div>`
+        ? `<div class="vertical-circuit-total"><strong>Pattern time:</strong> ${this.minutesLabel(totalCircuitMinutes)} shown on separate OFP rows and included in accumulated time. Fuel is included when Pattern FF is entered in the fuel panel.</div>`
         : ''}
       ${resultHtml}
       <details class="menu-help" data-menu-section="profile-help"><summary>Performance source &amp; profile rules</summary>
       ${manualClimb
         ? '<div class="vertical-poh-note"><strong>Manual climb:</strong> climb time uses the selected rate. The entered climb TAS is combined with the active leg wind to place TOC. Enter Manual climb FF below to include climb fuel. The same value is also available in Cruise performance &amp; fuel.</div>'
         : `<div class="vertical-poh-note"><strong>POH Figure 5-8:</strong> 3100 lb, flaps up, 2400 RPM, full throttle, mixture at Maximum Power Fuel Flow placard, cowl flaps OPEN. The POH table gives zero-wind air distance, time and fuel. Flightplanner derives average climb TAS from air distance/time, then applies the active per-leg wind to place TOC on the ground track. Time/fuel/distance are increased 10% for each 10°C above ISA, using route-weather OAT where available and manual OAT as fallback. ${fuelSettings.climbPerformanceMode === 'poh-normal-90' ? 'Normal climb is published through 10,000 ft.' : 'Maximum-rate climb is published through 14,000 ft.'}</div>`}
-      <div class="nav-help vertical-help"><strong>How it works:</strong> Auto follows the PL before and after a waypoint. A higher outbound PL creates a TOC after the waypoint. A lower outbound PL creates a TOD on the outbound leg, never before that waypoint. POH climb time/fuel stay tied to Figure 5-8 while wind changes the ground position of TOC. Descent time uses the selected rate, and descent TAS plus active wind sets the TOD ground distance. Airport/T&amp;G descends to field elevation and climbs again. Circuits does the same and also adds the selected pattern time. Off suppresses automatic vertical events at that waypoint. Until QNH conversion is added, entered elevations and PL are used as pressure-altitude proxies for POH climb calculations.</div></details>
+      <div class="nav-help vertical-help"><strong>How it works:</strong> Auto follows the PL before and after a waypoint. A higher outbound PL creates a TOC after the waypoint. A lower outbound PL creates a TOD before the waypoint, reaching the lower level before that leg begins. POH climb time/fuel stay tied to Figure 5-8 while wind changes the ground position of TOC. Descent time uses the selected rate, and descent TAS plus active wind sets the TOD ground distance. Airport/T&amp;G descends to field elevation and climbs again. Pattern does the same and adds a separate OFP row for the selected time and fuel. Off suppresses automatic vertical events at that waypoint. Until QNH conversion is added, entered elevations and PL are used as pressure-altitude proxies for POH climb calculations.</div></details>
     `);
+  }
+
+  private arrivalPatternControls(waypoints: ReturnType<FlightPlanStore['getWaypoints']>): string {
+    if (waypoints.length < 2) return '';
+    const point = waypoints[waypoints.length - 1];
+    const constraint = this.store.getWaypointVerticalConstraint(point.id);
+    return `<details class="menu-subsection" data-menu-section="arrival-pattern"><summary>Arrival pattern · ${this.escape(point.name)}</summary>
+      <label class="vertical-climb-model"><span>After arrival</span><select data-vertical-waypoint-mode="${point.id}" aria-label="Arrival pattern">
+        <option value="auto" ${constraint.mode !== 'circuits' ? 'selected' : ''}>No planned pattern</option>
+        <option value="circuits" ${constraint.mode === 'circuits' ? 'selected' : ''}>Add pattern</option>
+      </select></label>
+      ${constraint.mode === 'circuits' ? `<div class="vertical-circuit-controls">
+        <label><span>Patterns</span><input type="number" min="1" max="20" step="1" data-vertical-circuit-count="${point.id}" value="${constraint.circuitCount}" /></label>
+        <label><span>Min / pattern</span><input type="number" min="1" max="30" step="0.5" data-vertical-circuit-minutes="${point.id}" value="${constraint.minutesPerCircuit}" /></label>
+      </div><p class="menu-note">Pattern time and fuel are added after the arrival leg. Arrival elevation above sets the descent endpoint.</p>` : ''}
+    </details>`;
   }
 
   private endpointAipControls(
@@ -189,7 +206,7 @@ export class VerticalProfilePanel {
       <div class="vertical-waypoint-section">
         <div class="vertical-section-title">
           <strong>Intermediate waypoint behavior</strong>
-          <span>Use AIP elevation for airport visits, or add a circuit/pattern allowance for training time.</span>
+          <span>Use AIP elevation for airport visits, or add pattern time for training time.</span>
         </div>
         <div class="vertical-waypoint-list">
           ${waypoints.slice(1, -1).map((waypoint, offset) => {
@@ -211,7 +228,7 @@ export class VerticalProfilePanel {
                 <select data-vertical-waypoint-mode="${waypoint.id}" aria-label="Vertical behavior at ${this.escape(waypoint.name)}">
                   <option value="auto" ${constraint.mode === 'auto' ? 'selected' : ''}>Auto from PL</option>
                   <option value="airport" ${constraint.mode === 'airport' ? 'selected' : ''}>Airport / T&amp;G</option>
-                  <option value="circuits" ${constraint.mode === 'circuits' ? 'selected' : ''}>Airport + circuits</option>
+                  <option value="circuits" ${constraint.mode === 'circuits' ? 'selected' : ''}>Airport + pattern</option>
                   <option value="none" ${constraint.mode === 'none' ? 'selected' : ''}>Off</option>
                 </select>
                 ${isAirportMode ? `
@@ -223,8 +240,8 @@ export class VerticalProfilePanel {
                   </div>` : ''}
                 ${constraint.mode === 'circuits' ? `
                   <div class="vertical-circuit-controls">
-                    <label><span>Circuits</span><input type="number" min="1" max="20" step="1" data-vertical-circuit-count="${waypoint.id}" value="${constraint.circuitCount}" /></label>
-                    <label><span>Min / circuit</span><input type="number" min="1" max="30" step="0.5" data-vertical-circuit-minutes="${waypoint.id}" value="${constraint.minutesPerCircuit}" /></label>
+                    <label><span>Patterns</span><input type="number" min="1" max="20" step="1" data-vertical-circuit-count="${waypoint.id}" value="${constraint.circuitCount}" /></label>
+                    <label><span>Min / pattern</span><input type="number" min="1" max="30" step="0.5" data-vertical-circuit-minutes="${waypoint.id}" value="${constraint.minutesPerCircuit}" /></label>
                     <strong>+${this.minutesLabel(this.store.getWaypointActivityMinutes(waypoint.id))}</strong>
                   </div>` : ''}
               </div>`;

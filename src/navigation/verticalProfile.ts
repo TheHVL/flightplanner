@@ -301,63 +301,6 @@ export function calculateRouteVerticalProfile(input: RouteVerticalProfileInput):
     if (!onRoute) warnings.push(`TOD before ${waypoint.name} falls before the plotted route starts.`);
   };
 
-  // A PL reduction belongs to the outbound leg. Work backwards from the next waypoint
-  // using descent TAS and the active wind, but never move TOD before the waypoint where
-  // the lower outbound PL begins.
-  const addPlChangeDescent = (
-    anchorIndex: number,
-    altitudeFromFt: number,
-    altitudeToFt: number,
-  ) => {
-    if (anchorIndex >= legs.length) return;
-    const altitudeChangeFt = altitudeFromFt - altitudeToFt;
-    if (altitudeChangeFt <= 0) return;
-    const timeMin = altitudeChangeFt / descentRateFpm;
-    const phaseTasKt = descentGroundSpeedKt;
-    const anchorDistanceNm = waypointDistancesNm[anchorIndex];
-    const nextWaypointDistanceNm = waypointDistancesNm[anchorIndex + 1];
-    const backward = legWinds
-      ? walkPhaseBackward(legs, waypointDistancesNm, legWinds, nextWaypointDistanceNm, timeMin, phaseTasKt)
-      : {
-          routeDistanceNm: nextWaypointDistanceNm - descentGroundSpeedKt * timeMin / 60,
-          groundDistanceNm: descentGroundSpeedKt * timeMin / 60,
-        };
-    const idealTodDistanceNm = backward.routeDistanceNm;
-    const routeEventDistanceNm = Math.max(anchorDistanceNm, idealTodDistanceNm);
-    const distanceNm = backward.groundDistanceNm;
-    const profileEndDistanceNm = routeEventDistanceNm + distanceNm;
-    const waypoint = waypointAt(anchorIndex);
-    const onRoute = routeEventDistanceNm >= 0 && routeEventDistanceNm <= routeDistanceNm;
-
-    events.push({
-      id: `tod-${waypoint.id}-${events.length}`,
-      type: 'TOD',
-      reason: 'pl-change',
-      waypointId: waypoint.id,
-      waypointName: waypoint.name,
-      position: 'after',
-      altitudeFromFt,
-      altitudeToFt,
-      altitudeChangeFt,
-      timeMin,
-      distanceNm,
-      fuelGal: null,
-      performanceSource: 'manual',
-      phaseTasKt,
-      zeroWindDistanceNm: null,
-      routeDistanceNm: routeEventDistanceNm,
-      distanceFromWaypointNm: Math.max(0, routeEventDistanceNm - anchorDistanceNm),
-      onRoute,
-      coordinate: onRoute ? routeCoordinateAtDistance(legs, routeEventDistanceNm) : null,
-    });
-    intervals.push({ startNm: routeEventDistanceNm, endNm: profileEndDistanceNm });
-
-    if (idealTodDistanceNm < anchorDistanceNm - EPSILON) {
-      const shortByNm = Math.max(0, distanceNm - legs[anchorIndex].distanceNm);
-      warnings.push(`The selected descent from ${waypoint.name} cannot reach ${Math.round(altitudeToFt)} ft by ${legs[anchorIndex].to.name}; it needs ${roundHalfNm(shortByNm)} NM more at the active descent TAS/wind. TOD has been held at/after ${waypoint.name}, never before it.`);
-    }
-  };
-
   const firstPlannedAltitudeFt = plannedAltitudesFt[0];
   if (firstPlannedAltitudeFt === null) {
     warnings.push(`Enter PL for ${legs[0].from.name} → ${legs[0].to.name} to calculate the departure climb.`);
@@ -412,7 +355,9 @@ export function calculateRouteVerticalProfile(input: RouteVerticalProfileInput):
     if (outboundAltitudeFt > inboundAltitudeFt) {
       addClimb(waypointIndex, inboundAltitudeFt, outboundAltitudeFt, 'pl-change');
     } else if (outboundAltitudeFt < inboundAltitudeFt) {
-      addPlChangeDescent(waypointIndex, inboundAltitudeFt, outboundAltitudeFt);
+      // A lower PL applies from the start of the outbound leg. Reach it
+      // before entering that leg, leaving the airport descent as a separate phase.
+      addDescentBefore(waypointIndex, inboundAltitudeFt, outboundAltitudeFt, 'pl-change');
     }
   }
 

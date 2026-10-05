@@ -44,7 +44,7 @@ export interface FuelLegPlan {
   windFromDeg: number;
   windSpeedKt: number;
   forecastWindActive: boolean;
-  /** Effective whole-leg GS from flown distance divided by climb+cruise+descent time. Circuit time is excluded. */
+  /** Effective whole-leg GS from flown distance divided by climb+cruise+descent time. Pattern time is excluded. */
   groundSpeedKt: number;
   cruiseGroundSpeedKt: number;
   wcaDeg: number;
@@ -56,19 +56,27 @@ export interface FuelLegPlan {
   cruiseTimeMin: number;
   climbTimeMin: number;
   descentTimeMin: number;
-  activityTimeMin: number;
   flightTimeMin: number;
   totalTimeMin: number;
   cruiseFuelGal: number | null;
   climbFuelGal: number | null;
   descentFuelGal: number | null;
-  circuitFuelGal: number | null;
   legFuelGal: number | null;
   performanceError: string | null;
   phaseWarning: string | null;
 }
 
+export interface PatternFuelPlan {
+  waypointId: string;
+  patternCount: number;
+  minutesPerPattern: number;
+  timeMin: number;
+  fuelFlowGph: number | null;
+  fuelGal: number | null;
+}
+
 export interface RouteFuelPlan {
+  patterns: PatternFuelPlan[];
   legs: FuelLegPlan[];
   startupTaxiTakeoffGal: number;
   cruiseFuelGal: number | null;
@@ -87,7 +95,7 @@ interface RouteFuelPlanInput {
   legs: RouteLeg[];
   plannedAltitudesFt: Array<number | null>;
   forecasts: Array<LegWeatherForecast | null>;
-  waypointActivityMinutes: number[];
+  patterns: Array<Omit<PatternFuelPlan, 'fuelFlowGph' | 'fuelGal'>>;
   navigationSettings: NavigationSettings;
   performanceSettings: PerformanceSettings;
   weatherSettings: WeatherSettings;
@@ -173,7 +181,10 @@ export function calculateFuelPlanForStore(
     legs,
     plannedAltitudesFt: legs.map((leg) => store.getPlannedAltitudeFt(leg.from.id, leg.to.id)),
     forecasts: legs.map((leg) => store.getLegWeatherForecast(leg.from.id, leg.to.id)),
-    waypointActivityMinutes: legs.map((leg, index) => index > 0 ? store.getWaypointActivityMinutes(leg.from.id) : 0),
+    patterns: legs.length ? store.getWaypoints().filter(point => store.getWaypointActivityMinutes(point.id) > 0).map(point => {
+      const constraint = store.getWaypointVerticalConstraint(point.id);
+      return { waypointId: point.id, patternCount: constraint.circuitCount, minutesPerPattern: constraint.minutesPerCircuit, timeMin: store.getWaypointActivityMinutes(point.id) };
+    }) : [],
     navigationSettings: store.getNavigationSettings(),
     performanceSettings,
     weatherSettings: store.getWeatherSettings(),
@@ -187,7 +198,7 @@ export function calculateRouteFuelPlan(input: RouteFuelPlanInput): RouteFuelPlan
     legs,
     plannedAltitudesFt,
     forecasts,
-    waypointActivityMinutes,
+    patterns: plannedPatterns,
     navigationSettings,
     performanceSettings,
     weatherSettings,
@@ -197,13 +208,14 @@ export function calculateRouteFuelPlan(input: RouteFuelPlanInput): RouteFuelPlan
 
   if (
     plannedAltitudesFt.length !== legs.length ||
-    forecasts.length !== legs.length ||
-    waypointActivityMinutes.length !== legs.length
+    forecasts.length !== legs.length
   ) {
     throw new Error('Fuel-planning leg data does not match the route.');
   }
 
   const warnings: string[] = [];
+  const patterns: PatternFuelPlan[] = plannedPatterns.map(pattern => ({ ...pattern, fuelFlowGph: fuelSettings.circuitFuelFlowGph, fuelGal: phaseFuel(pattern.timeMin, fuelSettings.circuitFuelFlowGph) }));
+  if (patterns.some(pattern => pattern.fuelGal === null)) warnings.push('Enter Pattern FF to include the planned pattern fuel.');
   const profilesOverlap = verticalProfile?.profilesOverlap ?? false;
   const climbPerformanceIncomplete = verticalProfile?.climbPerformanceIncomplete ?? false;
   const phaseModelAvailable = verticalProfile !== null && !profilesOverlap && !climbPerformanceIncomplete;
@@ -276,9 +288,8 @@ export function calculateRouteFuelPlan(input: RouteFuelPlanInput): RouteFuelPlan
         };
     const cruiseDistanceNm = Math.max(0, leg.distanceNm - phase.climbDistanceNm - phase.descentDistanceNm);
     const cruiseTimeMin = cruiseWind ? cruiseDistanceNm / cruiseWind.groundSpeedKt * 60 : 0;
-    const activityTimeMin = Math.max(0, waypointActivityMinutes[index]);
     const flightTimeMin = cruiseTimeMin + phase.climbTimeMin + phase.descentTimeMin;
-    const totalTimeMin = flightTimeMin + activityTimeMin;
+    const totalTimeMin = flightTimeMin;
 
     const cruiseFuelGal = phaseFuel(cruiseTimeMin, cruiseFuelFlowGph);
     const climbFuelGal = profilesOverlap || climbPerformanceIncomplete
@@ -291,16 +302,14 @@ export function calculateRouteFuelPlan(input: RouteFuelPlanInput): RouteFuelPlan
     const descentFuelGal = profilesOverlap || climbPerformanceIncomplete
       ? null
       : phaseFuel(phase.descentTimeMin, fuelSettings.descentFuelFlowGph);
-    const circuitFuelGal = phaseFuel(activityTimeMin, fuelSettings.circuitFuelFlowGph);
-    const legFuelGal = profilesOverlap || climbPerformanceIncomplete
+    const legFuelGal = profilesOverlap || climbPerformanceIncomplete || performanceError !== null
       ? null
-      : sumIfKnown([cruiseFuelGal, climbFuelGal, descentFuelGal, circuitFuelGal]);
+      : sumIfKnown([cruiseFuelGal, climbFuelGal, descentFuelGal]);
 
     const missingPhases: string[] = [];
     if (cruiseTimeMin > EPSILON && cruiseFuelFlowGph === null) missingPhases.push('cruise FF');
     if (phase.climbTimeMin > EPSILON && !phase.pohClimbFuelComplete && fuelSettings.climbFuelFlowGph === null) missingPhases.push('climb FF');
     if (phase.descentTimeMin > EPSILON && fuelSettings.descentFuelFlowGph === null) missingPhases.push('descent FF');
-    if (activityTimeMin > EPSILON && fuelSettings.circuitFuelFlowGph === null) missingPhases.push('circuit FF');
     const phaseWarning = profilesOverlap
       ? 'Vertical profiles overlap, so phase-aware climb/descent fuel is unavailable.'
       : climbPerformanceIncomplete
@@ -356,13 +365,11 @@ export function calculateRouteFuelPlan(input: RouteFuelPlanInput): RouteFuelPlan
       cruiseTimeMin,
       climbTimeMin: phase.climbTimeMin,
       descentTimeMin: phase.descentTimeMin,
-      activityTimeMin,
       flightTimeMin,
       totalTimeMin,
       cruiseFuelGal,
       climbFuelGal,
       descentFuelGal,
-      circuitFuelGal,
       legFuelGal,
       performanceError,
       phaseWarning,
@@ -373,8 +380,8 @@ export function calculateRouteFuelPlan(input: RouteFuelPlanInput): RouteFuelPlan
   const cruiseFuelGal = sumComponent(legPlans.map((leg) => leg.cruiseFuelGal));
   const climbFuelGal = routeFuelIncomplete ? null : sumComponent(legPlans.map((leg) => leg.climbFuelGal));
   const descentFuelGal = routeFuelIncomplete ? null : sumComponent(legPlans.map((leg) => leg.descentFuelGal));
-  const circuitFuelGal = sumComponent(legPlans.map((leg) => leg.circuitFuelGal));
-  const enrouteFuelGal = routeFuelIncomplete ? null : sumComponent(legPlans.map((leg) => leg.legFuelGal));
+  const circuitFuelGal = sumComponent(patterns.map(pattern => pattern.fuelGal));
+  const enrouteFuelGal = routeFuelIncomplete ? null : sumComponent([...legPlans.map((leg) => leg.legFuelGal), ...patterns.map(pattern => pattern.fuelGal)]);
   const tripFuelGal = enrouteFuelGal === null
     ? null
     : fuelSettings.startupTaxiTakeoffGal + enrouteFuelGal;
@@ -406,6 +413,7 @@ export function calculateRouteFuelPlan(input: RouteFuelPlanInput): RouteFuelPlan
 
   return {
     legs: legPlans,
+    patterns,
     startupTaxiTakeoffGal: fuelSettings.startupTaxiTakeoffGal,
     cruiseFuelGal,
     climbFuelGal,

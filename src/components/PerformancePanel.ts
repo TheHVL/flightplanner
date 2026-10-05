@@ -62,12 +62,12 @@ export class PerformancePanel {
           ${this.fuelNumberField('totalFuelOnboardGal', 'Fuel onboard', fuelSettings.totalFuelOnboardGal, 'gal', 0.1, 0, 100)}
         </div>
         <h3 class="menu-group-title">Manual fuel flows</h3>
-        <p class="menu-note">Cruise and climb flows apply in manual modes. Descent and circuit flows are needed when those phases are planned.</p>
+        <p class="menu-note">Cruise and climb flows apply in manual modes. Descent and pattern flows are needed when those phases are planned.</p>
         <div class="nav-input-grid fuel-grid">
           ${this.fuelNumberField('manualCruiseFuelFlowGph', 'Manual cruise FF', fuelSettings.manualCruiseFuelFlowGph, 'GPH', 0.1, 0, 40)}
           ${this.fuelNumberField('climbFuelFlowGph', 'Manual climb FF', fuelSettings.climbFuelFlowGph, 'GPH', 0.1, 0, 40)}
           ${this.fuelNumberField('descentFuelFlowGph', 'Descent FF', fuelSettings.descentFuelFlowGph, 'GPH', 0.1, 0, 40)}
-          ${this.fuelNumberField('circuitFuelFlowGph', 'Circuit FF', fuelSettings.circuitFuelFlowGph, 'GPH', 0.1, 0, 40)}
+          ${this.fuelNumberField('circuitFuelFlowGph', 'Pattern FF', fuelSettings.circuitFuelFlowGph, 'GPH', 0.1, 0, 40)}
         </div>
         <div id="fuel-result" class="fuel-result"></div>
         <details class="menu-help" data-menu-section="fuel-help"><summary>Fuel source &amp; assumptions</summary><div class="nav-help fuel-source">
@@ -229,7 +229,7 @@ export class PerformancePanel {
         ${usageMetric('Cruise', plan.cruiseFuelGal)}
         ${usageMetric('Climb', plan.climbFuelGal)}
         ${usageMetric('Descent', plan.descentFuelGal)}
-        ${usageMetric('Circuits', plan.circuitFuelGal)}
+        ${usageMetric('Pattern', plan.circuitFuelGal)}
         ${usageMetric('Start/taxi/takeoff', plan.startupTaxiTakeoffGal)}
         <div class="fuel-metric fuel-metric--total"><span>Trip fuel</span><strong>${plan.tripFuelGal === null ? 'NEEDS INPUT' : `${ceilFuelUsageGal(plan.tripFuelGal)} GAL`}</strong></div>
         ${landing}

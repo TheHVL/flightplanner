@@ -81,7 +81,7 @@ describe('phase-aware fuel planning', () => {
     );
   });
 
-  it('adds circuit fuel to the outbound leg when circuit FF is supplied', () => {
+  it('accounts for pattern time and fuel separately from flight legs', () => {
     const store = new FlightPlanStore();
     const a = store.addWaypoint({ lat: 60, lon: 10 }, 'A');
     const b = store.addWaypoint({ lat: 60.5, lon: 10 }, 'B');
@@ -93,7 +93,7 @@ describe('phase-aware fuel planning', () => {
       mode: 'circuits',
       elevationFt: 4000,
       circuitCount: 2,
-      minutesPerCircuit: 6,
+      minutesPerCircuit: 5,
     });
     store.updatePerformanceSettings({ usePohPerformance: false });
 
@@ -102,10 +102,34 @@ describe('phase-aware fuel planning', () => {
       circuitFuelFlowGph: 12,
     }));
 
-    expect(plan.legs[0].activityTimeMin).toBe(0);
-    expect(plan.legs[1].activityTimeMin).toBe(12);
-    expect(plan.legs[1].circuitFuelGal).toBeCloseTo(2.4, 5);
-    expect(plan.circuitFuelGal).toBeCloseTo(2.4, 5);
+    expect(plan.patterns).toEqual([{ waypointId: b.id, patternCount: 2, minutesPerPattern: 5, timeMin: 10, fuelFlowGph: 12, fuelGal: 2 }]);
+    expect(plan.legs[1].totalTimeMin).toBe(plan.legs[1].flightTimeMin);
+    expect(plan.legs[1].legFuelGal).toBeCloseTo(plan.legs[1].cruiseFuelGal!, 5);
+    expect(plan.circuitFuelGal).toBe(2);
+    expect(plan.enrouteFuelGal).toBeCloseTo(plan.legs.reduce((sum, leg) => sum + leg.legFuelGal!, 0) + 2, 5);
+  });
+
+  it('includes departure and final-arrival patterns once, even without an outbound leg', () => {
+    const { store, fromId, toId } = twoPointRoute();
+    store.updatePerformanceSettings({ usePohPerformance: false });
+    store.setWaypointVerticalConstraint(fromId, { mode: 'circuits', circuitCount: 1, minutesPerCircuit: 5 });
+    store.setWaypointVerticalConstraint(toId, { mode: 'circuits', circuitCount: 2, minutesPerCircuit: 5 });
+    const plan = calculateFuelPlanForStore(store, fuelSettings({ manualCruiseFuelFlowGph: 10, circuitFuelFlowGph: 12, totalFuelOnboardGal: 50 }));
+    expect(plan.patterns.map(p => p.timeMin)).toEqual([5, 10]);
+    expect(plan.circuitFuelGal).toBe(3);
+    expect(plan.tripFuelGal).toBeCloseTo(1.7 + plan.legs[0].legFuelGal! + 3, 5);
+    expect(plan.landingFuelGal).toBeCloseTo(50 - plan.tripFuelGal!, 5);
+  });
+
+  it('keeps flight-leg fuel available but withholds trip fuel when Pattern FF is missing', () => {
+    const { store, toId } = twoPointRoute();
+    store.updatePerformanceSettings({ usePohPerformance: false });
+    store.setWaypointVerticalConstraint(toId, { mode: 'circuits', circuitCount: 2, minutesPerCircuit: 5 });
+    const plan = calculateFuelPlanForStore(store, fuelSettings({ manualCruiseFuelFlowGph: 10 }));
+    expect(plan.legs[0].legFuelGal).toBeGreaterThan(0);
+    expect(plan.patterns[0].fuelGal).toBeNull();
+    expect(plan.tripFuelGal).toBeNull();
+    expect(plan.warnings).toContain('Enter Pattern FF to include the planned pattern fuel.');
   });
 
   it('keeps trip fuel incomplete when manual climb FF is required but missing', () => {

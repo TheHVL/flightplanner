@@ -74,6 +74,31 @@ describe('phase-specific TAS and wind-aware vertical geometry', () => {
     expect(tod?.distanceNm).toBeCloseTo(100 * 8 / 60, 5);
   });
 
+  it('positions a reduction in PL using inbound wind and allocates descent fuel to the inbound leg', () => {
+    const store = new FlightPlanStore();
+    const a = store.addWaypoint({lat:0,lon:0}, 'A');
+    const b = store.addWaypoint({lat:0,lon:1}, 'Low-level entry');
+    const c = store.addWaypoint({lat:0,lon:1.1}, 'Airport');
+    store.setPlannedAltitudeFt(a.id,b.id,4500);
+    store.setPlannedAltitudeFt(b.id,c.id,1000);
+    store.updateVerticalProfileSettings({ ...baseVerticalSettings, departureElevationFt:4500, destinationElevationFt:1000 });
+    store.updatePerformanceSettings({usePohPerformance:false});
+    store.setManualLegWind(a.id,b.id,{windFromDeg:90,windSpeedKt:20});
+    store.setManualLegWind(b.id,c.id,{windFromDeg:270,windSpeedKt:40});
+    store.updateWeatherSettings({useForecastWinds:true});
+    const plan = calculateFuelPlanForStore(store,{...DEFAULT_FUEL_PLANNING_SETTINGS, climbPerformanceMode:'manual', manualCruiseFuelFlowGph:10, descentFuelFlowGph:8});
+    const descent = plan.verticalProfile!.events.find(event => event.type === 'TOD')!;
+    expect(descent.timeMin).toBe(7);
+    expect(descent.distanceNm).toBeCloseTo(100 * 7 / 60,5);
+    expect(descent.routeDistanceNm + descent.distanceNm).toBeCloseTo(store.getLegs()[0].distanceNm,5);
+    expect(plan.legs[0].descentTimeMin).toBeCloseTo(7,5);
+    expect(plan.legs[0].descentFuelGal).toBeCloseTo(8 * 7 / 60,5);
+    expect(plan.legs[1].descentTimeMin).toBe(0);
+    expect(plan.legs[1].descentFuelGal).toBe(0);
+    expect(plan.verticalProfile!.profilesOverlap).toBe(false);
+    expect(plan.tripFuelGal).not.toBeNull();
+  });
+
   it('uses enabled forecast wind for the vertical profile and manual wind as fallback', () => {
     const store = new FlightPlanStore();
     const a = store.addWaypoint({ lat: 60, lon: 10 }, 'A');

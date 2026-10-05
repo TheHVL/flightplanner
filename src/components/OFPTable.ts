@@ -16,8 +16,8 @@ import {
   calculateFuelPlanForStore,
   FUEL_SETTINGS_CHANGED_EVENT,
   type FuelLegPlan,
+  type PatternFuelPlan,
 } from '../fuel/fuelPlanning';
-import type { FrequencyPlanner } from '../frequencies/FrequencyPlanner';
 import { isOfpTouchAndGoBoundary } from './ofpTouchAndGoBoundary';
 
 interface LegRowResult {
@@ -28,10 +28,12 @@ export class OFPTable {
   constructor(
     private readonly element: HTMLElement,
     private readonly store: FlightPlanStore,
-    private readonly frequencies?: FrequencyPlanner,
   ) {
     this.element.addEventListener('change', (event) => this.handleChange(event));
-    this.element.addEventListener('input', event => { const input = event.target as HTMLInputElement; if (input.dataset.freqFrom) input.setCustomValidity(''); });
+    this.element.addEventListener('click', event => {
+      const button = (event.target as HTMLElement).closest<HTMLElement>('[data-frequency-open-from]');
+      if (button) window.dispatchEvent(new CustomEvent('flightplanner-select-frequency-leg', { detail: { fromId: button.dataset.frequencyOpenFrom, toId: button.dataset.frequencyOpenTo } }));
+    });
     if (typeof window !== 'undefined') {
       window.addEventListener(FUEL_SETTINGS_CHANGED_EVENT, () => this.render());
     }
@@ -48,28 +50,27 @@ export class OFPTable {
     let accumulatedTimeMinutes = 0;
     let accumulatedFuelGal: number | null = 0;
 
-    const rows = legs.map((leg, index) => {
+    const rows: string[] = [];
+    const remainingFuel = () => fuelPlan.totalFuelOnboardGal !== null && accumulatedFuelGal !== null
+      ? fuelPlan.totalFuelOnboardGal - fuelPlan.startupTaxiTakeoffGal - accumulatedFuelGal : null;
+    const appendPattern = (waypoint: ReturnType<FlightPlanStore['getWaypoints']>[number]) => {
+      const pattern = fuelPlan.patterns.find(p => p.waypointId === waypoint.id);
+      if (!pattern) return;
+      accumulatedTimeMinutes += pattern.timeMin;
+      accumulatedFuelGal = accumulatedFuelGal !== null && pattern.fuelGal !== null ? accumulatedFuelGal + pattern.fuelGal : null;
+      rows.push(this.patternRow(waypoint.name, pattern, accumulatedTimeMinutes, accumulatedFuelGal, remainingFuel()));
+    };
+    if (legs.length) appendPattern(legs[0].from);
+    for (const [index, leg] of legs.entries()) {
       const legPlan = fuelPlan.legs[index];
       accumulatedDistanceNm += leg.distanceNm;
-      accumulatedTimeMinutes += legPlan.totalTimeMin;
+      accumulatedTimeMinutes += legPlan.flightTimeMin;
       accumulatedFuelGal = accumulatedFuelGal !== null && legPlan.legFuelGal !== null
-        ? accumulatedFuelGal + legPlan.legFuelGal
-        : null;
-      const estimatedRemainingGal = fuelPlan.totalFuelOnboardGal !== null && accumulatedFuelGal !== null
-        ? fuelPlan.totalFuelOnboardGal - fuelPlan.startupTaxiTakeoffGal - accumulatedFuelGal
-        : null;
-
-      return this.legRow(
-        leg,
-        legPlan,
-        settings,
-        accumulatedDistanceNm,
-        accumulatedTimeMinutes,
-        accumulatedFuelGal,
-        estimatedRemainingGal,
-        fuelPlan.startupTaxiTakeoffGal,
-      ).html;
-    });
+        ? accumulatedFuelGal + legPlan.legFuelGal : null;
+      rows.push(this.legRow(leg, legPlan, settings, accumulatedDistanceNm,
+        accumulatedTimeMinutes, accumulatedFuelGal, remainingFuel(), fuelPlan.startupTaxiTakeoffGal).html);
+      appendPattern(leg.to);
+    }
 
     this.element.innerHTML = `
       <div class="ofp-heading">
@@ -101,17 +102,17 @@ export class OFPTable {
               <th rowspan="2">ETO</th>
               <th colspan="2">TIME</th>
               <th colspan="2">FUEL REMAINING</th>
-              <th rowspan="2" title="Published channel suggestions. Confirm active channels with ATS.">FREQ</th>
+              <th rowspan="2" title="Selected OFP channel. Use Select/Edit to choose in the sidebar. Confirm active channels with ATS.">FREQ</th>
             </tr>
             <tr class="ofp-subhead-row">
               <th>DIR/VEL</th><th>WCA</th>
               <th title="Accumulated route distance from departure">DIST</th>
-              <th title="Accumulated route time including modeled climb/descent and configured circuit/pattern allowances">TIME</th>
+              <th title="Accumulated route time including modeled climb/descent and planned pattern time">TIME</th>
               <th title="Cruise fuel flow in US gallons per hour for this leg">FF<br><span class="ofp-unit">GPH</span></th>
               <th title="Phase-aware fuel used on this leg">INT<br><span class="ofp-unit">GAL</span></th>
               <th title="Accumulated enroute fuel used, excluding startup/taxi/takeoff allowance">ACC<br><span class="ofp-unit">GAL</span></th>
               <th title="Manual minimum safe altitude for this leg">MSA</th><th title="Planned level for this leg">PL</th>
-              <th>GS</th><th title="Distance for this leg">DIST</th><th title="Time for this leg including climb/descent and activity time">TIME</th>
+              <th>GS</th><th title="Distance for this leg">DIST</th><th title="Time for this flight leg including climb/descent; pattern time is on its own row">TIME</th>
               <th>ATO</th><th>DIFF</th>
               <th>EST</th><th>ACT</th>
             </tr>
@@ -126,13 +127,13 @@ export class OFPTable {
         <span><i class="dot pending-dot"></i> In-flight entries</span>
         <span>Leg DIST and total route distance round up to the next whole NM. Accumulated distance remains shown to nearest 0.5 NM · headings/WCA shown to whole degrees</span>
         <span>TAS shows cruise TAS when a cruise portion exists; an all-climb/descent row shows that phase TAS. GS is whole-leg effective GS from flown distance / flight time.</span>
-        <span>FREQ shows the route channel sequence. Review sources and alternatives under Route frequencies. A manual entry overrides this whole leg; clear it to restore suggestions.</span>
+        <span>Select one OFP channel per leg in Route frequencies. The OFP shows only your selection; suggestions and alternatives remain in the sidebar.</span>
         <span>MSA is entered manually. Use the ±1 NM map corridor to inspect terrain/obstacles.</span>
         <span class="msa-legend-warning">PL below entered MSA is highlighted.</span>
-        <span>Fuel INT/ACC uses modeled cruise, climb, descent and circuit phases where the required fuel-flow inputs are available.</span>
+        <span>Fuel INT/ACC uses modeled cruise, climb and descent phases; pattern fuel appears on its own row where the required fuel-flow inputs are available.</span>
         <span>Displayed planning time is rounded up to the next whole minute. Displayed fuel used is rounded up to the next whole US gallon. Calculations retain full precision.</span>
-        <span class="ofp-touch-and-go-legend"><i></i> Solid line = Airport / T&amp;G boundary and start of the next OFP sector.</span>
-        ${totalCircuitMinutes > 0 ? `<span>Circuit/pattern allowance: +${this.formatActivityMinutes(totalCircuitMinutes)} in ACC TIME${fuelPlan.circuitFuelGal === null ? '; enter Circuit FF to include its fuel' : `; ${ceilFuelUsageGal(fuelPlan.circuitFuelGal)} gal included` }.</span>` : ''}
+        <span class="ofp-touch-and-go-legend"><i></i> Solid line = airport boundary after any pattern row and start of the next OFP sector.</span>
+        ${totalCircuitMinutes > 0 ? `<span>Pattern time: +${this.formatActivityMinutes(totalCircuitMinutes)} in ACC TIME${fuelPlan.circuitFuelGal === null ? '; enter Pattern FF to include its fuel' : `; ${ceilFuelUsageGal(fuelPlan.circuitFuelGal)} gal included` }.</span>` : ''}
       </div>
     `;
   }
@@ -150,7 +151,7 @@ export class OFPTable {
     const isTouchAndGoBoundary = isOfpTouchAndGoBoundary(
       this.store.getWaypointVerticalConstraint(leg.to.id).mode,
     );
-    const boundaryClass = isTouchAndGoBoundary ? 'ofp-touch-and-go-boundary' : '';
+    const boundaryClass = isTouchAndGoBoundary && this.store.getWaypointActivityMinutes(leg.to.id) === 0 ? 'ofp-touch-and-go-boundary' : '';
 
     try {
       if (legPlan.performanceError) throw new Error(`POH performance: ${legPlan.performanceError}`);
@@ -186,7 +187,7 @@ export class OFPTable {
       const remainingTitle = estimatedRemainingGal === null
         ? 'Enter Fuel onboard and all required phase fuel flows to calculate estimated fuel remaining.'
         : `Estimated fuel remaining after this leg, including subtraction of ${startupTaxiTakeoffGal.toFixed(1)} gal startup/taxi/takeoff allowance.`;
-      const gsTitle = `Effective whole-leg GS ${legPlan.groundSpeedKt.toFixed(1)} kt = ${leg.distanceNm.toFixed(2)} NM / ${legPlan.flightTimeMin.toFixed(2)} min of flying time. Circuit/activity time is not included in GS. Cruise-only GS is ${legPlan.cruiseGroundSpeedKt.toFixed(1)} kt.`;
+      const gsTitle = `Effective whole-leg GS ${legPlan.groundSpeedKt.toFixed(1)} kt = ${leg.distanceNm.toFixed(2)} NM / ${legPlan.flightTimeMin.toFixed(2)} min of flying time. Pattern time is not included in GS. Cruise-only GS is ${legPlan.cruiseGroundSpeedKt.toFixed(1)} kt.`;
 
       return {
         html: `
@@ -248,6 +249,7 @@ export class OFPTable {
           <td class="calculated" title="${timeTitle}">${this.formatMinutes(legPlan.totalTimeMin)}</td>
           <td class="pending">—</td>
           <td class="pending">—</td>
+          <td class="pending">—</td>
           ${estimatedRemainingGal === null
             ? `<td class="pending" title="${remainingTitle}">—</td>`
             : `<td class="calculated ${estimatedRemainingGal < 0 ? 'fuel-negative' : ''}" title="${remainingTitle}">${estimatedRemainingGal.toFixed(1)}</td>`}
@@ -265,11 +267,6 @@ export class OFPTable {
 
   private handleChange(event: Event): void {
     const input = event.target as HTMLInputElement;
-    if (input.dataset.freqFrom && input.dataset.freqTo) {
-      const valid = this.store.setManualFrequency(input.dataset.freqFrom, input.dataset.freqTo, input.value);
-      if (!valid) { input.setCustomValidity('Use a VHF channel with three decimals, such as 126.455. Separate channels with /.'); input.reportValidity(); }
-      return;
-    }
     const msaFromId = input.dataset.msaFrom;
     const msaToId = input.dataset.msaTo;
     if (msaFromId && msaToId) {
@@ -297,12 +294,23 @@ export class OFPTable {
   }
 
   private frequencyCell(leg: ReturnType<FlightPlanStore['getLegs']>[number]): string {
-    const plan = this.frequencies?.getPlans().find(p => p.leg.from.id === leg.from.id && p.leg.to.id === leg.to.id);
-    const manual = this.store.getManualFrequency(leg.from.id, leg.to.id);
-    const compact = (plan?.segments ?? []).filter((segment, index, all) => index === 0 || JSON.stringify(segment.primary.map(c => [c.channel, c.callSign, c.role])) !== JSON.stringify(all[index - 1].primary.map(c => [c.channel, c.callSign, c.role])));
-    const sequence = compact.map(s => `<div class="ofp-frequency-segment"><small>~${s.startNm.toFixed(1)} NM</small>${s.primary.length ? s.primary.map(c => `<strong title="${escapeHtml(c.callSign + ': ' + c.area.name)}">${escapeHtml(c.channel)}</strong>`).join(' / ') : '<span>Review</span>'}${s.primary.length > 1 ? '<small>Confirm channel</small>' : ''}</div>`).join('');
-    return `<td class="ofp-frequency-cell"><span class="ofp-frequency-mode">${manual ? 'Manual · review for this flight' : 'Published suggestions'}</span>${manual ? `<strong>${escapeHtml(manual)}</strong>` : sequence || `<small>${escapeHtml(plan?.note ?? 'Open Route frequencies to review ATS data.')}</small>`}
-      <input class="ofp-frequency-input" type="text" maxlength="69" value="${escapeHtml(manual ?? '')}" placeholder="Manual override" aria-label="Manual channels ${escapeHtml(leg.from.name)} to ${escapeHtml(leg.to.name)}" title="Manual entry for this whole leg. Clear to restore automatic suggestions." data-freq-from="${escapeHtml(leg.from.id)}" data-freq-to="${escapeHtml(leg.to.id)}" /></td>`;
+    const selected = this.store.getManualFrequency(leg.from.id, leg.to.id);
+    return `<td class="ofp-frequency-cell">${selected ? `<strong>${escapeHtml(selected)}</strong>` : '<span class="pending">—</span>'}<button type="button" class="ofp-frequency-link" data-frequency-open-from="${escapeHtml(leg.from.id)}" data-frequency-open-to="${escapeHtml(leg.to.id)}" aria-label="${selected ? 'Edit' : 'Select'} frequency ${escapeHtml(leg.from.name)} to ${escapeHtml(leg.to.name)}">${selected ? 'Edit' : 'Select'}</button></td>`;
+  }
+
+  private patternRow(name: string, pattern: PatternFuelPlan, totalMinutes: number, accumulatedFuel: number | null, remaining: number | null): string {
+    const cells = Array.from({ length: 25 }, () => '<td class="pattern-blank"></td>');
+    const fuelCell = (value: number | null, title: string) => value === null
+      ? `<td class="pending" title="${escapeHtml(title)}">—</td>`
+      : `<td class="calculated" title="${escapeHtml(title)}">${ceilFuelUsageGal(value)}</td>`;
+    cells[0] = `<td><strong>${escapeHtml(name)}</strong><small class="ofp-pattern-label">Pattern × ${pattern.patternCount}</small></td>`;
+    cells[8] = `<td class="calculated" title="Accumulated flight and pattern time">${this.formatMinutes(totalMinutes)}</td>`;
+    cells[9] = pattern.fuelFlowGph === null ? '<td class="pending" title="Enter Pattern FF in Cruise performance &amp; fuel">—</td>' : `<td class="calculated" title="Pattern fuel flow in US gallons per hour">${pattern.fuelFlowGph.toFixed(1)}</td>`;
+    cells[10] = fuelCell(pattern.fuelGal, pattern.fuelGal === null ? 'Enter Pattern FF to include pattern fuel.' : `Pattern fuel ${pattern.fuelGal.toFixed(2)} gal = ${pattern.patternCount} × ${pattern.minutesPerPattern} min × ${pattern.fuelFlowGph} GPH / 60.`);
+    cells[11] = fuelCell(accumulatedFuel, 'Accumulated flight and pattern fuel, excluding startup/taxi/takeoff.');
+    cells[18] = `<td class="calculated" title="${pattern.patternCount} × ${pattern.minutesPerPattern} minutes">${this.formatMinutes(pattern.timeMin)}</td>`;
+    cells[22] = remaining === null ? '<td class="pending">—</td>' : `<td class="calculated ${remaining < 0 ? 'fuel-negative' : ''}" title="Estimated fuel remaining after pattern">${remaining.toFixed(1)}</td>`;
+    return `<tr class="ofp-pattern-row ofp-touch-and-go-boundary" data-pattern-waypoint="${escapeHtml(pattern.waypointId)}">${cells.join('')}</tr>`;
   }
 
   private phaseTimeTitle(leg: FuelLegPlan): string {
@@ -310,7 +318,6 @@ export class OFPTable {
       `cruise ${this.formatMinutes(leg.cruiseTimeMin)}`,
       leg.climbTimeMin > 0 ? `climb ${this.formatMinutes(leg.climbTimeMin)} at ${leg.climbTasKt?.toFixed(0) ?? '—'} KTAS` : '',
       leg.descentTimeMin > 0 ? `descent ${this.formatMinutes(leg.descentTimeMin)} at ${leg.descentTasKt?.toFixed(0) ?? '—'} KTAS` : '',
-      leg.activityTimeMin > 0 ? `circuits/activity ${this.formatMinutes(leg.activityTimeMin)}` : '',
     ].filter(Boolean);
     return `Phase-aware leg time: ${parts.join(', ')}.`;
   }
@@ -321,7 +328,6 @@ export class OFPTable {
       component('cruise', leg.cruiseFuelGal),
       leg.climbTimeMin > 0 ? component('climb', leg.climbFuelGal) : '',
       leg.descentTimeMin > 0 ? component('descent', leg.descentFuelGal) : '',
-      leg.activityTimeMin > 0 ? component('circuits', leg.circuitFuelGal) : '',
     ].filter(Boolean).join(', ');
   }
 
