@@ -13,6 +13,7 @@ export class SequentialLegPanel {
       <h2>Prepare legs</h2>
       <p class="hint">Enter advances through PL, MSA, wind direction and speed, then to the next leg. Shift+Enter goes back. Tab follows the normal keyboard order. Blank altitude clears it; leave both wind fields blank to use the global wind.</p>
       <label>Leg<select data-leg-selector aria-label="Leg to prepare"></select></label>
+      <p data-leg-name class="leg-selection-name"></p>
       <form class="leg-entry-form">
         <label>PL (ft)<input data-leg-field="pl" type="number" min="0" max="30000" step="1" placeholder="ft" /></label>
         <label>MSA (ft)<input data-leg-field="msa" type="number" min="0" max="30000" step="1" placeholder="ft" /></label>
@@ -75,10 +76,12 @@ export class SequentialLegPanel {
 
   private select(index: number): void {
     const leg = this.store.getLegs()[index];
-    if (!leg) { this.fromId = ''; this.toId = ''; this.fields.forEach(field => field.value = ''); return; }
+    if (!leg) { this.fromId = ''; this.toId = ''; this.fields.forEach(field => field.value = ''); this.element.querySelector('[data-leg-name]')!.textContent = ''; return; }
     this.fromId = leg.from.id;
     this.toId = leg.to.id;
     this.selector.value = String(index);
+    this.selector.title = `${leg.from.name} → ${leg.to.name}`;
+    this.element.querySelector('[data-leg-name]')!.textContent = `${leg.from.name} → ${leg.to.name}`;
     const wind = this.store.getManualLegWind(this.fromId, this.toId);
     const values = [this.store.getPlannedAltitudeFt(this.fromId, this.toId), this.store.getManualMsaFt(this.fromId, this.toId), wind?.windFromDeg, wind?.windSpeedKt];
     this.fields.forEach((field, i) => field.value = values[i]?.toString() ?? '');

@@ -2,6 +2,12 @@
 
 This file records significant Flightplanner updates, formulas, source assumptions, limitations and implementation decisions. New updates are added at the top.
 
+## 2026-10-05, airport groups and adjustable sidebar
+
+- Replaced the mixed, truncated AIP search list with alphabetical airport dropdowns containing sorted reporting points. Airport names and point names remain searchable; matching groups open automatically and all matches are available.
+- Added a draggable sidebar divider with saved width, keyboard resizing and double-click reset. Width is limited to retain a useful map area, with the existing stacked layout on smaller screens.
+- Allowed long menu headings and route labels to wrap, added a full leg-name preview, improved panel spacing and checkbox alignment, and rearranged narrow-sidebar controls to avoid clipped text. The map toolbar wraps as its available width changes.
+
 ## Formula conventions
 
 - `D` = distance in NM

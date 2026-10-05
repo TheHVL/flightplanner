@@ -7,6 +7,7 @@ export class AipPanel {
   private refresh: AipRefreshStatus | null = null;
   private selectedIcao = '';
   private selectedPoints: string[] = [];
+  private expandedAirports = new Set<string>();
   constructor(private readonly element: HTMLElement, private readonly store: FlightPlanStore) {
     this.element.innerHTML = `<h2>AIP aviation data</h2><div data-aip-status role="status">Loading Avinor catalog…</div>
       <button type="button" data-aip-reload>Check deployed data</button>
@@ -48,10 +49,22 @@ export class AipPanel {
     const query = this.element.querySelector<HTMLInputElement>('[data-aip-search]')!.value.trim().toLocaleUpperCase();
     const tokens = query.split(/\s+/);
     const matches = (text: string) => tokens.every(token => text.toLocaleUpperCase().includes(token));
-    const airports = this.catalog.aerodromes.filter(ad => matches(`${ad.icao} ${ad.name}`));
-    const points = (this.catalog.reportingPoints ?? []).filter(point => matches(`${point.name} ${point.aerodromeIcao}`));
-    this.element.querySelector('[data-aip-results]')!.innerHTML = `<div class="aip-results">${airports.slice(0, 15).map(ad => `<article><button type="button" data-aip-ad="${e(ad.icao)}"><strong>${e(ad.icao)}</strong> ${e(ad.name)}</button><button type="button" data-aip-add-ad="${e(ad.icao)}" ${ad.lat === null || ad.lon === null ? 'disabled' : ''}>Add</button></article>`).join('')}${points.slice(0, 30).map(point => `<article><span>△ ${e(point.name)} <small>${e(point.aerodromeIcao)}</small>${point.remarks ? `<small> · ${e(point.remarks)}</small>` : ''}</span><button type="button" data-aip-add-point="${e(point.id)}">Add</button></article>`).join('')}</div>
-      <small>${airports.length + points.length} matches${airports.length > 15 || points.length > 30 ? '; refine your search to see more' : ''}. Add appends to your current route.</small>`;
+    const groups = [...this.catalog.aerodromes].sort((a, b) => a.icao.localeCompare(b.icao)).map(ad => {
+      const airportMatches = matches(`${ad.icao} ${ad.name}`);
+      const points = (this.catalog!.reportingPoints ?? []).filter(point => point.aerodromeIcao === ad.icao &&
+        (airportMatches || matches(`${point.name} ${ad.icao} ${ad.name}`)))
+        .sort((a, b) => a.name.localeCompare(b.name, 'nb'));
+      return { ad, points, airportMatches };
+    }).filter(group => group.airportMatches || group.points.length);
+    this.element.querySelector('[data-aip-results]')!.innerHTML = `<div class="aip-results">${groups.map(({ ad, points }) => `
+      <details class="aip-airport-group" data-aip-group="${e(ad.icao)}" ${query || this.expandedAirports.has(ad.icao) ? 'open' : ''}>
+        <summary><strong>${e(ad.icao)}</strong><span>${e(ad.name)}<small>${points.length} reporting point${points.length === 1 ? '' : 's'}</small></span></summary>
+        <div class="aip-airport-content">
+          <div class="aip-airport-actions"><button type="button" data-aip-ad="${e(ad.icao)}" aria-label="${e(ad.icao)} airport details">Airport details</button><button type="button" data-aip-add-ad="${e(ad.icao)}" ${ad.lat === null || ad.lon === null ? 'disabled' : ''}>Add airport</button></div>
+          ${points.map(point => `<article class="aip-point-row"><span><strong>${e(point.name)}</strong>${point.remarks ? `<small>${e(point.remarks)}</small>` : ''}</span><button type="button" data-aip-add-point="${e(point.id)}" aria-label="Add ${e(point.name)} (${e(ad.icao)}) to route">Add</button></article>`).join('') || '<p class="aip-empty-points">No reporting points imported. Check the published chart.</p>'}
+        </div>
+      </details>`).join('') || '<p class="aip-empty-points">No airports or reporting points match your search.</p>'}</div>
+      <small>${groups.length} airport${groups.length === 1 ? '' : 's'} · ${groups.reduce((sum, group) => sum + group.points.length, 0)} reporting points. Expand an airport to browse its points. Add appends to your current route.</small>`;
   }
   private details(): void {
     const ad = this.catalog?.aerodromes.find(ad => ad.icao === this.selectedIcao);
@@ -88,6 +101,12 @@ export class AipPanel {
     this.store.appendAipWaypoints(points.map(point => ({ name: point!.name, lat: point!.lat, lon: point!.lon, aipId: point!.id, aipEffectiveDate: this.catalog!.effectiveDate })));
   }
   private click(event: Event): void {
+    const summary = (event.target as HTMLElement).closest('summary');
+    const group = summary?.parentElement as HTMLDetailsElement | undefined;
+    if (group?.dataset.aipGroup) {
+      if (group.open) this.expandedAirports.delete(group.dataset.aipGroup);
+      else this.expandedAirports.add(group.dataset.aipGroup);
+    }
     const button = (event.target as HTMLElement).closest<HTMLButtonElement>('button');
     if (!button) return;
     if (button.hasAttribute('data-aip-reload')) { void this.load(); return; }

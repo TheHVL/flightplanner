@@ -11,6 +11,37 @@ const catalog = {
 
 afterEach(()=>vi.unstubAllGlobals());
 describe('AIP browser',()=>{
+  it('groups every point by airport without truncation and searches airport names as well as points', async () => {
+    const grouped = {
+      ...catalog,
+      aerodromes: [{...catalog.aerodromes[0], icao:'ENTC', name:'TROMSØ / Langnes'}, ...catalog.aerodromes],
+      reportingPoints: [
+        ...catalog.reportingPoints,
+        ...Array.from({length:35}, (_, index) => ({...catalog.reportingPoints[0], id:`ENTC:${index}`, name:index === 0 ? 'FINNSNES' : `POINT ${String(index).padStart(2,'0')}`, aerodromeIcao:'ENTC'})),
+      ],
+    };
+    vi.stubGlobal('fetch', vi.fn(async(input:RequestInfo | URL) => ({ok:true,json:async() => String(input).includes('aip-status.json') ? {state:'success',attemptedAt:new Date().toISOString(),effectiveDate:grouped.effectiveDate} : grouped})));
+    const store = new FlightPlanStore();
+    const element = document.createElement('section'); document.body.replaceChildren(element);
+    new AipPanel(element, store);
+    await vi.waitFor(() => expect(element.querySelectorAll('[data-aip-group]')).toHaveLength(2));
+    expect(Array.from(element.querySelectorAll<HTMLElement>('[data-aip-group]')).map(group => group.dataset.aipGroup)).toEqual(['ENDU','ENTC']);
+    expect(element.querySelectorAll('[data-aip-group="ENTC"] [data-aip-add-point]')).toHaveLength(35);
+    expect(element.querySelector<HTMLDetailsElement>('[data-aip-group="ENDU"]')!.open).toBe(false);
+    const search = element.querySelector<HTMLInputElement>('[data-aip-search]')!;
+    const find = (value:string) => { search.value=value; search.dispatchEvent(new Event('input')); };
+    find('Tromsø');
+    expect(element.querySelectorAll('[data-aip-group]')).toHaveLength(1);
+    expect(element.querySelector<HTMLDetailsElement>('[data-aip-group="ENTC"]')!.open).toBe(true);
+    expect(element.querySelectorAll('[data-aip-add-point]')).toHaveLength(35);
+    find('FINNSNES');
+    expect(element.querySelectorAll('[data-aip-group]')).toHaveLength(2);
+    expect(element.querySelectorAll('[data-aip-add-point]')).toHaveLength(2);
+    element.querySelector<HTMLButtonElement>('[data-aip-add-point="ENTC:0"]')!.click();
+    expect(store.getWaypoints()[0].aipId).toBe('ENTC:0');
+    find('no matching point');
+    expect(element.querySelector('[data-aip-results]')!.textContent).toContain('No airports or reporting points');
+  });
   it('searches airports and points, shows details, appends a reviewed sequence and warns about older saved point data',async()=>{
     vi.stubGlobal('fetch',vi.fn(async(input:RequestInfo | URL)=>({ok:true,json:async()=>String(input).includes('aip-status.json')?{state:'success',attemptedAt:new Date().toISOString(),effectiveDate:catalog.effectiveDate}:catalog})));
     const store=new FlightPlanStore();
