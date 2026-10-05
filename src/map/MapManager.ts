@@ -1,3 +1,4 @@
+import { escapeHtml } from '../utils/html';
 import L, {
   type Coords,
   type DoneCallback,
@@ -407,7 +408,7 @@ export class MapManager {
 
       marker.setLatLng([waypoint.lat, waypoint.lon]);
       marker.setIcon(this.waypointIcon(index + 1, role));
-      marker.bindTooltip(`${index + 1}. ${waypoint.name}`, {
+      marker.bindTooltip(`${index + 1}. ${escapeHtml(waypoint.name)}`, {
         permanent: true,
         direction: 'top',
         offset: [0, -17],

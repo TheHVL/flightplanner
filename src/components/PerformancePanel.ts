@@ -1,3 +1,4 @@
+import { escapeHtml } from '../utils/html';
 import type { FlightPlanStore, PerformanceSettings } from '../flightplan/FlightPlanStore';
 import { calculateCruisePerformance } from '../performance/cruisePerformance';
 import { ceilFuelUsageGal } from '../presentation/planningRounding';
@@ -183,7 +184,7 @@ export class PerformancePanel {
       `;
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to calculate POH cruise performance.';
-      resultElement.innerHTML = `<div class="performance-error">${message}</div>`;
+      resultElement.innerHTML = `<div class="performance-error">${escapeHtml(message)}</div>`;
     }
   }
 
@@ -214,7 +215,7 @@ export class PerformancePanel {
         ? '<div class="fuel-metric"><span>Est. landing fuel</span><strong>ENTER ONBOARD</strong></div>'
         : remainingMetric('Est. landing fuel', plan.landingFuelGal);
       const warningHtml = plan.warnings.length > 0
-        ? `<div class="fuel-warning">${plan.warnings.slice(0, 4).join(' ')}</div>`
+        ? `<div class="fuel-warning">${escapeHtml(plan.warnings.slice(0, 4).join(' '))}</div>`
         : '';
 
       resultElement.innerHTML = `
@@ -229,7 +230,7 @@ export class PerformancePanel {
       `;
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to calculate route fuel.';
-      resultElement.innerHTML = `<div class="performance-error">${message}</div>`;
+      resultElement.innerHTML = `<div class="performance-error">${escapeHtml(message)}</div>`;
     }
   }
 }

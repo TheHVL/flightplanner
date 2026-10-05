@@ -1,0 +1,12 @@
+.saved-plans-fields { display: grid; gap: 9px; padding: 14px 16px; min-width: 0; }
+.saved-plans-fields > label { font-size: 11px; font-weight: 800; color: #41516a; }
+.saved-plans-fields > input:not([hidden]), .saved-plans-fields > select { width: 100%; min-width: 0; box-sizing: border-box; border: 1px solid #c9d3df; border-radius: 6px; padding: 9px 8px; background: #fff; color: #16243a; font: inherit; font-size: 12px; }
+.saved-plans-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+.saved-plans-actions button { min-width: 0; white-space: normal; overflow-wrap: anywhere; line-height: 1.4; }
+.saved-plans-files { border-top: 1px solid #e2e8f0; padding-top: 10px; }
+.saved-plans-state, .saved-plans-note, .saved-plans-message { margin: 0; font-size: 11px; line-height: 1.55; overflow-wrap: anywhere; }
+.saved-plans-note { color: #65758a; }
+.saved-plans-state { color: #41516a; }
+.saved-plans-message { color: #166534; }
+.saved-plans-message--error { color: #b42318; }
+.saved-plans-state:empty, .saved-plans-message:empty { display: none; }
