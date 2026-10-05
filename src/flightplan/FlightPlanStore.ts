@@ -495,6 +495,26 @@ export class FlightPlanStore {
     return { ...this.waypoints[this.waypoints.length - 1] };
   }
 
+  /** Append a published point sequence as one undoable action. */
+  appendAipWaypoints(points: Array<Coordinate & { name: string; aipId: string; aipEffectiveDate: string; elevationFt?: number }>): void {
+    if (points.length === 0 || points.some(point => !validCoordinate(point.lat, point.lon) || !point.name || !point.aipId || !/^\d{4}-\d{2}-\d{2}$/.test(point.aipEffectiveDate))) return;
+    this.rememberUndo();
+    for (const point of points) {
+      const waypoint: Waypoint = { id: crypto.randomUUID(), name: point.name, lat: point.lat, lon: point.lon, aipId: point.aipId, aipEffectiveDate: point.aipEffectiveDate };
+      this.waypoints.push(waypoint);
+      if (point.elevationFt !== undefined) {
+        this.verticalWaypointConstraints.set(waypoint.id, { ...DEFAULT_WAYPOINT_VERTICAL_CONSTRAINT, mode: 'airport', elevationFt: point.elevationFt, icaoCode: point.aipId });
+        if (this.waypoints.length === 1) this.verticalProfileSettings = { ...this.verticalProfileSettings, departureElevationFt: point.elevationFt, departureIcaoCode: point.aipId };
+        this.verticalProfileSettings = { ...this.verticalProfileSettings, destinationElevationFt: point.elevationFt, destinationIcaoCode: point.aipId };
+      } else {
+        // An appended reporting point is not a landing aerodrome.
+        this.verticalProfileSettings = { ...this.verticalProfileSettings, destinationElevationFt: 0, destinationIcaoCode: '' };
+      }
+    }
+    this.weatherForecasts.clear();
+    this.emit();
+  }
+
   insertWaypointAt(index: number, coordinate: Coordinate, name?: string): Waypoint | null {
     if (!Number.isInteger(index) || index <= 0 || index >= this.waypoints.length) return null;
 
@@ -550,6 +570,7 @@ export class FlightPlanStore {
       (patch.lon !== undefined && patch.lon !== existing.lon)
     ) {
       this.clearManualLegSettingsForWaypoint(id);
+      patch = { ...patch, aipId: undefined, aipEffectiveDate: undefined };
     }
     this.waypoints = this.waypoints.map((waypoint) =>
       waypoint.id === id ? { ...waypoint, ...patch } : waypoint,
@@ -714,6 +735,10 @@ function parseWorkingDraftState(value: unknown): FlightPlanWorkingDraftState | n
     if (!isRecord(item) || typeof item.id !== 'string' || item.id.length === 0 || waypointIds.has(item.id)) return null;
     if (typeof item.name !== 'string' || !validCoordinate(item.lat, item.lon)) return null;
     const waypoint: Waypoint = { id: item.id, name: item.name, lat: item.lat as number, lon: item.lon as number };
+    if (typeof item.aipId === 'string' && typeof item.aipEffectiveDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(item.aipEffectiveDate)) {
+      waypoint.aipId = item.aipId;
+      waypoint.aipEffectiveDate = item.aipEffectiveDate;
+    }
     if (item.altitudeFt !== undefined) {
       if (!finiteInRange(item.altitudeFt, -2000, 60000)) return null;
       waypoint.altitudeFt = item.altitudeFt as number;

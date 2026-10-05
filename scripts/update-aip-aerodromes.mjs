@@ -1,154 +1,96 @@
-import { writeFile } from 'node:fs/promises';
+import { readFile, writeFile, rename, mkdir } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { load } from 'cheerio';
+import { resolveIssue, discoverAerodromePages, parseAerodromePage, parseReportingPointBbox, annotateReportingPoints, verifiedRoutes } from './aip/parse.mjs';
 
-const AIP_HOME = 'https://aim-prod.avinor.no/no/AIP/';
+const HOME = 'https://aim-prod.avinor.no/no/AIP/';
 const OUTPUT = new URL('../public/aip-aerodromes.json', import.meta.url);
-
-// Aerodromes/heliports listed in AIP Norway AD 1.3. Missing AD 2 pages are skipped.
-const AIRPORT_CODES = [
-  'ENSS', 'ENMH', 'ENHV', 'ENBS', 'ENHK', 'ENBV', 'ENHF', 'ENVD', 'ENSR', 'ENTC',
-  'ENAT', 'ENNA', 'ENKR', 'ENAN', 'ENDU', 'ENSK', 'ENEV', 'ENLK', 'ENVR', 'ENSH',
-  'ENBO', 'ENRS', 'ENRA', 'ENST', 'ENBN', 'ENMS', 'ENRM', 'ENNM', 'ENOL', 'ENVA',
-  'ENKB', 'ENAL', 'ENML', 'ENRO', 'ENOV', 'ENFL', 'ENSD', 'ENBL', 'ENSG', 'ENRE',
-  'ENBH', 'ENBR', 'ENEG', 'ENGM', 'ENSO', 'ENAS', 'ENHD', 'ENNO', 'ENRY', 'ENKJ',
-  'ENZV', 'ENSB', 'ENGK', 'ENTO', 'ENCN',
-];
-
-const requestHeaders = {
-  accept: 'text/html,application/xhtml+xml',
-  'user-agent': 'Flightplanner training tool - AIP aerodrome metadata refresh',
-};
-
-async function fetchText(url) {
-  const response = await fetch(url, { redirect: 'follow', headers: requestHeaders });
-  if (!response.ok) throw new Error(`${response.status} ${response.statusText} for ${url}`);
-  return { text: await response.text(), url: response.url };
-}
-
-function decodeHtml(value) {
-  return value
-    .replaceAll('&nbsp;', ' ')
-    .replaceAll('&#160;', ' ')
-    .replaceAll('&amp;', '&')
-    .replaceAll('&quot;', '"')
-    .replaceAll('&#39;', "'")
-    .replaceAll('&deg;', '°')
-    .replaceAll('&Oslash;', 'Ø')
-    .replaceAll('&oslash;', 'ø')
-    .replaceAll('&Aring;', 'Å')
-    .replaceAll('&aring;', 'å')
-    .replaceAll('&AElig;', 'Æ')
-    .replaceAll('&aelig;', 'æ');
-}
-
-function plainText(html) {
-  return decodeHtml(html)
-    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/\bT[A-Z0-9_]+;[A-Z0-9_]+;\d+\b/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-function parseCoordinate(value) {
-  const match = value.match(/^(\d{2,3})(\d{2})(\d{2}(?:\.\d+)?)([NSEW])$/i);
-  if (!match) return null;
-  const degrees = Number(match[1]);
-  const minutes = Number(match[2]);
-  const seconds = Number(match[3]);
-  if (![degrees, minutes, seconds].every(Number.isFinite)) return null;
-  const decimal = degrees + minutes / 60 + seconds / 3600;
-  return /[SW]/i.test(match[4]) ? -decimal : decimal;
-}
-
-function parseAerodromePage(icao, html, sourceUrl) {
-  const text = plainText(html);
-  const headingMatch = text.match(new RegExp(`\\b${icao}\\s*[—–-]\\s*(.{1,100}?)\\s+${icao}\\s+AD\\s+2\\.1`, 'i'));
-  const name = (headingMatch?.[1] ?? icao)
-    .replace(/\s+\/\s+/g, ' / ')
-    .replace(/\s+/g, ' ')
-    .trim();
-
-  const elevIndex = text.toUpperCase().indexOf('ELEV/REF TEMP/MEAN LOW TEMP');
-  if (elevIndex < 0) return null;
-  const elevSlice = text.slice(elevIndex, elevIndex + 220);
-  const elevMatch = elevSlice.match(/ELEV\/REF TEMP\/MEAN LOW TEMP\s+([\d][\d\s,.]*?)\s+FT\b/i);
-  if (!elevMatch) return null;
-  const elevationFt = Number(elevMatch[1].replace(/[\s,]/g, ''));
-  if (!Number.isFinite(elevationFt)) return null;
-
-  const arpIndex = text.toUpperCase().indexOf('ARP COORDINATES AND SITE AT AD');
-  const arpSlice = arpIndex >= 0 ? text.slice(arpIndex, arpIndex + 260) : '';
-  const coordMatch = arpSlice.match(/(\d{6,7}(?:\.\d+)?[NS]).*?(\d{7,8}(?:\.\d+)?[EW])/i);
-  const lat = coordMatch ? parseCoordinate(coordMatch[1]) : null;
-  const lon = coordMatch ? parseCoordinate(coordMatch[2]) : null;
-
-  return {
-    icao,
-    name,
-    elevationFt,
-    lat,
-    lon,
-    sourceUrl,
-  };
-}
-
-async function resolveCurrentIssue() {
-  const history = await fetchText(AIP_HOME);
-
-  // Avinor redirects AIP_HOME to the current issue history page. The exact href
-  // format has changed over time, so avoid depending on an absolute/relative href
-  // shape. The current issue's AIRAC directory is the first YYYY-MM-DD-AIRAC token
-  // on the history page, where the current edition is presented before the next one.
-  const airacDates = [...history.text.matchAll(/(\d{4}-\d{2}-\d{2})-AIRAC/gi)]
-    .map((match) => match[1])
-    .filter((value, index, values) => values.indexOf(value) === index);
-  const effectiveDate = airacDates[0];
-  if (!effectiveDate) {
-    throw new Error('Could not identify the current Avinor AIP AIRAC date from the AIP history page.');
-  }
-
-  const issueRoot = new URL(`./${effectiveDate}-AIRAC/html/`, history.url);
-  const issueUrl = new URL('index-en-GB.html', issueRoot);
-  return { issueUrl: issueUrl.toString(), issueRoot, effectiveDate };
-}
-
-async function main() {
-  const { issueUrl, issueRoot, effectiveDate } = await resolveCurrentIssue();
-  const aerodromes = [];
-  const failures = [];
-
-  for (const icao of AIRPORT_CODES) {
-    const pageUrl = new URL(`eAIP/EN-AD-2.${icao}-en-GB.html`, issueRoot).toString();
+const STATUS = new URL('../public/aip-status.json', import.meta.url);
+const attempt = new Date().toISOString();
+const sourcesDir = process.env.AIP_SOURCES_DIR;
+let effectiveDate = null;
+async function request(url) {
+  let error;
+  for (let n = 0; n < 3; n++) {
     try {
-      const page = await fetchText(pageUrl);
-      const parsed = parseAerodromePage(icao, page.text, page.url);
-      if (parsed) aerodromes.push(parsed);
-      else failures.push(`${icao}: no AD elevation found`);
-    } catch (error) {
-      failures.push(`${icao}: ${error instanceof Error ? error.message : String(error)}`);
+      const response = await fetch(url, { redirect: 'follow', signal: AbortSignal.timeout(30000), headers: { 'user-agent': 'Flightplanner AIP refresh', accept: '*/*' } });
+      if (!response.ok) throw new Error(`HTTP ${response.status} for ${url}`);
+      if (new URL(response.url).hostname !== 'aim-prod.avinor.no' || /NewAipAvailable/.test(response.url)) throw new Error(`Unexpected AIP redirect: ${response.url}`);
+      return response;
+    } catch (caught) { error = caught; }
+  }
+  throw error;
+}
+async function text(url) { const response = await request(url); return { text: await response.text(), url: response.url }; }
+async function main() {
+  const previous = JSON.parse(await readFile(OUTPUT, 'utf8'));
+  const history = await text(HOME);
+  const issue = resolveIssue(history.text, history.url);
+  effectiveDate = issue.effectiveDate;
+  if (effectiveDate < previous.effectiveDate) throw new Error('Refusing to downgrade the AIP edition.');
+  const tocUrl = new URL('eAIP/EN-menu-en-GB.html', issue.issueRoot).toString();
+  const toc = await text(tocUrl);
+  let pages = discoverAerodromePages(toc.text, toc.url);
+  if (pages.size < 20) {
+    const adIndex = await text(new URL('eAIP/EN-AD-1.3-en-GB.html', issue.issueRoot).toString());
+    pages = new Map([...pages, ...discoverAerodromePages(adIndex.text, adIndex.url)]);
+    // AD 1.3 may print codes instead of linking each AD 2 chapter.
+    const $ = load(adIndex.text);
+    for (const match of $.text().matchAll(/\bEN[A-Z]{2}\b/g)) {
+      if (!pages.has(match[0])) pages.set(match[0], new URL(`eAIP/EN-AD-2.${match[0]}-en-GB.html`, issue.issueRoot).toString());
     }
   }
-
-  if (aerodromes.length < 20) {
-    throw new Error(`Only ${aerodromes.length} aerodromes were parsed from AIP, refusing to replace the fallback catalog.`);
-  }
-
-  aerodromes.sort((a, b) => a.icao.localeCompare(b.icao));
-  const catalog = {
-    source: 'Avinor AIP Norway',
-    effectiveDate,
-    generatedAt: new Date().toISOString(),
-    issueUrl,
-    aerodromes,
-  };
-
-  await writeFile(OUTPUT, `${JSON.stringify(catalog, null, 2)}\n`, 'utf8');
-  console.log(`Updated ${aerodromes.length} AIP aerodromes, effective ${effectiveDate || 'unknown'}.`);
-  if (failures.length > 0) console.warn(`Skipped ${failures.length}: ${failures.join(' | ')}`);
+  if (pages.size < 20) throw new Error(`Only ${pages.size} AD 2 chapters discovered.`);
+  if (sourcesDir) { await mkdir(sourcesDir, { recursive: true }); await writeFile(join(sourcesDir, 'history.html'), history.text); }
+  const aerodromes = [], reportingPoints = [], chartSources = [], coverageWarnings = [];
+  const temporary = await mkdtemp(join(tmpdir(), 'flightplanner-aip-'));
+  try {
+    for (const [icao, url] of [...pages].sort()) {
+      const page = await text(url);
+      if (sourcesDir) await writeFile(join(sourcesDir, `${icao}.html`), page.text);
+      const ad = parseAerodromePage(icao, page.text, page.url);
+      if (ad.lat === null || ad.lon === null || ad.runways.length === 0 || ad.frequencies.length === 0) throw new Error(`${icao}: incomplete AD 2 import`);
+      for (const [index, chart] of ad.charts.entries()) {
+        const pdf = Buffer.from(await (await request(chart.sourceUrl)).arrayBuffer());
+        if (!pdf.subarray(0, 5).equals(Buffer.from('%PDF-'))) throw new Error(`${icao}: chart is not a PDF`);
+        chart.sha256 = createHash('sha256').update(pdf).digest('hex');
+        chartSources.push({ ...chart, aerodromeIcao: icao });
+        const file = join(temporary, `${icao}-${index}.pdf`);
+        await writeFile(file, pdf);
+        if (sourcesDir) await writeFile(join(sourcesDir, `${icao}-${index}.pdf`), pdf);
+        const chartText = execFileSync('pdftotext', ['-bbox-layout', file, '-'], { encoding: 'utf8', maxBuffer: 10 * 1024 * 1024 });
+        const plainText = execFileSync('pdftotext', ['-layout', file, '-'], { encoding: 'utf8', maxBuffer: 10 * 1024 * 1024 });
+        const parsed = annotateReportingPoints(parseReportingPointBbox(icao, chartText, chart.sourceUrl), chart.title, plainText);
+        for (const point of parsed) {
+          const existing = reportingPoints.find(candidate => candidate.id === point.id);
+          if (existing && (existing.lat !== point.lat || existing.lon !== point.lon)) throw new Error(`Conflicting published point ${point.id}`);
+          if (!existing) reportingPoints.push(point);
+        }
+        if (parsed.length === 0) coverageWarnings.push(`${icao}: no machine-readable coordinate table in ${chart.title}. Open the published chart.`);
+      }
+      aerodromes.push(ad);
+      console.log(`${icao}: ${ad.runways.length} runway ends, ${ad.frequencies.length} frequencies, ${ad.charts.length} VFR charts`);
+    }
+  } finally { await rm(temporary, { recursive: true, force: true }); }
+  for (const old of previous.aerodromes) if (!aerodromes.some(ad => ad.icao === old.icao)) throw new Error(`Previously covered ${old.icao} missing; refusing partial replacement.`);
+  const definitions = JSON.parse(await readFile(new URL('./aip/verified-vfr-routes.json', import.meta.url), 'utf8'));
+  const vfrRoutes = verifiedRoutes(definitions, chartSources, reportingPoints);
+  for (const route of definitions) if (!vfrRoutes.some(item => item.id === route.id)) coverageWarnings.push(`${route.aerodromeIcao}: route ${route.name} withheld because its source changed or a point is missing.`);
+  const catalog = { source: 'Avinor AIP Norway', ...issue, generatedAt: attempt, checkedAt: attempt, aerodromes, reportingPoints, vfrRoutes, coverageWarnings };
+  // Replace only after ALL mandatory data and charts have succeeded. Never combine
+  // records from different editions or silently certify a partial import as current.
+  const staged = new URL('../public/aip-aerodromes.json.tmp', import.meta.url);
+  await writeFile(staged, JSON.stringify(catalog, null, 2) + '\n');
+  await rename(staged, OUTPUT);
+  await writeFile(STATUS, JSON.stringify({ state: 'success', attemptedAt: attempt, effectiveDate }, null, 2) + '\n');
+  console.log(`Refreshed ${aerodromes.length} aerodromes, ${reportingPoints.length} points, ${vfrRoutes.length} verified route sequences. Effective ${effectiveDate}.`);
 }
-
-main().catch((error) => {
-  console.error(error instanceof Error ? error.stack ?? error.message : error);
+main().catch(async error => {
+  console.error(error);
+  await writeFile(STATUS, JSON.stringify({ state: 'failed', attemptedAt: attempt, effectiveDate, error: error.message }, null, 2) + '\n');
   process.exitCode = 1;
 });

@@ -368,3 +368,7 @@ npm run aip:update
 See [CHANGELOG.md](CHANGELOG.md) for the update-by-update history, formulas, data assumptions, limitations and important implementation notes.
 
 No private API keys belong in this repository.
+
+## Sequential leg preparation and AIP catalog
+
+Use the new Prepare legs and AIP panels for keyboard-first PL/MSA/wind entry, searchable aerodromes/reporting points, published VFR point sequences, and aerodrome details. Daily Avinor publication checks include explicit effective dates and failure warnings. See [AIP data lifecycle and coverage](docs/AIP_DATA.md).

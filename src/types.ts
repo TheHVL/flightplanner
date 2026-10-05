@@ -7,6 +7,9 @@ export interface Waypoint extends Coordinate {
   id: string;
   name: string;
   altitudeFt?: number;
+  /** AIP provenance is retained across autosave; edited coordinates remain user-owned. */
+  aipId?: string;
+  aipEffectiveDate?: string;
 }
 
 export interface RouteLeg {

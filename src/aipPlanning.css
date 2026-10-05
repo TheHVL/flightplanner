@@ -1,0 +1,15 @@
+.leg-entry-form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+.leg-entry-form label, #aip-panel > label, #sequential-leg-panel > label { display: grid; gap: 5px; font-size: 12px; }
+.leg-entry-form input, #sequential-leg-panel select, #aip-panel input { width: 100%; min-width: 0; padding: 9px; border: 1px solid var(--border, #ced9e0); border-radius: 6px; font: inherit; }
+.leg-entry-actions { grid-column: 1 / -1; display: flex; gap: 8px; }
+.leg-entry-actions button, #aip-panel button { cursor: pointer; padding: 7px 9px; border: 1px solid #cad5df; background: #f5f8fa; border-radius: 5px; color: #20394b; }
+.aip-status { margin: 10px 0; font-size: 12px; line-height: 1.5; }
+.aip-status--warning { color: #8a440d; background: #fff4dc; border-radius: 5px; padding: 8px; }
+.aip-results { max-height: 240px; overflow: auto; margin: 10px 0; }
+.aip-results article { display: flex; gap: 8px; align-items: center; justify-content: space-between; margin: 5px 0; }
+.aip-results article > :first-child { flex: 1; text-align: left; }
+.aip-details { border-top: 1px solid #dbe2e9; margin-top: 15px; padding-top: 12px; font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.aip-details h4 { margin: 18px 0 6px; }
+.aip-details details { margin-top: 10px; }
+.aip-details details p { max-height: 260px; overflow: auto; }
+.aip-point-buttons { display: flex; flex-wrap: wrap; gap: 6px; }
