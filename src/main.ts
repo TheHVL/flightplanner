@@ -4,6 +4,7 @@ import './phase4.css';
 import './phase5.css';
 import './phase6.css';
 import './uxEnhancements.css';
+import './aipPlanning.css';
 import { FlightPlanStore } from './flightplan/FlightPlanStore';
 import { ROUTE_SHAPE_CHANGED_EVENT, RouteShapeController } from './flightplan/RouteShapeController';
 import { restoreWorkingRoute, saveWorkingRoute } from './flightplan/workingRoutePersistence';
@@ -14,6 +15,8 @@ import { PerformancePanel } from './components/PerformancePanel';
 import { WeatherPanel } from './components/WeatherPanel';
 import { VerticalProfilePanel } from './components/VerticalProfilePanel';
 import { OFPTable } from './components/OFPTable';
+import { AipPanel } from './components/AipPanel';
+import { SequentialLegPanel } from './components/SequentialLegPanel';
 import { FUEL_SETTINGS_CHANGED_EVENT, getFuelPlanningSettings } from './fuel/fuelPlanning';
 import { buildC182TGlideEnvelopeSamples } from './navigation/glideEnvelope';
 import { analyzeGlideCoastline, loadNordicLandMask } from './navigation/glideCoastline';
@@ -58,6 +61,14 @@ root.innerHTML = `
         <details class="phase-disclosure" data-panel-key="route" open>
           <summary><span>ROUTE</span><strong>Waypoints</strong></summary>
           <section id="route-panel" class="route-panel panel"></section>
+        </details>
+        <details class="phase-disclosure" data-panel-key="leg-entry" open>
+          <summary><span>PREPARE</span><strong>Sequential PL / MSA / wind</strong></summary>
+          <section id="sequential-leg-panel" class="panel"></section>
+        </details>
+        <details class="phase-disclosure" data-panel-key="aip" open>
+          <summary><span>AIP</span><strong>Aerodromes &amp; VFR points</strong></summary>
+          <section id="aip-panel" class="panel"></section>
         </details>
         <details class="phase-disclosure" data-panel-key="navigation">
           <summary><span>PHASE 2</span><strong>Navigation &amp; wind</strong></summary>
@@ -180,6 +191,8 @@ const store = new FlightPlanStore();
 const routeShapeController = new RouteShapeController(store);
 restoreWorkingRoute(store, routeShapeController);
 const routePanel = new RoutePanel(routeElement, store);
+new SequentialLegPanel(document.querySelector<HTMLElement>('#sequential-leg-panel')!, store);
+new AipPanel(document.querySelector<HTMLElement>('#aip-panel')!, store);
 const navigationPanel = new NavigationPanel(navigationElement, store);
 const performancePanel = new PerformancePanel(performanceElement, store);
 const weatherPanel = new WeatherPanel(weatherElement, store);

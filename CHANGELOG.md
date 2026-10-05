@@ -757,3 +757,12 @@ TT = atan2(y, x), normalized to 0..360°
 - External data failures should produce explicit warnings or safe fallbacks, not invented values.
 - AIP, weather, MSA, glide and fuel integrations are planning aids and do not replace official flight-planning sources or pilot judgement.
 - Every significant calculation change should add or update automated tests.
+
+## Sequential planning and expanded AIP integration
+
+- Added stable sequential PL/MSA/wind controls, Enter/Shift+Enter navigation and per-leg wind activation.
+- Added searchable official aerodromes/chart points, detailed runway/ATS/procedure information, and reviewed VFR point sequences for ENDU/ENTC/ENSR.
+- Preserved AIP provenance through autosave and undo; imported airport elevation feeds vertical planning.
+- Replaced the fixed elevation scraper with effective-date selection, AD chapter discovery, amendment/rowspan-aware parsing, and PDF coordinate-table extraction.
+- Added daily refresh, persistent last-successful snapshot, visible failure/staleness status, and checksum-gated chart sequences.
+- Added parser, data integrity, persistence and keyboard regression tests.
