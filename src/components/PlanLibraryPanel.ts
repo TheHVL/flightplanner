@@ -17,21 +17,27 @@ export class PlanLibraryPanel {
     private readonly shapes: RouteShapeController, private readonly onLoaded: () => void) {
     this.element.innerHTML = `
       <div class="saved-plans-fields">
+        <h3 class="menu-group-title">Save current work</h3>
         <label for="plan-name">Plan name</label>
         <input id="plan-name" type="text" maxlength="100" placeholder="e.g. ENDU - ENTC training" autocomplete="off" />
         <div class="saved-plans-actions">
           <button class="ghost-button" type="button" data-plan-action="save">Save as new</button>
           <button class="ghost-button" type="button" data-plan-action="update">Update selected</button>
         </div>
+        <h3 class="menu-group-title">Open a saved plan</h3>
         <label for="saved-plan-select">Saved plans</label>
         <select id="saved-plan-select" aria-describedby="saved-plan-state"></select>
         <p id="saved-plan-state" class="saved-plans-state"></p>
         <div class="saved-plans-actions">
           <button class="ghost-button" type="button" data-plan-action="load">Load selected</button>
+        </div>
+        <details class="menu-subsection"><summary>Manage plans &amp; restore work</summary><div class="saved-plans-actions">
           <button class="ghost-button" type="button" data-plan-action="duplicate">Duplicate selected</button>
           <button class="ghost-button" type="button" data-plan-action="delete">Delete selected</button>
           <button class="ghost-button" type="button" data-plan-action="previous">Restore previous work</button>
         </div>
+        </details>
+        <h3 class="menu-group-title">Backup &amp; transfer</h3>
         <div class="saved-plans-actions saved-plans-files">
           <button class="ghost-button" type="button" data-plan-action="export">Export current plan</button>
           <button class="ghost-button" type="button" data-plan-action="import">Import plan file</button>

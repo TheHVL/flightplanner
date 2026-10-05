@@ -1,3 +1,4 @@
+import { setPanelMarkup } from '../utils/panelMarkup';
 import type {
   FlightPlanStore,
   VerticalProfileSettings,
@@ -103,43 +104,49 @@ export class VerticalProfilePanel {
     const totalCircuitMinutes = this.store.getTotalWaypointActivityMinutes();
     const manualClimb = fuelSettings.climbPerformanceMode === 'manual';
 
-    this.element.innerHTML = `
+    setPanelMarkup(this.element, `
       <div class="panel-heading">
         <div>
-          <p class="eyebrow">PHASE 7 · AIP PREVIEW</p>
-          <h2>Vertical profile &amp; aerodromes</h2>
+          <p class="eyebrow">FLIGHT PROFILE</p>
+          <h2>Climb &amp; descent profile</h2>
         </div>
       </div>
-      <p class="hint">TOC/TOD follows the planned level for each leg. A PL descent is never started before the waypoint where the lower outbound PL begins. Vertical ground distance now uses phase TAS together with the active wind for each leg.</p>
+      <p class="hint">Set climb and descent performance, then check airport elevations and intermediate visits.</p>
+      <h3 class="menu-group-title">Climb &amp; descent</h3>
       <label class="vertical-climb-model">
         <span>Climb performance</span>
         <select data-climb-performance-mode aria-label="Climb performance model">
-          <option value="poh-normal-90" ${fuelSettings.climbPerformanceMode === 'poh-normal-90' ? 'selected' : ''}>POH normal climb - 90 KIAS</option>
-          <option value="poh-max-rate" ${fuelSettings.climbPerformanceMode === 'poh-max-rate' ? 'selected' : ''}>POH maximum rate of climb</option>
+          <option value="poh-normal-90" ${fuelSettings.climbPerformanceMode === 'poh-normal-90' ? 'selected' : ''}>POH normal · 90 KIAS</option>
+          <option value="poh-max-rate" ${fuelSettings.climbPerformanceMode === 'poh-max-rate' ? 'selected' : ''}>POH maximum rate</option>
           <option value="manual" ${fuelSettings.climbPerformanceMode === 'manual' ? 'selected' : ''}>Manual rate / TAS</option>
         </select>
       </label>
-      ${manualClimb
-        ? '<div class="vertical-poh-note"><strong>Manual climb:</strong> climb time uses the selected rate. The entered climb TAS is combined with the active leg wind to place TOC. Enter Manual climb FF below to include climb fuel. The same value is also available in Phase 4 trip fuel planning.</div>'
-        : `<div class="vertical-poh-note"><strong>POH Figure 5-8:</strong> 3100 lb, flaps up, 2400 RPM, full throttle, mixture at Maximum Power Fuel Flow placard, cowl flaps OPEN. The POH table gives zero-wind air distance, time and fuel. Flightplanner derives average climb TAS from air distance/time, then applies the active per-leg wind to place TOC on the ground track. Time/fuel/distance are increased 10% for each 10°C above ISA, using route-weather OAT where available and Phase 4 OAT as fallback. ${fuelSettings.climbPerformanceMode === 'poh-normal-90' ? 'Normal climb is published through 10,000 ft.' : 'Maximum-rate climb is published through 14,000 ft.'}</div>`}
       <div class="vertical-input-grid">
-        ${this.numberField(`${departureName} elevation`, 'dep-elev', settings.departureElevationFt, 'ft', 0, 20000, 10)}
-        ${this.numberField(`${destinationName} elevation`, 'dest-elev', settings.destinationElevationFt, 'ft', 0, 20000, 10)}
         ${manualClimb ? this.numberField('Climb rate', 'climb-rate', settings.climbRateFpm, 'ft/min', 100, 5000, 50) : ''}
         ${this.numberField('Descent rate', 'descent-rate', settings.descentRateFpm, 'ft/min', 100, 5000, 50)}
         ${manualClimb ? this.numberField('Manual climb TAS', 'climb-gs', settings.climbGroundSpeedKt, 'kt', 20, 300, 1) : ''}
         ${manualClimb ? this.nullableNumberField('Manual climb FF', 'climb-ff', fuelSettings.climbFuelFlowGph, 'GPH', 0, 40, 0.1) : ''}
         ${this.numberField('Descent TAS', 'descent-gs', settings.descentGroundSpeedKt, 'kt', 20, 300, 1)}
       </div>
+      <details class="menu-subsection" data-menu-section="airport-elevations" open><summary>Departure &amp; arrival elevations</summary>
+      <div class="vertical-input-grid">
+        ${this.numberField(`${departureName} elevation`, 'dep-elev', settings.departureElevationFt, 'ft', 0, 20000, 10)}
+        ${this.numberField(`${destinationName} elevation`, 'dest-elev', settings.destinationElevationFt, 'ft', 0, 20000, 10)}
+      </div>
       ${this.endpointAipControls('departure', departureName, settings.departureIcaoCode, settings.departureElevationFt)}
       ${this.endpointAipControls('destination', destinationName, settings.destinationIcaoCode, settings.destinationElevationFt)}
-      ${this.waypointControls(waypoints, plannedAltitudesFt)}
+      </details>
+      ${waypoints.length > 2 ? `<details class="menu-subsection" data-menu-section="airport-visits"><summary>Intermediate airport visits &amp; circuits</summary>${this.waypointControls(waypoints, plannedAltitudesFt)}</details>` : ''}
       ${totalCircuitMinutes > 0
         ? `<div class="vertical-circuit-total"><strong>Circuit allowance:</strong> ${this.minutesLabel(totalCircuitMinutes)} added to OFP accumulated time. Fuel is included when Circuit FF is entered in the fuel panel.</div>`
         : ''}
       ${resultHtml}
-      <div class="nav-help vertical-help"><strong>How it works:</strong> Auto follows the PL before and after a waypoint. A higher outbound PL creates a TOC after the waypoint. A lower outbound PL creates a TOD on the outbound leg, never before that waypoint. POH climb time/fuel stay tied to Figure 5-8 while wind changes the ground position of TOC. Descent time uses the selected rate, and descent TAS plus active wind sets the TOD ground distance. Airport/T&amp;G descends to field elevation and climbs again. Circuits does the same and also adds the selected pattern time. Off suppresses automatic vertical events at that waypoint. Until QNH conversion is added, entered elevations and PL are used as pressure-altitude proxies for POH climb calculations.</div>
-    `;
+      <details class="menu-help" data-menu-section="profile-help"><summary>Performance source &amp; profile rules</summary>
+      ${manualClimb
+        ? '<div class="vertical-poh-note"><strong>Manual climb:</strong> climb time uses the selected rate. The entered climb TAS is combined with the active leg wind to place TOC. Enter Manual climb FF below to include climb fuel. The same value is also available in Cruise performance &amp; fuel.</div>'
+        : `<div class="vertical-poh-note"><strong>POH Figure 5-8:</strong> 3100 lb, flaps up, 2400 RPM, full throttle, mixture at Maximum Power Fuel Flow placard, cowl flaps OPEN. The POH table gives zero-wind air distance, time and fuel. Flightplanner derives average climb TAS from air distance/time, then applies the active per-leg wind to place TOC on the ground track. Time/fuel/distance are increased 10% for each 10°C above ISA, using route-weather OAT where available and manual OAT as fallback. ${fuelSettings.climbPerformanceMode === 'poh-normal-90' ? 'Normal climb is published through 10,000 ft.' : 'Maximum-rate climb is published through 14,000 ft.'}</div>`}
+      <div class="nav-help vertical-help"><strong>How it works:</strong> Auto follows the PL before and after a waypoint. A higher outbound PL creates a TOC after the waypoint. A lower outbound PL creates a TOD on the outbound leg, never before that waypoint. POH climb time/fuel stay tied to Figure 5-8 while wind changes the ground position of TOC. Descent time uses the selected rate, and descent TAS plus active wind sets the TOD ground distance. Airport/T&amp;G descends to field elevation and climbs again. Circuits does the same and also adds the selected pattern time. Off suppresses automatic vertical events at that waypoint. Until QNH conversion is added, entered elevations and PL are used as pressure-altitude proxies for POH climb calculations.</div></details>
+    `);
   }
 
   private endpointAipControls(

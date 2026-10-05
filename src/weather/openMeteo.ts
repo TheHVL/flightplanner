@@ -28,7 +28,7 @@ export async function fetchForecastSample(
   when: Date,
 ): Promise<ForecastSample> {
   const url = buildForecastUrl(lat, lon, when);
-  const response = await fetch(url);
+  const response = await fetch(url, { cache: 'no-store' });
   if (!response.ok) {
     throw new Error(`Weather service returned HTTP ${response.status}.`);
   }

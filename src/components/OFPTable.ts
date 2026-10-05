@@ -168,7 +168,7 @@ export class OFPTable {
       const altitudeWarning = belowMsa
         ? `Warning: planned level ${plannedAltitudeFt} ft is below entered MSA ${manualMsaFt} ft.`
         : 'Planned level for this leg in feet';
-      const performanceTitle = `Cruise performance at ${Math.round(legPlan.pressureAltitudeFt)} ft pressure-altitude proxy; OAT ${legPlan.oatC.toFixed(1)}°C (${legPlan.oatSource === 'forecast' ? 'route weather' : 'Phase 4 fallback'}).`;
+      const performanceTitle = `Cruise performance at ${Math.round(legPlan.pressureAltitudeFt)} ft pressure-altitude proxy; OAT ${legPlan.oatC.toFixed(1)}°C (${legPlan.oatSource === 'forecast' ? 'route weather' : 'manual OAT fallback'}).`;
       const tasTitle = legPlan.displayPhase === 'cruise'
         ? `Displayed TAS is cruise TAS ${legPlan.cruiseTasKt.toFixed(0)} kt. ${performanceTitle}`
         : legPlan.displayPhase === 'climb'

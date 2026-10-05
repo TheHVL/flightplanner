@@ -7,6 +7,7 @@ import './uxEnhancements.css';
 import './aipPlanning.css';
 import './sidebarLayout.css';
 import './savedPlans.css';
+import './planningMenus.css';
 import { FlightPlanStore } from './flightplan/FlightPlanStore';
 import { ROUTE_SHAPE_CHANGED_EVENT, RouteShapeController } from './flightplan/RouteShapeController';
 import { restoreWorkingRoute, saveWorkingRoute } from './flightplan/workingRoutePersistence';
@@ -57,12 +58,13 @@ root.innerHTML = `
           <div class="brand-subtitle">VFR · NORWAY · TRAINING</div>
         </div>
       </div>
-      <div class="phase-chip"><span></span> PHASE 7 · AIP &amp; MSA</div>
+      <div class="phase-chip"><span></span> VFR FLIGHT PLANNING</div>
     </header>
 
     <main class="workspace">
       <aside id="planning-sidebar" class="left-column">
-        <details class="phase-disclosure" data-panel-key="saved-plans" open>
+        <div class="sidebar-menu-heading"><strong>Flight preparation</strong><button type="button" id="collapse-planning-menus" class="ghost-button">Collapse all</button></div>
+        <details class="phase-disclosure" data-panel-key="saved-plans">
           <summary><span>PLANS</span><strong>Save &amp; load</strong></summary>
           <section id="saved-plans-panel" class="panel"></section>
         </details>
@@ -70,29 +72,29 @@ root.innerHTML = `
           <summary><span>ROUTE</span><strong>Waypoints</strong></summary>
           <section id="route-panel" class="route-panel panel"></section>
         </details>
-        <details class="phase-disclosure" data-panel-key="leg-entry" open>
-          <summary><span>PREPARE</span><strong>Sequential PL / MSA / wind</strong></summary>
-          <section id="sequential-leg-panel" class="panel"></section>
-        </details>
-        <details class="phase-disclosure" data-panel-key="aip" open>
-          <summary><span>AIP</span><strong>Aerodromes &amp; VFR points</strong></summary>
+        <details class="phase-disclosure" data-panel-key="aip">
+          <summary><span>ROUTE</span><strong>Airports &amp; reporting points</strong></summary>
           <section id="aip-panel" class="panel"></section>
         </details>
-        <details class="phase-disclosure" data-panel-key="navigation">
-          <summary><span>PHASE 2</span><strong>Navigation &amp; wind</strong></summary>
-          <section id="navigation-panel" class="navigation-panel panel"></section>
-        </details>
-        <details class="phase-disclosure" data-panel-key="performance" open>
-          <summary><span>PHASE 4</span><strong>Performance &amp; fuel</strong></summary>
-          <section id="performance-panel" class="performance-panel panel"></section>
+        <details class="phase-disclosure" data-panel-key="leg-entry">
+          <summary><span>LEGS</span><strong>Levels, MSA &amp; manual winds</strong></summary>
+          <section id="sequential-leg-panel" class="panel"></section>
         </details>
         <details class="phase-disclosure" data-panel-key="weather">
-          <summary><span>PHASE 5</span><strong>Route weather</strong></summary>
+          <summary><span>WEATHER</span><strong>Forecast winds &amp; temperature</strong></summary>
           <section id="weather-panel" class="weather-panel panel"></section>
         </details>
+        <details class="phase-disclosure" data-panel-key="performance">
+          <summary><span>AIRCRAFT</span><strong>Cruise performance &amp; fuel</strong></summary>
+          <section id="performance-panel" class="performance-panel panel"></section>
+        </details>
         <details class="phase-disclosure" data-panel-key="vertical">
-          <summary><span>PHASE 6/7</span><strong>Vertical profile &amp; AIP</strong></summary>
+          <summary><span>AIRCRAFT</span><strong>Climb, descent &amp; airport visits</strong></summary>
           <section id="vertical-profile-panel" class="vertical-profile-panel panel"></section>
+        </details>
+        <details class="phase-disclosure" data-panel-key="navigation">
+          <summary><span>DEFAULTS</span><strong>Manual TAS, wind &amp; variation</strong></summary>
+          <section id="navigation-panel" class="navigation-panel panel"></section>
         </details>
       </aside>
       <div id="sidebar-resize-handle" class="sidebar-resize-handle" role="separator" tabindex="0"
@@ -128,7 +130,7 @@ root.innerHTML = `
         </div>
         <div id="glide-assumption-bar" class="glide-assumption-bar" hidden>
           <strong>C182T maximum glide, POH Fig. 3-1:</strong>
-          propeller windmilling, flaps up, zero wind. The blue shading uses the Phase 6 modeled altitude and assumes the shoreline/landing surface is at sea level. Red route sections indicate sampled over-water positions where no coastline is found inside the modeled zero-wind glide range; amber dashed sections indicate a modeled coastline margin of 1 NM or less. Coastline screening uses generalized Natural Earth 1:10m land data and may omit small islands or fine shoreline detail. Best glide speeds shown by the chart are 76 KIAS at 3100 lb, 70 KIAS at 2600 lb and 58 KIAS at 2100 lb. This is not terrain-clearance or landing-suitability analysis.
+          propeller windmilling, flaps up, zero wind. The blue shading uses the modeled route altitude and assumes the shoreline/landing surface is at sea level. Red route sections indicate sampled over-water positions where no coastline is found inside the modeled zero-wind glide range; amber dashed sections indicate a modeled coastline margin of 1 NM or less. Coastline screening uses generalized Natural Earth 1:10m land data and may omit small islands or fine shoreline detail. Best glide speeds shown by the chart are 76 KIAS at 3100 lb, 70 KIAS at 2600 lb and 58 KIAS at 2100 lb. This is not terrain-clearance or landing-suitability analysis.
           <span id="glide-status" class="glide-status"></span>
         </div>
         <div id="map" class="map"></div>
@@ -232,6 +234,10 @@ for (const disclosure of document.querySelectorAll<HTMLDetailsElement>('.phase-d
     window.requestAnimationFrame(() => mapManager.invalidateSize());
   });
 }
+
+document.querySelector('#collapse-planning-menus')!.addEventListener('click', () => {
+  for (const panel of document.querySelectorAll<HTMLDetailsElement>('.phase-disclosure[data-panel-key]')) panel.open = false;
+});
 
 const isChartDetailMode = (value: string | null): value is ChartDetailMode =>
   value === 'auto' || value === 'sharp' || value === 'fast';

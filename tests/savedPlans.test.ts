@@ -167,7 +167,7 @@ describe('saved plan controls', () => {
     resolve({ validTimeUtc: '2026-10-05T10:00:00Z', altitudeFt: 4500, altitudeClamped: false, windFromDeg: 210, windSpeedKt: 15, temperatureC: 5, source: 'Test' });
     await new Promise((done) => setTimeout(done, 0));
     expect(store.getWeatherForecasts()).toEqual([]);
-    expect(root.textContent).toContain('Fetch a fresh route forecast');
+    expect(root.textContent).toContain('Check the flight date above, then fetch fresh winds');
     expect(root.querySelector<HTMLButtonElement>('[data-weather-fetch]')!.disabled).toBe(false);
   });
 
