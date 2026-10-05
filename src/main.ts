@@ -16,6 +16,7 @@ import { VerticalProfilePanel } from './components/VerticalProfilePanel';
 import { OFPTable } from './components/OFPTable';
 import { FUEL_SETTINGS_CHANGED_EVENT, getFuelPlanningSettings } from './fuel/fuelPlanning';
 import { buildC182TGlideEnvelopeSamples } from './navigation/glideEnvelope';
+import { analyzeGlideCoastline, loadNordicLandMask } from './navigation/glideCoastline';
 import { coordinateAtRouteDistance, trackAtRouteDistance } from './navigation/geodesy';
 import { calculateRouteVerticalProfile } from './navigation/verticalProfile';
 import { calculateVerticalProfileConflicts, formatVerticalConflict } from './navigation/verticalConflicts';
@@ -105,7 +106,7 @@ root.innerHTML = `
         </div>
         <div id="glide-assumption-bar" class="glide-assumption-bar" hidden>
           <strong>C182T maximum glide, POH Fig. 3-1:</strong>
-          propeller windmilling, flaps up, zero wind. The shading uses the Phase 6 modeled altitude and assumes the shoreline/landing surface is at sea level. Best glide speeds shown by the chart are 76 KIAS at 3100 lb, 70 KIAS at 2600 lb and 58 KIAS at 2100 lb. It shows theoretical reach, not terrain clearance or landing suitability.
+          propeller windmilling, flaps up, zero wind. The blue shading uses the Phase 6 modeled altitude and assumes the shoreline/landing surface is at sea level. Red route sections indicate sampled over-water positions where no coastline is found inside the modeled zero-wind glide range; amber dashed sections indicate a modeled coastline margin of 1 NM or less. Coastline screening uses generalized Natural Earth 1:10m land data and may omit small islands or fine shoreline detail. Best glide speeds shown by the chart are 76 KIAS at 3100 lb, 70 KIAS at 2600 lb and 58 KIAS at 2100 lb. This is not terrain-clearance or landing-suitability analysis.
           <span id="glide-status" class="glide-status"></span>
         </div>
         <div id="map" class="map"></div>
@@ -231,7 +232,7 @@ glideEnvelopeToggle.addEventListener('change', () => {
   localStorage.setItem('flightplanner-glide-envelope', String(glideEnvelopeToggle.checked));
   glideAssumptionBar.hidden = !glideEnvelopeToggle.checked;
   mapManager.setGlideEnvelopeVisible(glideEnvelopeToggle.checked);
-  renderGlideEnvelope();
+  void renderGlideEnvelope();
 });
 
 const MIN_WORKSPACE_HEIGHT = 480;
@@ -414,9 +415,13 @@ const renderVerticalProfileMarkers = () => {
   }
 };
 
-const renderGlideEnvelope = () => {
+let glideRenderSequence = 0;
+
+const renderGlideEnvelope = async () => {
+  const sequence = ++glideRenderSequence;
   if (!glideEnvelopeToggle.checked) {
     mapManager.renderGlideEnvelope([]);
+    mapManager.renderGlideCoastlineSegments([]);
     glideStatus.textContent = '';
     return;
   }
@@ -425,6 +430,7 @@ const renderGlideEnvelope = () => {
     const current = calculateCurrentVerticalProfile();
     if (!current) {
       mapManager.renderGlideEnvelope([]);
+      mapManager.renderGlideCoastlineSegments([]);
       glideStatus.textContent = 'Add at least two waypoints and enter PL to draw the envelope.';
       return;
     }
@@ -436,14 +442,59 @@ const renderGlideEnvelope = () => {
     mapManager.renderGlideEnvelope(result.samples);
 
     if (result.samples.length === 0) {
+      mapManager.renderGlideCoastlineSegments([]);
       glideStatus.textContent = result.warnings[0] ?? 'Enter PL for the route to draw the envelope.';
       return;
     }
 
-    const warning = result.warnings.length > 0 ? ` ${result.warnings.join(' ')}` : '';
-    glideStatus.textContent = `Current modeled maximum reach is up to ${result.maxRangeNm.toFixed(1)} NM from the route.${warning}`;
+    const envelopeWarning = result.warnings.length > 0 ? ` ${result.warnings.join(' ')}` : '';
+    glideStatus.textContent = `Current modeled maximum reach is up to ${result.maxRangeNm.toFixed(1)} NM from the route. Analyzing coastline...${envelopeWarning}`;
+
+    try {
+      const landMaskUrl = new URL('data/ne_10m_land_nordic.geojson', document.baseURI).toString();
+      const landMask = await loadNordicLandMask(landMaskUrl);
+      if (sequence !== glideRenderSequence || !glideEnvelopeToggle.checked) return;
+
+      const coastline = analyzeGlideCoastline(result.samples, landMask);
+      mapManager.renderGlideCoastlineSegments(coastline.mapSegments);
+
+      let coastlineStatus = '';
+      if (coastline.unreachableSampleCount > 0) {
+        coastlineStatus =
+          ` Approx. ${coastline.estimatedUnreachableRouteNm.toFixed(1)} NM of the sampled route has no coastline inside the modeled zero-wind glide range; red route sections mark the screening result.`;
+        if (coastline.marginalSampleCount > 0) {
+          coastlineStatus +=
+            ` A further approx. ${coastline.estimatedMarginalRouteNm.toFixed(1)} NM has 1 NM or less modeled coastline margin and is shown amber/dashed.`;
+        }
+      } else if (coastline.marginalSampleCount > 0) {
+        coastlineStatus =
+          ` Coastline is inside the modeled range at sampled over-water positions, but approx. ${coastline.estimatedMarginalRouteNm.toFixed(1)} NM has 1 NM or less modeled margin and is shown amber/dashed.`;
+      } else if (coastline.waterSampleCount > 0) {
+        const margin = coastline.minimumReachableMarginNm === null
+          ? ''
+          : ` Smallest modeled coastline margin is ${coastline.minimumReachableMarginNm.toFixed(1)} NM.`;
+        coastlineStatus =
+          ` All sampled over-water positions have coastline inside the modeled zero-wind glide range.${margin}`;
+      } else {
+        coastlineStatus = ' No sampled over-water route positions were detected by the bundled land mask.';
+      }
+
+      const coverageWarning = coastline.outsideCoverageSampleCount > 0
+        ? ` ${coastline.outsideCoverageSampleCount} sample(s) are outside dataset coverage.`
+        : '';
+      glideStatus.textContent =
+        `Current modeled maximum reach is up to ${result.maxRangeNm.toFixed(1)} NM from the route.${coastlineStatus}${coverageWarning}${envelopeWarning}`;
+    } catch (coastlineError) {
+      if (sequence !== glideRenderSequence || !glideEnvelopeToggle.checked) return;
+      mapManager.renderGlideCoastlineSegments([]);
+      const message = coastlineError instanceof Error ? coastlineError.message : 'unknown coastline-data error';
+      glideStatus.textContent =
+        `Current modeled maximum reach is up to ${result.maxRangeNm.toFixed(1)} NM from the route. Coastline screening unavailable: ${message}.${envelopeWarning}`;
+    }
   } catch (error) {
+    if (sequence !== glideRenderSequence) return;
     mapManager.renderGlideEnvelope([]);
+    mapManager.renderGlideCoastlineSegments([]);
     glideStatus.textContent = error instanceof Error ? error.message : 'Glide overlay could not be calculated.';
   }
 };
@@ -500,7 +551,7 @@ const render = () => {
   mapManager.renderMsaCorridor(legs);
   mapManager.renderRoute(waypoints, legs, (id, lat, lon) => store.updateWaypoint(id, { lat, lon }));
   renderVerticalProfileMarkers();
-  renderGlideEnvelope();
+  void renderGlideEnvelope();
 };
 
 store.subscribe(() => {
