@@ -1,0 +1,26 @@
+.frequency-toolbar { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin:12px 0; }
+.frequency-toolbar a,.frequency-candidate a,.frequency-airport a { font-size:12px; color:var(--accent, #2a6777); }
+.frequency-data-status,.frequency-note { font-size:12px; line-height:1.5; padding:10px; border-radius:6px; background:#fff4db; color:#695121; overflow-wrap:anywhere; }
+.frequency-leg-label,.frequency-manual-label { display:flex; flex-direction:column; gap:7px; margin:14px 0; font-size:12px; font-weight:600; }
+.frequency-leg-label select,.frequency-manual-label select,.frequency-manual-label input { width:100%; min-width:0; box-sizing:border-box; }
+.frequency-segments { display:grid; gap:10px; }
+.frequency-segment { padding:12px; border:1px solid #dbe5e8; background:#f7fafb; border-radius:8px; min-width:0; }
+.frequency-segment > strong { font-size:12px; color:#526572; }
+.frequency-candidate { display:flex; gap:10px; align-items:baseline; margin:10px 0 4px; font-size:13px; }
+.frequency-candidate > strong { font-size:16px; color:#195d70; font-variant-numeric:tabular-nums; }
+.frequency-candidate > span { flex:1; min-width:0; overflow-wrap:anywhere; }
+.frequency-candidate small,.frequency-airport small { display:block; font-size:11px; color:#667984; line-height:1.5; margin-top:3px; }
+.frequency-remarks { font-size:11px; line-height:1.5; color:#667984; overflow-wrap:anywhere; margin:4px 0 9px; }
+.frequency-alternatives { font-size:12px; margin-top:10px; }
+.frequency-alternatives summary { cursor:pointer; color:#426d7b; }
+.frequency-active { font-size:12px; line-height:1.5; }
+.frequency-airport { padding:10px 0; border-bottom:1px solid #dbe5e8; font-size:12px; }
+.frequency-airport p { margin:10px 0; }
+.frequency-message { font-size:12px; line-height:1.5; }
+.ofp-table .ofp-frequency-cell { min-width:160px; max-width:240px; white-space:normal; vertical-align:top; }
+.ofp-frequency-mode,.ofp-frequency-cell > small { display:block; font-size:10px; line-height:1.4; color:#657984; margin-bottom:5px; }
+.ofp-frequency-segment { margin:4px 0; font-size:12px; }
+.ofp-frequency-segment small { display:block; font-size:10px; color:#657984; }
+.ofp-frequency-segment strong { font-variant-numeric:tabular-nums; }
+.ofp-frequency-input { display:block; width:100%; min-width:0; margin-top:7px; box-sizing:border-box; font-size:11px; padding:6px; }
+@media print { .ofp-frequency-input { display:none; } }

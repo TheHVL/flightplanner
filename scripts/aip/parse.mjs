@@ -43,7 +43,7 @@ export function discoverAerodromePages(html, sourceUrl) {
 
 // Expand eAIP rowspans so reciprocal runway rows and repeated services retain
 // their published cells. Parse only the section/table appropriate to each field.
-function tableRows($, html) {
+export function tableRows($, html) {
   const fragment = load(html);
   fragment('.sdParams,.AmdtDeletedAIRAC,.AmdtDeleted,.Deleted,.deleted,del').remove();
   fragment('br').replaceWith(' ');
@@ -94,6 +94,15 @@ const number = value => {
   return match ? Number(match[1].replaceAll(' ', '')) : null;
 };
 
+export function parseAerodromeAirspaceDescription(icao, html) {
+  const $ = load(html);
+  const rows = tableRows($, sectionHtml($, icao, 17));
+  const value = label => rows.find(row => row[1]?.toUpperCase().includes(label))?.slice(2).join(' ') ?? '';
+  return { lateralLimits: value('DESIGNATION AND LATERAL'), verticalLimits: value('VERTICAL LIMITS'),
+    airspaceClass: value('AIRSPACE CLASSIFICATION'), callSign: value('ATS UNIT CALL SIGN').replace(/\s+English[\s\S]*/i, ''),
+    hours: value('HOURS OF APPLICABILITY'), remarks: value('RMK') };
+}
+
 export function parseAerodromePage(icao, html, sourceUrl) {
   const $ = load(html);
   // These hidden AIXM annotations are present in Avinor eAIP and are not data.
@@ -135,7 +144,7 @@ export function parseAerodromePage(icao, html, sourceUrl) {
     });
   });
   const text = section => cleanText(load(sectionHtml($, icao, section)).text());
-  return { icao, name: name || icao, elevationFt, lat: parseCoordinate(coords[1]), lon: parseCoordinate(coords[2]), sourceUrl, runways, frequencies, transitionAltitudeFt,
+  return { icao, name: name || icao, elevationFt, lat: parseCoordinate(coords[1]), lon: parseCoordinate(coords[2]), sourceUrl, runways, frequencies, transitionAltitudeFt, atsAirspace: parseAerodromeAirspaceDescription(icao, html),
     localRegulations: text(20), circuitNotes: text(21), flightProcedures: text(22), charts };
 }
 

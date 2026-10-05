@@ -8,7 +8,8 @@
     "build": "tsc --noEmit && vite build",
     "test": "vitest run",
     "test:watch": "vitest",
-    "aip:update": "node scripts/update-aip-aerodromes.mjs"
+    "aip:update": "node scripts/update-aip-aerodromes.mjs",
+    "aip:frequencies": "node scripts/update-aip-frequencies.mjs"
   },
   "dependencies": {
     "leaflet": "^1.9.4",
