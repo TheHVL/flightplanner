@@ -8,6 +8,9 @@ import './aipPlanning.css';
 import './sidebarLayout.css';
 import './savedPlans.css';
 import './planningMenus.css';
+import './frequencies.css';
+import { FrequencyPlanner } from './frequencies/FrequencyPlanner';
+import { FrequencyPanel } from './components/FrequencyPanel';
 import { FlightPlanStore } from './flightplan/FlightPlanStore';
 import { ROUTE_SHAPE_CHANGED_EVENT, RouteShapeController } from './flightplan/RouteShapeController';
 import { restoreWorkingRoute, saveWorkingRoute } from './flightplan/workingRoutePersistence';
@@ -83,6 +86,10 @@ root.innerHTML = `
         <details class="phase-disclosure" data-panel-key="weather">
           <summary><span>WEATHER</span><strong>Forecast winds &amp; temperature</strong></summary>
           <section id="weather-panel" class="weather-panel panel"></section>
+        </details>
+        <details class="phase-disclosure" data-panel-key="frequencies">
+          <summary><span>COMMS</span><strong>Route frequencies</strong></summary>
+          <section id="frequency-panel" class="panel"></section>
         </details>
         <details class="phase-disclosure" data-panel-key="performance">
           <summary><span>AIRCRAFT</span><strong>Cruise performance &amp; fuel</strong></summary>
@@ -201,6 +208,7 @@ warningAck.addEventListener('click', () => {
 window.setTimeout(() => warningAck.focus(), 0);
 
 const store = new FlightPlanStore();
+const frequencyPlanner = new FrequencyPlanner(store);
 const routeShapeController = new RouteShapeController(store);
 restoreWorkingRoute(store, routeShapeController);
 const routePanel = new RoutePanel(routeElement, store);
@@ -216,7 +224,10 @@ new PlanLibraryPanel(document.querySelector<HTMLElement>('#saved-plans-panel')!,
   weatherPanel.onPlanLoaded();
   verticalProfilePanel.render();
 });
-const ofpTable = new OFPTable(tableElement, store);
+const ofpTable = new OFPTable(tableElement, store, frequencyPlanner);
+new FrequencyPanel(document.querySelector<HTMLElement>('#frequency-panel')!, store, frequencyPlanner);
+frequencyPlanner.subscribe(() => ofpTable.render());
+void frequencyPlanner.reload();
 const mapManager = new MapManager(mapElement, {
   onMapClick: (lat, lon) => store.addWaypoint({ lat, lon }),
   onWaypointMoved: (id, lat, lon) => store.updateWaypoint(id, { lat, lon }),

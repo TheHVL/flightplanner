@@ -17,6 +17,7 @@ import {
   FUEL_SETTINGS_CHANGED_EVENT,
   type FuelLegPlan,
 } from '../fuel/fuelPlanning';
+import type { FrequencyPlanner } from '../frequencies/FrequencyPlanner';
 import { isOfpTouchAndGoBoundary } from './ofpTouchAndGoBoundary';
 
 interface LegRowResult {
@@ -27,8 +28,10 @@ export class OFPTable {
   constructor(
     private readonly element: HTMLElement,
     private readonly store: FlightPlanStore,
+    private readonly frequencies?: FrequencyPlanner,
   ) {
     this.element.addEventListener('change', (event) => this.handleChange(event));
+    this.element.addEventListener('input', event => { const input = event.target as HTMLInputElement; if (input.dataset.freqFrom) input.setCustomValidity(''); });
     if (typeof window !== 'undefined') {
       window.addEventListener(FUEL_SETTINGS_CHANGED_EVENT, () => this.render());
     }
@@ -98,7 +101,7 @@ export class OFPTable {
               <th rowspan="2">ETO</th>
               <th colspan="2">TIME</th>
               <th colspan="2">FUEL REMAINING</th>
-              <th rowspan="2">FREQ</th>
+              <th rowspan="2" title="Published channel suggestions. Confirm active channels with ATS.">FREQ</th>
             </tr>
             <tr class="ofp-subhead-row">
               <th>DIR/VEL</th><th>WCA</th>
@@ -120,9 +123,10 @@ export class OFPTable {
       </div>
       <div class="table-legend">
         <span><i class="dot calculated-dot"></i> Calculated</span>
-        <span><i class="dot pending-dot"></i> Added in later phases</span>
+        <span><i class="dot pending-dot"></i> In-flight entries</span>
         <span>Leg DIST and total route distance round up to the next whole NM. Accumulated distance remains shown to nearest 0.5 NM · headings/WCA shown to whole degrees</span>
         <span>TAS shows cruise TAS when a cruise portion exists; an all-climb/descent row shows that phase TAS. GS is whole-leg effective GS from flown distance / flight time.</span>
+        <span>FREQ shows the route channel sequence. Review sources and alternatives under Route frequencies. A manual entry overrides this whole leg; clear it to restore suggestions.</span>
         <span>MSA is entered manually. Use the ±1 NM map corridor to inspect terrain/obstacles.</span>
         <span class="msa-legend-warning">PL below entered MSA is highlighted.</span>
         <span>Fuel INT/ACC uses modeled cruise, climb, descent and circuit phases where the required fuel-flow inputs are available.</span>
@@ -248,19 +252,24 @@ export class OFPTable {
             ? `<td class="pending" title="${remainingTitle}">—</td>`
             : `<td class="calculated ${estimatedRemainingGal < 0 ? 'fuel-negative' : ''}" title="${remainingTitle}">${estimatedRemainingGal.toFixed(1)}</td>`}
           <td class="pending">—</td>
-          <td class="pending">—</td>
+          ${this.frequencyCell(leg)}
         </tr>`,
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Navigation calculation failed.';
       return {
-        html: `<tr class="${boundaryClass}"><td><strong>${escapeHtml(leg.from.name)}</strong></td><td colspan="24" class="calculation-error">${escapeHtml(message)}</td></tr>`,
+        html: `<tr class="${boundaryClass}"><td><strong>${escapeHtml(leg.from.name)}</strong></td><td colspan="23" class="calculation-error">${escapeHtml(message)}</td>${this.frequencyCell(leg)}</tr>`,
       };
     }
   }
 
   private handleChange(event: Event): void {
     const input = event.target as HTMLInputElement;
+    if (input.dataset.freqFrom && input.dataset.freqTo) {
+      const valid = this.store.setManualFrequency(input.dataset.freqFrom, input.dataset.freqTo, input.value);
+      if (!valid) { input.setCustomValidity('Use a VHF channel with three decimals, such as 126.455. Separate channels with /.'); input.reportValidity(); }
+      return;
+    }
     const msaFromId = input.dataset.msaFrom;
     const msaToId = input.dataset.msaTo;
     if (msaFromId && msaToId) {
@@ -285,6 +294,15 @@ export class OFPTable {
     const altitudeFt = Number(input.value);
     if (!Number.isFinite(altitudeFt)) return;
     this.store.setPlannedAltitudeFt(fromId, toId, altitudeFt);
+  }
+
+  private frequencyCell(leg: ReturnType<FlightPlanStore['getLegs']>[number]): string {
+    const plan = this.frequencies?.getPlans().find(p => p.leg.from.id === leg.from.id && p.leg.to.id === leg.to.id);
+    const manual = this.store.getManualFrequency(leg.from.id, leg.to.id);
+    const compact = (plan?.segments ?? []).filter((segment, index, all) => index === 0 || JSON.stringify(segment.primary.map(c => [c.channel, c.callSign, c.role])) !== JSON.stringify(all[index - 1].primary.map(c => [c.channel, c.callSign, c.role])));
+    const sequence = compact.map(s => `<div class="ofp-frequency-segment"><small>~${s.startNm.toFixed(1)} NM</small>${s.primary.length ? s.primary.map(c => `<strong title="${escapeHtml(c.callSign + ': ' + c.area.name)}">${escapeHtml(c.channel)}</strong>`).join(' / ') : '<span>Review</span>'}${s.primary.length > 1 ? '<small>Confirm channel</small>' : ''}</div>`).join('');
+    return `<td class="ofp-frequency-cell"><span class="ofp-frequency-mode">${manual ? 'Manual · review for this flight' : 'Published suggestions'}</span>${manual ? `<strong>${escapeHtml(manual)}</strong>` : sequence || `<small>${escapeHtml(plan?.note ?? 'Open Route frequencies to review ATS data.')}</small>`}
+      <input class="ofp-frequency-input" type="text" maxlength="69" value="${escapeHtml(manual ?? '')}" placeholder="Manual override" aria-label="Manual channels ${escapeHtml(leg.from.name)} to ${escapeHtml(leg.to.name)}" title="Manual entry for this whole leg. Clear to restore automatic suggestions." data-freq-from="${escapeHtml(leg.from.id)}" data-freq-to="${escapeHtml(leg.to.id)}" /></td>`;
   }
 
   private phaseTimeTitle(leg: FuelLegPlan): string {

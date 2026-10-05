@@ -1,3 +1,4 @@
+import { normalizeManualChannels } from '../frequencies/channels';
 import type { Coordinate, RouteLeg, Waypoint } from '../types';
 import { calculateRouteLegs } from '../navigation/geodesy';
 
@@ -80,6 +81,7 @@ export interface FlightPlanWorkingDraftState {
   verticalProfileSettings: VerticalProfileSettings;
   plannedAltitudesFt: Array<[string, number]>;
   manualMsaFt: Array<[string, number]>;
+  manualFrequencies: Array<[string, string]>;
   manualLegWinds: Array<[string, VerticalLegWind]>;
   verticalWaypointConstraints: Array<[string, WaypointVerticalConstraint]>;
   automaticWaypointIds: string[];
@@ -140,6 +142,7 @@ export class FlightPlanStore {
   private verticalProfileSettings: VerticalProfileSettings = { ...DEFAULT_VERTICAL_PROFILE_SETTINGS };
   private plannedAltitudesFt = new Map<string, number>();
   private manualMsaFt = new Map<string, number>();
+  private manualFrequencies = new Map<string, string>();
   private manualLegWinds = new Map<string, VerticalLegWind>();
   private weatherForecasts = new Map<string, LegWeatherForecast>();
   private verticalWaypointConstraints = new Map<string, WaypointVerticalConstraint>();
@@ -194,6 +197,7 @@ export class FlightPlanStore {
       verticalProfileSettings: { ...this.verticalProfileSettings },
       plannedAltitudesFt: [...this.plannedAltitudesFt.entries()],
       manualMsaFt: [...this.manualMsaFt.entries()],
+      manualFrequencies: [...this.manualFrequencies.entries()],
       manualLegWinds: [...this.manualLegWinds.entries()].map(([key, wind]) => [key, { ...wind }]),
       verticalWaypointConstraints: [...this.verticalWaypointConstraints.entries()].map(([key, constraint]) => [key, { ...constraint }]),
       automaticWaypointIds: [...this.automaticWaypointIds],
@@ -211,6 +215,7 @@ export class FlightPlanStore {
     this.verticalProfileSettings = { ...draft.verticalProfileSettings };
     this.plannedAltitudesFt = new Map(draft.plannedAltitudesFt);
     this.manualMsaFt = new Map(draft.manualMsaFt);
+    this.manualFrequencies = new Map(draft.manualFrequencies);
     this.manualLegWinds = new Map(
       draft.manualLegWinds.map(([key, wind]) => [key, { ...wind }]),
     );
@@ -422,6 +427,22 @@ export class FlightPlanStore {
     this.emit();
   }
 
+  getManualFrequency(fromId: string, toId: string): string | null {
+    return this.manualFrequencies.get(this.legKey(fromId, toId)) ?? null;
+  }
+
+  setManualFrequency(fromId: string, toId: string, value: string | null): boolean {
+    if (!this.getLegs().some(leg => leg.from.id === fromId && leg.to.id === toId)) return false;
+    const key = this.legKey(fromId, toId);
+    const normalized = value === null || value.trim() === '' ? null : normalizeManualChannels(value);
+    if (value?.trim() && !normalized) return false;
+    if ((this.manualFrequencies.get(key) ?? null) === normalized) return true;
+    this.rememberUndo();
+    if (normalized === null) this.manualFrequencies.delete(key); else this.manualFrequencies.set(key, normalized);
+    this.emit();
+    return true;
+  }
+
   setManualMsaFt(fromId: string, toId: string, msaFt: number | null): void {
     const key = this.legKey(fromId, toId);
     const current = this.manualMsaFt.get(key) ?? null;
@@ -541,6 +562,7 @@ export class FlightPlanStore {
 
     this.plannedAltitudesFt.delete(previousLegKey);
     this.manualMsaFt.delete(previousLegKey);
+    this.manualFrequencies.delete(previousLegKey);
     this.manualLegWinds.delete(previousLegKey);
     if (inheritedAltitudeFt !== null) {
       this.plannedAltitudesFt.set(this.legKey(from.id, id), inheritedAltitudeFt);
@@ -612,6 +634,7 @@ export class FlightPlanStore {
     this.automaticWaypointIds.clear();
     this.plannedAltitudesFt.clear();
     this.manualMsaFt.clear();
+    this.manualFrequencies.clear();
     this.manualLegWinds.clear();
     this.weatherForecasts.clear();
     this.verticalWaypointConstraints.clear();
@@ -639,11 +662,13 @@ export class FlightPlanStore {
     if (previous && current) {
       const key = this.legKey(previous.id, current.id);
       this.manualMsaFt.delete(key);
+      this.manualFrequencies.delete(key);
       this.manualLegWinds.delete(key);
     }
     if (current && next) {
       const key = this.legKey(current.id, next.id);
       this.manualMsaFt.delete(key);
+      this.manualFrequencies.delete(key);
       this.manualLegWinds.delete(key);
     }
   }
@@ -652,6 +677,9 @@ export class FlightPlanStore {
     const activeKeys = new Set(this.getLegs().map((leg) => this.legKey(leg.from.id, leg.to.id)));
     for (const key of this.plannedAltitudesFt.keys()) {
       if (!activeKeys.has(key)) this.plannedAltitudesFt.delete(key);
+    }
+    for (const key of this.manualFrequencies.keys()) {
+      if (!activeKeys.has(key)) this.manualFrequencies.delete(key);
     }
     for (const key of this.manualMsaFt.keys()) {
       if (!activeKeys.has(key)) this.manualMsaFt.delete(key);
@@ -682,6 +710,7 @@ export class FlightPlanStore {
       verticalProfileSettings: { ...this.verticalProfileSettings },
       plannedAltitudesFt: [...this.plannedAltitudesFt.entries()],
       manualMsaFt: [...this.manualMsaFt.entries()],
+      manualFrequencies: [...this.manualFrequencies.entries()],
       manualLegWinds: [...this.manualLegWinds.entries()].map(([key, wind]) => [key, { ...wind }]),
       weatherForecasts: [...this.weatherForecasts.entries()].map(([key, forecast]) => [key, { ...forecast }]),
       verticalWaypointConstraints: [...this.verticalWaypointConstraints.entries()].map(([key, constraint]) => [key, { ...constraint }]),
@@ -697,6 +726,7 @@ export class FlightPlanStore {
     this.verticalProfileSettings = { ...snapshot.verticalProfileSettings };
     this.plannedAltitudesFt = new Map(snapshot.plannedAltitudesFt);
     this.manualMsaFt = new Map(snapshot.manualMsaFt);
+    this.manualFrequencies = new Map(snapshot.manualFrequencies);
     this.manualLegWinds = new Map(
       snapshot.manualLegWinds.map(([key, wind]) => [key, { ...wind }]),
     );
@@ -755,6 +785,18 @@ export function parseWorkingDraftState(value: unknown): FlightPlanWorkingDraftSt
   const manualMsaFt = parseNumberEntries(value.manualMsaFt, activeLegKeys, 0, 30000);
   if (!plannedAltitudesFt || !manualMsaFt) return null;
 
+  // Older version-1 plans predate frequency overrides and remain importable.
+  const manualFrequencies: Array<[string, string]> = [];
+  if (value.manualFrequencies !== undefined && !Array.isArray(value.manualFrequencies)) return null;
+  const seenFrequencies = new Set<string>();
+  for (const entry of value.manualFrequencies ?? []) {
+    if (!Array.isArray(entry) || entry.length !== 2 || typeof entry[0] !== 'string' || !activeLegKeys.has(entry[0]) ||
+        seenFrequencies.has(entry[0]) || typeof entry[1] !== 'string') return null;
+    const channel = normalizeManualChannels(entry[1]);
+    if (!channel) return null;
+    seenFrequencies.add(entry[0]); manualFrequencies.push([entry[0], channel]);
+  }
+
   const manualLegWinds: Array<[string, VerticalLegWind]> = [];
   for (const entry of value.manualLegWinds) {
     if (!Array.isArray(entry) || entry.length !== 2 || typeof entry[0] !== 'string' || !activeLegKeys.has(entry[0])) return null;
@@ -785,6 +827,7 @@ export function parseWorkingDraftState(value: unknown): FlightPlanWorkingDraftSt
     verticalProfileSettings: { ...value.verticalProfileSettings } as VerticalProfileSettings,
     plannedAltitudesFt,
     manualMsaFt,
+    manualFrequencies,
     manualLegWinds,
     verticalWaypointConstraints,
     automaticWaypointIds,
