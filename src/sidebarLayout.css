@@ -1,0 +1,30 @@
+/* A dedicated divider leaves the sidebar and map as independent grid tracks. */
+@media (min-width: 901px) {
+  .workspace { grid-template-columns: var(--sidebar-width, 340px) 14px minmax(0, 1fr); gap: 0; }
+}
+.left-column { container-type: inline-size; }
+.sidebar-resize-handle { display: grid; place-items: center; cursor: ew-resize; touch-action: none; user-select: none; border-radius: 5px; }
+.sidebar-resize-handle::before { content: ''; width: 4px; height: 48px; border-radius: 999px; background: #9aa8b8; }
+.sidebar-resize-handle:hover, .sidebar-resize-handle:focus-visible { background: #d9e3ef; outline: none; }
+.sidebar-resize-handle:focus-visible::before { background: #1f67d8; }
+body.sidebar-resizing, body.sidebar-resizing * { cursor: ew-resize !important; user-select: none !important; }
+.phase-disclosure > summary strong { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; line-height: 1.4; }
+.phase-disclosure > summary span { white-space: nowrap; }
+.left-column :is(p, label, button, a) { overflow-wrap: anywhere; }
+.left-column select { max-width: 100%; min-width: 0; padding-right: 24px; }
+.vertical-waypoint-name strong, .manual-wind-leg strong { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; line-height: 1.4; }
+.map-column { container-type: inline-size; }
+.map-column .map-toolbar { flex: 0 0 auto; height: auto; min-height: 54px; padding-top: 9px; padding-bottom: 9px; flex-wrap: wrap; }
+.map-toolbar > div:first-child { flex: 0 0 auto; }
+.map-toolbar-right { flex-wrap: wrap; }
+@container (max-width: 780px) { .map-note { display: none; } }
+@container (max-width: 380px) {
+  .manual-wind-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; }
+  .manual-wind-leg { grid-column: 1 / -1; }
+  .vertical-waypoint-row { grid-template-columns: minmax(0, 1fr); }
+  .vertical-circuit-controls { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .vertical-circuit-controls > strong { grid-column: 1 / -1; white-space: normal; }
+  .vertical-aip-endpoint-row { grid-template-columns: minmax(0, 1fr) 74px; }
+  .vertical-aip-endpoint-row > div { grid-column: 1 / -1; }
+}
+@media (max-width: 900px) { .sidebar-resize-handle { display: none; } }

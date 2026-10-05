@@ -5,6 +5,7 @@ import './phase5.css';
 import './phase6.css';
 import './uxEnhancements.css';
 import './aipPlanning.css';
+import './sidebarLayout.css';
 import { FlightPlanStore } from './flightplan/FlightPlanStore';
 import { ROUTE_SHAPE_CHANGED_EVENT, RouteShapeController } from './flightplan/RouteShapeController';
 import { restoreWorkingRoute, saveWorkingRoute } from './flightplan/workingRoutePersistence';
@@ -17,6 +18,7 @@ import { VerticalProfilePanel } from './components/VerticalProfilePanel';
 import { OFPTable } from './components/OFPTable';
 import { AipPanel } from './components/AipPanel';
 import { SequentialLegPanel } from './components/SequentialLegPanel';
+import { SidebarResize } from './components/SidebarResize';
 import { FUEL_SETTINGS_CHANGED_EVENT, getFuelPlanningSettings } from './fuel/fuelPlanning';
 import { buildC182TGlideEnvelopeSamples } from './navigation/glideEnvelope';
 import { analyzeGlideCoastline, loadNordicLandMask } from './navigation/glideCoastline';
@@ -57,7 +59,7 @@ root.innerHTML = `
     </header>
 
     <main class="workspace">
-      <aside class="left-column">
+      <aside id="planning-sidebar" class="left-column">
         <details class="phase-disclosure" data-panel-key="route" open>
           <summary><span>ROUTE</span><strong>Waypoints</strong></summary>
           <section id="route-panel" class="route-panel panel"></section>
@@ -87,6 +89,9 @@ root.innerHTML = `
           <section id="vertical-profile-panel" class="vertical-profile-panel panel"></section>
         </details>
       </aside>
+      <div id="sidebar-resize-handle" class="sidebar-resize-handle" role="separator" tabindex="0"
+        aria-orientation="vertical" aria-label="Resize planning sidebar" aria-controls="planning-sidebar"
+        title="Drag left or right to resize the sidebar. Arrow keys also resize. Double-click to reset."></div>
       <section id="map-column" class="map-column">
         <div class="map-toolbar">
           <div>
@@ -262,6 +267,8 @@ const setWorkspaceHeight = (height: number, persist = false) => {
 };
 
 setWorkspaceHeight(Number.isFinite(savedWorkspaceHeight) && savedWorkspaceHeight > 0 ? savedWorkspaceHeight : defaultWorkspaceHeight);
+new SidebarResize(workspace, document.querySelector<HTMLElement>('#planning-sidebar')!,
+  document.querySelector<HTMLElement>('#sidebar-resize-handle')!, () => window.requestAnimationFrame(() => mapManager.invalidateSize()));
 
 let resizePointerId: number | null = null;
 let resizeStartY = 0;
