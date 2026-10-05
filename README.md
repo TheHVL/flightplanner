@@ -39,6 +39,16 @@ Browser-based VFR flight planning for Norwegian flight training, with the Cessna
 - Collapsible planning sections in the sidebar, with each section remembering whether it was open or closed.
 - Resizable map workspace, scrollable planning sidebar and full-screen map mode.
 
+## Save and load flight plans
+
+The **PLANS / Save & load** sidebar section saves named snapshots in the current browser. Use **Save as new** for a separate plan and **Update selected** to replace a saved snapshot. Editing the working route does not overwrite named plans. **Duplicate selected** creates an independent copy of the selected saved snapshot.
+
+Plans retain waypoints, AIP edition references, route bends, PL/MSA, manual winds, navigation/performance/vertical-profile settings, circuit settings, and fuel inputs. Fetched weather responses are cleared when loading; fetch a fresh forecast for the flight. Loading also cancels any forecast request for the previous plan.
+
+**Export current plan** downloads a versioned JSON file containing the current working plan. **Import plan file** validates a file and adds it to saved plans without replacing current work. Imports use a new plan ID and add a numbered suffix if the name already exists.
+
+Each load keeps a recovery copy of the previous working plan, including fuel and route bends. **Restore previous work** swaps the current and previous plans. If browser storage cannot retain the recovery copy, loading stops and keeps the current route. Export files for backup or use on another device; saved plans are local to this browser and are not an account sync service.
+
 ## Route shaping between waypoints
 
 Dragging the blue route line is a route-shaping operation, not a waypoint-creation operation.

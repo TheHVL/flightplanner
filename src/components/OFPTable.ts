@@ -1,3 +1,4 @@
+import { escapeHtml } from '../utils/html';
 import type { FlightPlanStore } from '../flightplan/FlightPlanStore';
 import { totalRouteDistanceNm } from '../navigation/geodesy';
 import {
@@ -186,7 +187,7 @@ export class OFPTable {
       return {
         html: `
         <tr class="${[belowMsa ? 'ofp-row-warning' : '', boundaryClass].filter(Boolean).join(' ')}">
-          <td><strong>${leg.from.name}</strong></td>
+          <td><strong>${escapeHtml(leg.from.name)}</strong></td>
           <td class="calculated" title="${tasTitle}">${legPlan.tasKt.toFixed(0)}</td>
           <td class="calculated">${this.headingLabel(leg.trueTrackDeg)}</td>
           <td class="calculated" title="${settings.automaticVariation ? `WMM2025 at leg midpoint: ${rawVariationDegEast.toFixed(2)}°, rounded for OFP` : 'Manual variation override'}">${variationLabel}</td>
@@ -204,7 +205,7 @@ export class OFPTable {
           ${accumulatedFuelGal === null
             ? `<td class="pending" title="${accumulatedFuelTitle}">—</td>`
             : `<td class="calculated" title="${accumulatedFuelTitle}">${ceilFuelUsageGal(accumulatedFuelGal)}</td>`}
-          <td><strong>${leg.to.name}</strong></td>
+          <td><strong>${escapeHtml(leg.to.name)}</strong></td>
           <td class="editable-cell ${belowMsa ? 'msa-warning-cell' : ''}">
             <input
               class="ofp-altitude-input ofp-msa-input"
@@ -214,7 +215,7 @@ export class OFPTable {
               max="30000"
               step="100"
               placeholder="ft"
-              aria-label="Manual MSA ${leg.from.name} to ${leg.to.name}"
+              aria-label="Manual MSA ${escapeHtml(leg.from.name)} to ${escapeHtml(leg.to.name)}"
               title="Manual MSA. UTSA daylight VFR rule supplied for this project: highest terrain/obstacle within 1 NM of route plus 500 ft."
               data-msa-from="${leg.from.id}"
               data-msa-to="${leg.to.id}"
@@ -230,7 +231,7 @@ export class OFPTable {
               max="30000"
               step="100"
               placeholder="ft"
-              aria-label="Planned altitude ${leg.from.name} to ${leg.to.name}"
+              aria-label="Planned altitude ${escapeHtml(leg.from.name)} to ${escapeHtml(leg.to.name)}"
               title="${altitudeWarning}"
               data-alt-from="${leg.from.id}"
               data-alt-to="${leg.to.id}"
@@ -253,7 +254,7 @@ export class OFPTable {
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Navigation calculation failed.';
       return {
-        html: `<tr class="${boundaryClass}"><td><strong>${leg.from.name}</strong></td><td colspan="24" class="calculation-error">${message}</td></tr>`,
+        html: `<tr class="${boundaryClass}"><td><strong>${escapeHtml(leg.from.name)}</strong></td><td colspan="24" class="calculation-error">${escapeHtml(message)}</td></tr>`,
       };
     }
   }

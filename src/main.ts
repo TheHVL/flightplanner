@@ -6,6 +6,7 @@ import './phase6.css';
 import './uxEnhancements.css';
 import './aipPlanning.css';
 import './sidebarLayout.css';
+import './savedPlans.css';
 import { FlightPlanStore } from './flightplan/FlightPlanStore';
 import { ROUTE_SHAPE_CHANGED_EVENT, RouteShapeController } from './flightplan/RouteShapeController';
 import { restoreWorkingRoute, saveWorkingRoute } from './flightplan/workingRoutePersistence';
@@ -19,6 +20,7 @@ import { OFPTable } from './components/OFPTable';
 import { AipPanel } from './components/AipPanel';
 import { SequentialLegPanel } from './components/SequentialLegPanel';
 import { SidebarResize } from './components/SidebarResize';
+import { PlanLibraryPanel } from './components/PlanLibraryPanel';
 import { FUEL_SETTINGS_CHANGED_EVENT, getFuelPlanningSettings } from './fuel/fuelPlanning';
 import { buildC182TGlideEnvelopeSamples } from './navigation/glideEnvelope';
 import { analyzeGlideCoastline, loadNordicLandMask } from './navigation/glideCoastline';
@@ -60,6 +62,10 @@ root.innerHTML = `
 
     <main class="workspace">
       <aside id="planning-sidebar" class="left-column">
+        <details class="phase-disclosure" data-panel-key="saved-plans" open>
+          <summary><span>PLANS</span><strong>Save &amp; load</strong></summary>
+          <section id="saved-plans-panel" class="panel"></section>
+        </details>
         <details class="phase-disclosure" data-panel-key="route" open>
           <summary><span>ROUTE</span><strong>Waypoints</strong></summary>
           <section id="route-panel" class="route-panel panel"></section>
@@ -202,6 +208,12 @@ const navigationPanel = new NavigationPanel(navigationElement, store);
 const performancePanel = new PerformancePanel(performanceElement, store);
 const weatherPanel = new WeatherPanel(weatherElement, store);
 const verticalProfilePanel = new VerticalProfilePanel(verticalProfileElement, store);
+new PlanLibraryPanel(document.querySelector<HTMLElement>('#saved-plans-panel')!, store, routeShapeController, () => {
+  navigationPanel.render();
+  performancePanel.render();
+  weatherPanel.onPlanLoaded();
+  verticalProfilePanel.render();
+});
 const ofpTable = new OFPTable(tableElement, store);
 const mapManager = new MapManager(mapElement, {
   onMapClick: (lat, lon) => store.addWaypoint({ lat, lon }),

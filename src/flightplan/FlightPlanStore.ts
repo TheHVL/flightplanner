@@ -714,7 +714,7 @@ export class FlightPlanStore {
   }
 }
 
-function parseWorkingDraftState(value: unknown): FlightPlanWorkingDraftState | null {
+export function parseWorkingDraftState(value: unknown): FlightPlanWorkingDraftState | null {
   if (!isRecord(value)) return null;
   if (
     !Array.isArray(value.waypoints) ||
@@ -813,7 +813,7 @@ function parseNumberEntries(
 
 function parseWaypointVerticalConstraint(value: unknown): WaypointVerticalConstraint | null {
   if (!isRecord(value)) return null;
-  if (!['auto', 'airport', 'circuits', 'none'].includes(String(value.mode))) return null;
+  if (typeof value.mode !== 'string' || !['auto', 'airport', 'circuits', 'none'].includes(value.mode)) return null;
   if (value.elevationFt !== null && !finiteInRange(value.elevationFt, 0, 20000)) return null;
   if (typeof value.icaoCode !== 'string') return null;
   if (!finiteInRange(value.circuitCount, 1, 20) || !finiteInRange(value.minutesPerCircuit, 1, 30)) return null;

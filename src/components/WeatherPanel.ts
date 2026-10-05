@@ -1,3 +1,4 @@
+import { escapeHtml } from '../utils/html';
 import type { FlightPlanStore, LegWeatherForecast } from '../flightplan/FlightPlanStore';
 import { routeLegMidpoint } from '../navigation/magneticVariation';
 import { solveWindTriangle } from '../navigation/wind';
@@ -6,6 +7,7 @@ import { fetchForecastSample } from '../weather/openMeteo';
 
 export class WeatherPanel {
   private loading = false;
+  private requestVersion = 0;
   private statusMessage = 'Set a UTC departure time, then fetch winds and temperature along the route.';
 
   constructor(
@@ -35,7 +37,7 @@ export class WeatherPanel {
       <div class="weather-controls">
         <label class="weather-time-field">
           <span>Departure time UTC</span>
-          <input type="datetime-local" data-weather-time value="${settings.departureTimeUtc}" />
+          <input type="datetime-local" data-weather-time value="${escapeHtml(settings.departureTimeUtc)}" />
         </label>
         <button class="weather-fetch-button" type="button" data-weather-fetch ${this.loading || legs.length === 0 ? 'disabled' : ''}>
           ${this.loading ? 'Fetching…' : 'Fetch route forecast'}
@@ -48,11 +50,18 @@ export class WeatherPanel {
       <div class="weather-priority-note">
         <strong>Wind priority:</strong> fetched forecast for the leg → manual leg backup → global Phase 2 manual wind. Manual leg winds remain stored if a forecast is fetched later.
       </div>
-      <div class="weather-status">${this.statusMessage}</div>
+      <div class="weather-status">${escapeHtml(this.statusMessage)}</div>
       ${forecasts.length > 0 ? this.forecastList(forecasts) : ''}
       ${legs.length > 0 ? this.manualWindList() : ''}
       <div class="nav-help weather-source"><strong>Forecast source:</strong> Open-Meteo pressure-level forecast. Altitude interpolation uses geopotential height; time is interpolated between hourly forecast steps. Manual leg wind direction is FROM true north.</div>
     `;
+  }
+
+  onPlanLoaded(): void {
+    this.requestVersion += 1;
+    this.loading = false;
+    this.statusMessage = 'Plan loaded. Fetch a fresh route forecast for this flight. Manual leg wind backups were kept.';
+    this.render();
   }
 
   private forecastList(forecasts: LegWeatherForecast[]): string {
@@ -64,11 +73,11 @@ export class WeatherPanel {
       </div>
       <div class="weather-list">${forecasts.map((forecast) => {
         const leg = legs.find((candidate) => candidate.from.id === forecast.fromId && candidate.to.id === forecast.toId);
-        const name = leg ? `${leg.from.name} → ${leg.to.name}` : 'Route leg';
+        const name = leg ? `${escapeHtml(leg.from.name)} → ${escapeHtml(leg.to.name)}` : 'Route leg';
         return `
           <div class="weather-row">
             <div>
-              <strong>${name}</strong>
+              <strong>${escapeHtml(name)}</strong>
               <span>${Math.round(forecast.altitudeFt)} ft · ${this.formatUtc(forecast.validTimeUtc)}</span>
             </div>
             <div class="weather-values">
@@ -99,7 +108,7 @@ export class WeatherPanel {
           return `
             <div class="manual-wind-row">
               <div class="manual-wind-leg">
-                <strong>${leg.from.name} → ${leg.to.name}</strong>
+                <strong>${escapeHtml(leg.from.name)} → ${escapeHtml(leg.to.name)}</strong>
                 <span>${status}</span>
               </div>
               <label>
@@ -114,7 +123,7 @@ export class WeatherPanel {
                   data-manual-wind-to-id="${leg.to.id}"
                   data-manual-wind-field="direction"
                   value="${manual?.windFromDeg ?? ''}"
-                  aria-label="Manual wind direction ${leg.from.name} to ${leg.to.name}"
+                  aria-label="Manual wind direction ${escapeHtml(leg.from.name)} to ${escapeHtml(leg.to.name)}"
                 />
               </label>
               <label>
@@ -129,7 +138,7 @@ export class WeatherPanel {
                   data-manual-wind-to-id="${leg.to.id}"
                   data-manual-wind-field="speed"
                   value="${manual?.windSpeedKt ?? ''}"
-                  aria-label="Manual wind speed ${leg.from.name} to ${leg.to.name}"
+                  aria-label="Manual wind speed ${escapeHtml(leg.from.name)} to ${escapeHtml(leg.to.name)}"
                 />
               </label>
               <button
@@ -224,6 +233,7 @@ export class WeatherPanel {
     }
 
     this.loading = true;
+    const requestVersion = ++this.requestVersion;
     this.statusMessage = `Fetching forecast for ${legs.length} leg${legs.length === 1 ? '' : 's'}…`;
     this.render();
 
@@ -242,6 +252,7 @@ export class WeatherPanel {
         const estimatedMidpointTime = new Date(legStartMs + stillAirHours * 0.5 * 60 * 60 * 1000);
         const midpoint = routeLegMidpoint(leg);
         const sample = await fetchForecastSample(midpoint.lat, midpoint.lon, altitudeFt, estimatedMidpointTime);
+        if (requestVersion !== this.requestVersion) return;
         const windSolution = solveWindTriangle({
           trueTrackDeg: leg.trueTrackDeg,
           tasKt,
@@ -266,12 +277,15 @@ export class WeatherPanel {
       this.store.setRouteWeatherForecasts(forecasts);
       this.statusMessage = `Forecast loaded for ${forecasts.length} leg${forecasts.length === 1 ? '' : 's'}. Enable “Use per-leg route winds” to apply forecast values with manual leg winds as automatic backups.`;
     } catch (error) {
+      if (requestVersion !== this.requestVersion) return;
       this.store.clearWeatherForecasts();
       const message = error instanceof Error ? error.message : 'Route weather fetch failed.';
       this.statusMessage = `${message} Manual leg wind backups were kept.`;
     } finally {
-      this.loading = false;
-      this.render();
+      if (requestVersion === this.requestVersion) {
+        this.loading = false;
+        this.render();
+      }
     }
   }
 
