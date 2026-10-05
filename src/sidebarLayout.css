@@ -22,6 +22,8 @@ body.sidebar-resizing, body.sidebar-resizing * { cursor: ew-resize !important; u
   .manual-wind-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; }
   .manual-wind-leg { grid-column: 1 / -1; }
   .vertical-waypoint-row { grid-template-columns: minmax(0, 1fr); }
+  .vertical-airport-tools { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .vertical-airport-elevation { grid-column: 1 / -1; }
   .vertical-circuit-controls { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .vertical-circuit-controls > strong { grid-column: 1 / -1; white-space: normal; }
   .vertical-aip-endpoint-row { grid-template-columns: minmax(0, 1fr) 74px; }
