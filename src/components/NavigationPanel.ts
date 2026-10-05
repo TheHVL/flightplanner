@@ -1,3 +1,4 @@
+import { setPanelMarkup } from '../utils/panelMarkup';
 import type { FlightPlanStore, NavigationSettings } from '../flightplan/FlightPlanStore';
 import { roundVariationDeg } from '../navigation/magneticVariation';
 
@@ -11,28 +12,32 @@ export class NavigationPanel {
 
   render(): void {
     const settings = this.store.getNavigationSettings();
-    this.element.innerHTML = `
+    setPanelMarkup(this.element, `
       <div class="panel-heading">
         <div>
-          <p class="eyebrow">PHASE 2 · COMPLETE</p>
-          <h2>Navigation inputs</h2>
+          <p class="eyebrow">FALLBACK SETTINGS</p>
+          <h2>Navigation defaults</h2>
         </div>
       </div>
-      <p class="hint">Wind triangle calculations use WMM2025 magnetic variation per leg, rounded to the nearest whole degree for the OFP. You can switch to a manual whole-degree variation override when needed.</p>
+      <p class="hint">Manual TAS applies when POH performance is off. Default winds apply when no active leg wind is available.</p>
+      <h3 class="menu-group-title">Manual flight defaults</h3>
       <div class="nav-input-grid">
         ${this.numberField('tasKt', 'Manual cruise TAS', settings.tasKt, 'kt', 1, 40, 250)}
         ${this.numberField('windFromDeg', 'Wind from', settings.windFromDeg, '°T', 1, 0, 359)}
         ${this.numberField('windSpeedKt', 'Wind speed', settings.windSpeedKt, 'kt', 1, 0, 150)}
+        </div>
+      <h3 class="menu-group-title">Magnetic variation</h3>
+      <div class="nav-input-grid">
         ${this.numberField('variationDegEast', 'Manual variation', roundVariationDeg(settings.variationDegEast), '° E(+)/W(-)', 1, -30, 30, settings.automaticVariation)}
       </div>
       <label class="nav-toggle">
         <input type="checkbox" data-nav-boolean="automaticVariation" ${settings.automaticVariation ? 'checked' : ''} />
         <span>Automatic magnetic variation (WMM2025, leg midpoint)</span>
       </label>
-      <div class="nav-help">
-        <strong>Calculated per leg:</strong> VAR, MT, WCA, TH, MH, GS and time. Wind direction is meteorological direction FROM true north. Manual TAS is used only when POH performance mode is disabled.
-      </div>
-    `;
+      <details class="menu-help" data-menu-section="navigation-help"><summary>Calculation details</summary><div class="nav-help">
+        <strong>Calculated per leg:</strong> VAR, MT, WCA, TH, MH, GS and time. Wind direction is meteorological direction FROM true north. Manual TAS is used only when POH performance mode is disabled. WMM2025 variation is calculated at each leg midpoint and rounded to a whole degree for the OFP.
+      </div></details>
+    `);
   }
 
   private numberField(

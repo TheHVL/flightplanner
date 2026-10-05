@@ -10,8 +10,9 @@ export class SequentialLegPanel {
 
   constructor(private readonly element: HTMLElement, private readonly store: FlightPlanStore) {
     this.element.innerHTML = `
-      <h2>Prepare legs</h2>
-      <p class="hint">Enter advances through PL, MSA, wind direction and speed, then to the next leg. Shift+Enter goes back. Tab follows the normal keyboard order. Blank altitude clears it; leave both wind fields blank to use the global wind.</p>
+      <h2>Leg preparation</h2>
+      <p class="hint">Choose a leg, enter its levels and optional manual wind, then save and continue.</p>
+      <details class="menu-help"><summary>Keyboard shortcuts &amp; empty fields</summary><p class="hint">Enter advances through PL, MSA, wind direction and speed, then to the next leg. Shift+Enter goes back. Tab follows the normal keyboard order. Blank altitude clears it; leave both wind fields blank to use the default wind.</p></details>
       <label>Leg<select data-leg-selector aria-label="Leg to prepare"></select></label>
       <p data-leg-name class="leg-selection-name"></p>
       <form class="leg-entry-form">

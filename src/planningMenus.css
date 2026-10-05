@@ -1,0 +1,36 @@
+/* Planning order and shared subsection styling. */
+.sidebar-menu-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: #40516a; font-size: 12px; padding: 2px 1px; }
+.left-column { gap: 9px; }
+.left-column .phase-disclosure > summary { padding: 13px; }
+.left-column .phase-disclosure > summary strong { font-size: 12px; }
+.menu-group-title { margin: 0; padding: 14px 16px 4px; font-size: 12px; color: #243750; }
+.menu-note { padding: 5px 16px 10px; margin: 0; color: #64748b; font-size: 11px; line-height: 1.5; }
+.menu-subsection, .menu-help { margin: 10px 14px; border: 1px solid #dae2ec; border-radius: 7px; overflow: hidden; min-width: 0; }
+.menu-subsection > summary, .menu-help > summary { cursor: pointer; padding: 10px 12px; font-size: 11px; font-weight: 700; color: #334b68; background: #f7f9fc; line-height: 1.5; overflow-wrap: anywhere; }
+.menu-subsection[open] > summary, .menu-help[open] > summary { border-bottom: 1px solid #e2e8f0; }
+.menu-subsection > summary:focus-visible, .menu-help > summary:focus-visible { outline: 2px solid #1f67d8; outline-offset: -2px; }
+.left-column .menu-help .nav-help { margin: 0; border: 0; }
+.left-column .weather-controls { grid-template-columns: minmax(0, 1fr); }
+.weather-controls .weather-fetch-button { justify-self: stretch; white-space: normal; padding: 10px; }
+.left-column .weather-status { overflow-wrap: anywhere; }
+.left-column .vertical-climb-model { display: grid; grid-template-columns: minmax(0, 1fr); gap: 7px; }
+.left-column .vertical-climb-model select { width: 100%; font-size: 12px; }
+.left-column select { font: inherit; font-size: 12px; width: 100%; }
+.menu-subsection .saved-plans-actions { margin: 10px; }
+.saved-plans-fields .menu-group-title { padding: 7px 0 0; }
+.saved-plans-fields .menu-subsection { margin: 2px 0; }
+.saved-plans-actions [data-plan-action="save"], .saved-plans-actions [data-plan-action="load"] { background: #1f67d8; border-color: #1f67d8; color: white; }
+.saved-plans-actions [data-plan-action="delete"] { color: #b42318; }
+#aip-panel .menu-subsection { margin: 9px 0; }
+.aip-details > h3 { margin-top: 12px; }
+.aip-details .menu-subsection > p, .aip-details .menu-subsection > .aip-point-buttons { margin: 10px; }
+.aip-details .menu-subsection .hint { padding: 10px; }
+.aip-details .menu-subsection button { max-width: 100%; white-space: normal; }
+#sequential-leg-panel .menu-help { margin: 9px 0; }
+#sequential-leg-panel .hint { padding: 9px 0; }
+#sequential-leg-panel .menu-help .hint { padding: 10px; }
+@container (max-width: 340px) {
+  .left-column .nav-input-grid, .left-column .vertical-input-grid { grid-template-columns: minmax(0, 1fr); }
+  .left-column .phase-disclosure > summary { gap: 7px; padding: 11px; }
+  .left-column .phase-disclosure > summary span { font-size: 8px; }
+}

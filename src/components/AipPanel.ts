@@ -1,3 +1,4 @@
+import { setPanelMarkup } from '../utils/panelMarkup';
 import { aipFreshness, loadAipAerodromeCatalog, type AipAerodromeCatalog, type AipRefreshStatus, type AipAerodrome } from '../aip/aerodromes';
 import type { FlightPlanStore } from '../flightplan/FlightPlanStore';
 import { escapeHtml as e } from '../utils/html';
@@ -9,10 +10,10 @@ export class AipPanel {
   private selectedPoints: string[] = [];
   private expandedAirports = new Set<string>();
   constructor(private readonly element: HTMLElement, private readonly store: FlightPlanStore) {
-    this.element.innerHTML = `<h2>AIP aviation data</h2><div data-aip-status role="status">Loading Avinor catalog…</div>
+    this.element.innerHTML = `<h2>Airports &amp; reporting points</h2><div data-aip-status role="status">Loading Avinor catalog…</div>
       <button type="button" data-aip-reload>Check deployed data</button>
       <label>Search airports or reporting points<input type="search" data-aip-search placeholder="ENDU, Tromsø, point name…" /></label>
-      <p data-aip-plan-status class="aip-status"></p><div data-aip-results></div><div data-aip-details></div>`;
+      <p data-aip-plan-status class="aip-status"></p><div data-aip-details></div><div data-aip-results></div>`;
     this.element.querySelector('[data-aip-search]')!.addEventListener('input', () => this.results());
     this.element.addEventListener('click', event => this.click(event));
     this.store.subscribe(() => this.planStatus());
@@ -71,25 +72,28 @@ export class AipPanel {
     if (!ad || !this.catalog) return;
     const points = (this.catalog.reportingPoints ?? []).filter(point => point.aerodromeIcao === ad.icao);
     const routes = (this.catalog.vfrRoutes ?? []).filter(route => route.aerodromeIcao === ad.icao);
-    this.element.querySelector('[data-aip-details]')!.innerHTML = `<article class="aip-details">
+    setPanelMarkup(this.element.querySelector<HTMLElement>('[data-aip-details]')!, `<article class="aip-details">
+      <button type="button" data-aip-close-details>Close airport details</button>
       <h3>${e(ad.icao)} · ${e(ad.name)}</h3>
       <p>${ad.elevationFt} ft AMSL · ARP ${ad.lat?.toFixed(5) ?? 'unavailable'} / ${ad.lon?.toFixed(5) ?? 'unavailable'}</p>
       <p>Transition altitude: ${ad.transitionAltitudeFt ?? 'not imported'}${ad.transitionAltitudeFt ? ' ft' : ''}</p>
       <a href="${e(ad.sourceUrl)}" target="_blank" rel="noopener noreferrer">Official AD 2 publication</a>
-      <h4>Runway ends</h4>
+      <details class="menu-subsection" data-menu-section="${e(ad.icao)}-runways"><summary>Runways &amp; declared distances</summary>
       ${(ad.runways ?? []).map(rwy => `<p><strong>RWY ${e(rwy.designator)}</strong> · ${rwy.trueBearingDeg ?? '?'}° true · ${rwy.lengthM ?? '?'} × ${rwy.widthM ?? '?'} m · ${e(rwy.surface)}<br>TORA ${rwy.toraM ?? '?'} · TODA ${rwy.todaM ?? '?'} · ASDA ${rwy.asdaM ?? '?'} · LDA ${rwy.ldaM ?? '?'} m${rwy.remarks ? `<br>${e(rwy.remarks)}` : ''}</p>`).join('') || '<p>Not imported. Open AD 2.12/2.13.</p>'}
-      <h4>ATS frequencies / channels</h4>
+      </details><details class="menu-subsection" data-menu-section="${e(ad.icao)}-frequencies" open><summary>ATS frequencies / channels</summary>
       ${(ad.frequencies ?? []).map(freq => `<p><strong>${e(freq.service)} ${e(freq.frequencyMHz)}</strong> · ${e(freq.callSign)} · ${e(freq.hours)}${freq.remarks && freq.remarks !== 'NIL' ? `<br>${e(freq.remarks)}` : ''}</p>`).join('') || '<p>Not imported. Open AD 2.18.</p>'}
+      </details>
       ${this.notes('Local regulations (AD 2.20)', ad.localRegulations)}${this.notes('Noise / circuit notes (AD 2.21)', ad.circuitNotes)}${this.notes('Flight procedures (AD 2.22)', ad.flightProcedures)}
-      <h4>Published VFR charts &amp; routes</h4>
+      <details class="menu-subsection" data-menu-section="${e(ad.icao)}-charts" open><summary>VFR charts &amp; published routes</summary>
       ${(ad.charts ?? []).map(chart => `<p><a href="${e(chart.sourceUrl)}" target="_blank" rel="noopener noreferrer">${e(chart.title)}</a></p>`).join('') || '<p>No VFR chart imported.</p>'}
       ${routes.map(route => `<p>${e(route.name)}: ${route.pointIds.map(id => e(this.catalog!.reportingPoints!.find(point => point.id === id)!.name)).join(' → ')}<br>${e(route.remarks)}<button type="button" data-aip-route="${e(route.id)}">Append published sequence</button></p>`).join('')}
       <p class="hint">${routes.length ? 'Published sequences are tied to the source chart checksum.' : 'No verified ordered route sequence is available for this aerodrome.'} Read the chart for direction, altitude, clearance and aircraft restrictions.</p>
-      ${points.length ? `<h4>Build a sequence from published points</h4><p class="hint">Select points in the order you want to fly after checking the chart. This is your own sequence.</p><div class="aip-point-buttons">${points.map(point => `<button type="button" title="${e(point.remarks ?? 'Published chart point')}" data-aip-choose-point="${e(point.id)}">${e(point.name)}</button>`).join('')}</div><p data-aip-sequence>${this.sequenceLabel()}</p><button type="button" data-aip-append-sequence>Append selected points</button><button type="button" data-aip-clear-sequence>Clear selection</button>` : '<p>No machine-readable reporting points imported for this aerodrome.</p>'}
+      </details>
+      ${points.length ? `<details class="menu-subsection" data-menu-section="${e(ad.icao)}-sequence"><summary>Build your own point sequence</summary><p class="hint">Select points in the order you want to fly after checking the chart. This is your own sequence.</p><div class="aip-point-buttons">${points.map(point => `<button type="button" title="${e(point.remarks ?? 'Published chart point')}" data-aip-choose-point="${e(point.id)}">${e(point.name)}</button>`).join('')}</div><p data-aip-sequence>${this.sequenceLabel()}</p><button type="button" data-aip-append-sequence>Append selected points</button><button type="button" data-aip-clear-sequence>Clear selection</button></details>` : '<p>No machine-readable reporting points imported for this aerodrome.</p>'}
       ${(this.catalog.coverageWarnings ?? []).filter(warning => warning.startsWith(ad.icao)).map(warning => `<p class="aip-status--warning">${e(warning)}</p>`).join('')}
-    </article>`;
+    </article>`);
   }
-  private notes(title: string, value?: string): string { return value ? `<details><summary>${e(title)}</summary><p>${e(value)}</p></details>` : ''; }
+  private notes(title: string, value?: string): string { return value ? `<details class="menu-subsection" data-menu-section="${e(this.selectedIcao)}-${e(title)}"><summary>${e(title)}</summary><p>${e(value)}</p></details>` : ''; }
   private sequenceLabel(): string { return this.selectedPoints.map(id => e(this.catalog?.reportingPoints?.find(point => point.id === id)?.name ?? id)).join(' → ') || 'No points selected.'; }
   private addAirport(ad: AipAerodrome): void {
     if (ad.lat === null || ad.lon === null) return;
@@ -110,8 +114,9 @@ export class AipPanel {
     const button = (event.target as HTMLElement).closest<HTMLButtonElement>('button');
     if (!button) return;
     if (button.hasAttribute('data-aip-reload')) { void this.load(); return; }
+    if (button.hasAttribute('data-aip-close-details')) { this.selectedIcao = ''; this.selectedPoints = []; this.element.querySelector('[data-aip-details]')!.innerHTML = ''; return; }
     if (!this.catalog) return;
-    if (button.dataset.aipAd) { this.selectedIcao = button.dataset.aipAd; this.selectedPoints = []; this.details(); }
+    if (button.dataset.aipAd) { this.selectedIcao = button.dataset.aipAd; this.selectedPoints = []; this.details(); this.element.querySelector('[data-aip-details]')!.scrollIntoView({ block: 'nearest' }); }
     if (button.dataset.aipAddAd) { const ad = this.catalog.aerodromes.find(ad => ad.icao === button.dataset.aipAddAd); if (ad) this.addAirport(ad); }
     if (button.dataset.aipAddPoint) this.appendPoints([button.dataset.aipAddPoint]);
     if (button.dataset.aipChoosePoint) { this.selectedPoints.push(button.dataset.aipChoosePoint); this.element.querySelector('[data-aip-sequence]')!.innerHTML = this.sequenceLabel(); }
