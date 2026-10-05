@@ -23,6 +23,43 @@ Displayed OFP values may be rounded for readability. Internal calculations keep 
 
 ---
 
+## 2026-10-05, automatic glide coastline screening
+
+### Added / changed
+
+- Extended the existing C182T maximum-glide overlay with automatic land/water and coastline screening.
+- Added a bundled northern-Europe land mask derived from Natural Earth `ne_10m_land` at 1:10m scale. The data file is loaded on demand only when the glide overlay is enabled.
+- Every modeled glide sample is classified as land, over-water with coastline inside modeled glide range, over-water with a coastline margin of 1 NM or less, over-water with no coastline inside modeled glide range, or outside dataset coverage.
+- Over-water route sections with no detected coastline inside the modeled zero-wind glide range are highlighted red on the map.
+- Over-water route sections with 1 NM or less modeled coastline margin are highlighted amber with a dashed line.
+- Added map/status summaries for approximate marginal/unreachable route length and the smallest modeled coastline margin.
+- Added stale-result protection so an asynchronous coastline result from an older route cannot overwrite a newer route edit.
+- Added automated geometry tests covering land, reachable coastline, marginal coastline, unreachable coastline, polygon holes and coverage limits.
+
+### Coastline screening model
+
+```text
+glide range = existing C182T POH Figure 3-1 model
+
+for each sampled over-water route position:
+    search coastline segments within glide range
+
+margin = glide range - nearest coastline distance
+
+margin > 1 NM       -> coastline inside modeled range
+0 <= margin <= 1 NM -> marginal, amber/dashed
+no coastline found  -> red
+```
+
+### Important limitations
+
+- Natural Earth 1:10m land data is generalized and may omit small islands or fine shoreline/fjord detail.
+- The result is a coarse screening aid, not proof of gliding reach to a usable landing area.
+- Terrain obstruction, wind, aircraft weight effects beyond the existing Figure 3-1 display assumptions, landing suitability and obstacle clearance are not modeled.
+- Terrain-assisted MSA and more detailed land/terrain analysis remain separate future roadmap work.
+
+---
+
 ## 2026-10-03, whole-NM OFP leg-distance rounding
 
 ### Added / changed
