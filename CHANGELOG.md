@@ -2,6 +2,10 @@
 
 This file records significant Flightplanner updates, formulas, source assumptions, limitations and implementation decisions. New updates are added at the top.
 
+## 2026-10-05, whole-number OFP total distance
+
+- OFP Total route now displays whole nautical miles, rounded upward using the existing distance-display convention. Exact distance remains available in its tooltip and continues to drive calculations. Accumulated-distance cells retain their existing display precision.
+
 ## 2026-10-05, airport groups and adjustable sidebar
 
 - Replaced the mixed, truncated AIP search list with alphabetical airport dropdowns containing sorted reporting points. Airport names and point names remain searchable; matching groups open automatically and all matches are available.
