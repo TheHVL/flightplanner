@@ -215,10 +215,18 @@ export function calculateRouteVerticalProfile(input: RouteVerticalProfileInput):
     }
 
     const anchorDistanceNm = waypointDistancesNm[anchorIndex];
+    // A short leg may end before the previous climb reaches its target.
+    // Continue that climb before starting the next altitude increment.
+    // Airport visits and descents retain their independent constraints.
+    const previousEvent = events.at(-1);
+    const climbStartNm = reason === 'pl-change' && previousEvent?.type === 'TOC'
+      && Math.abs(previousEvent.altitudeToFt - altitudeFromFt) <= EPSILON
+      ? Math.max(anchorDistanceNm, previousEvent.routeDistanceNm)
+      : anchorDistanceNm;
     const walk = legWinds
-      ? walkPhaseForward(legs, waypointDistancesNm, legWinds, anchorDistanceNm, timeMin, phaseTasKt)
+      ? walkPhaseForward(legs, waypointDistancesNm, legWinds, climbStartNm, timeMin, phaseTasKt)
       : {
-          routeDistanceNm: anchorDistanceNm + (zeroWindDistanceNm ?? climbGroundSpeedKt * timeMin / 60),
+          routeDistanceNm: climbStartNm + (zeroWindDistanceNm ?? climbGroundSpeedKt * timeMin / 60),
           groundDistanceNm: zeroWindDistanceNm ?? climbGroundSpeedKt * timeMin / 60,
         };
     const distanceNm = walk.groundDistanceNm;
@@ -242,15 +250,15 @@ export function calculateRouteVerticalProfile(input: RouteVerticalProfileInput):
       phaseTasKt,
       zeroWindDistanceNm,
       routeDistanceNm: routeEventDistanceNm,
-      distanceFromWaypointNm: distanceNm,
+      distanceFromWaypointNm: routeEventDistanceNm - anchorDistanceNm,
       onRoute,
       coordinate: onRoute ? routeCoordinateAtDistance(legs, routeEventDistanceNm) : null,
     };
     events.push(event);
-    intervals.push({ startNm: anchorDistanceNm, endNm: routeEventDistanceNm });
+    intervals.push({ startNm: climbStartNm, endNm: routeEventDistanceNm });
     if (!onRoute) warnings.push(`TOC after ${waypoint.name} falls beyond the plotted route.`);
-    if (reason === 'pl-change' && anchorIndex < legs.length && distanceNm > legs[anchorIndex].distanceNm) {
-      warnings.push(`The selected climb cannot reach ${Math.round(altitudeToFt)} ft before ${legs[anchorIndex].to.name}; it needs ${roundHalfNm(distanceNm - legs[anchorIndex].distanceNm)} NM more at the active climb TAS/wind.`);
+    if (reason === 'pl-change' && anchorIndex < legs.length && routeEventDistanceNm > waypointDistancesNm[anchorIndex + 1] + EPSILON) {
+      warnings.push(`The selected climb cannot reach ${Math.round(altitudeToFt)} ft before ${legs[anchorIndex].to.name}; it needs ${roundHalfNm(routeEventDistanceNm - waypointDistancesNm[anchorIndex + 1])} NM more at the active climb TAS/wind.`);
     }
   };
 
