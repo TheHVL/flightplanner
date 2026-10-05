@@ -224,7 +224,7 @@ new PlanLibraryPanel(document.querySelector<HTMLElement>('#saved-plans-panel')!,
   weatherPanel.onPlanLoaded();
   verticalProfilePanel.render();
 });
-const ofpTable = new OFPTable(tableElement, store, frequencyPlanner);
+const ofpTable = new OFPTable(tableElement, store);
 new FrequencyPanel(document.querySelector<HTMLElement>('#frequency-panel')!, store, frequencyPlanner);
 frequencyPlanner.subscribe(() => ofpTable.render());
 void frequencyPlanner.reload();
@@ -548,55 +548,12 @@ const renderGlideEnvelope = async () => {
   }
 };
 
-const enhanceVerticalPanel = () => {
-  for (const select of verticalProfileElement.querySelectorAll<HTMLSelectElement>('[data-vertical-waypoint-mode]')) {
-    const airportOption = select.querySelector<HTMLOptionElement>('option[value="airport"]');
-    const circuitOption = select.querySelector<HTMLOptionElement>('option[value="circuits"]');
-    if (airportOption) airportOption.textContent = 'Airport / T&G';
-    if (circuitOption) circuitOption.textContent = 'Airport + circuits (1000 ft AGL)';
-  }
-
-  const sectionHint = verticalProfileElement.querySelector<HTMLElement>('.vertical-waypoint-section .vertical-section-title span');
-  if (sectionHint) {
-    sectionHint.textContent = 'Airport / T&G models the airport visit without added circuit time. Airport + circuits uses the same airport descent/climb and adds circuit time/fuel; standard circuit altitude is 1000 ft AGL.';
-  }
-
-  for (const controls of verticalProfileElement.querySelectorAll<HTMLElement>('.vertical-circuit-controls')) {
-    if (controls.querySelector('.circuit-standard-note')) continue;
-    const row = controls.closest<HTMLElement>('.vertical-waypoint-row');
-    const elevationInput = row?.querySelector<HTMLInputElement>('[data-vertical-waypoint-elevation]');
-    const elevationFt = elevationInput?.value ? Number(elevationInput.value) : null;
-    const altitudeText = elevationFt !== null && Number.isFinite(elevationFt)
-      ? `${Math.round(elevationFt + 1000).toLocaleString()} ft AMSL (1000 ft AGL)`
-      : 'field elevation + 1000 ft AGL';
-    const note = document.createElement('div');
-    note.className = 'circuit-standard-note';
-    note.textContent = `Standard circuit altitude: ${altitudeText}.`;
-    controls.append(note);
-  }
-};
-
-const fixOfpFuelRemainingColumn = () => {
-  for (const row of tableElement.querySelectorAll<HTMLTableRowElement>('tbody tr')) {
-    if (row.cells.length !== 24) continue;
-    const estimatedCell = Array.from(row.cells).find((cell) => cell.title.startsWith('Estimated fuel remaining'));
-    if (!estimatedCell) continue;
-    const diffCell = document.createElement('td');
-    diffCell.className = 'pending';
-    diffCell.title = 'Time difference between actual and estimated time.';
-    diffCell.textContent = '—';
-    estimatedCell.before(diffCell);
-  }
-};
-
 const render = () => {
   const waypoints = store.getWaypoints();
   const legs = store.getLegs();
   mapDeleteRouteButton.disabled = waypoints.length === 0;
   routePanel.render();
   ofpTable.render();
-  enhanceVerticalPanel();
-  fixOfpFuelRemainingColumn();
   mapManager.renderMsaCorridor(legs);
   mapManager.renderRoute(waypoints, legs, (id, lat, lon) => store.updateWaypoint(id, { lat, lon }));
   renderVerticalProfileMarkers();

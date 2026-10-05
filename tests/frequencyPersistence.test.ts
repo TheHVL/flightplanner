@@ -35,14 +35,14 @@ describe('manual frequency persistence',()=>{
     store.undoLastAction();expect(store.getManualFrequency(a.id,b.id)).toBe('126.455');
     store.updateWaypoint(a.id,{lat:68.9});expect(store.getManualFrequency(a.id,b.id)).toBeNull();
   });
-  it('lets the OFP edit a manual channel and clears it back to automatic',()=>{
-    const {store,a,b}=route();const element=document.createElement('section');document.body.append(element);
-    const table=new OFPTable(element,store);store.subscribe(()=>table.render());table.render();
-    let input=element.querySelector<HTMLInputElement>('[data-freq-from]')!;
-    input.value='126.455';input.dispatchEvent(new Event('change',{bubbles:true}));
-    expect(store.getManualFrequency(a.id,b.id)).toBe('126.455');
-    expect(element.querySelector('.ofp-frequency-cell')?.textContent).toContain('Manual');
-    input=element.querySelector<HTMLInputElement>('[data-freq-from]')!;input.value='';input.dispatchEvent(new Event('change',{bubbles:true}));
-    expect(store.getManualFrequency(a.id,b.id)).toBeNull();
+  it('shows saved selections without expanding the OFP into a channel editor',()=>{
+    const {store,a,b}=route();const element=document.createElement('section');
+    const table=new OFPTable(element,store);table.render();
+    expect(element.querySelector('.ofp-frequency-cell')?.textContent).toBe('—Select');
+    store.setManualFrequency(a.id,b.id,'126.455 / 123.755');table.render();
+    expect(element.querySelector('.ofp-frequency-cell')?.textContent).toBe('126.455 / 123.755Edit');
+    expect(element.querySelector('[data-freq-from]')).toBeNull();
+    store.setManualFrequency(a.id,b.id,null);table.render();
+    expect(element.querySelector('.ofp-frequency-cell')?.textContent).toBe('—Select');
   });
 });

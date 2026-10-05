@@ -17,10 +17,9 @@
 .frequency-airport { padding:10px 0; border-bottom:1px solid #dbe5e8; font-size:12px; }
 .frequency-airport p { margin:10px 0; }
 .frequency-message { font-size:12px; line-height:1.5; }
-.ofp-table .ofp-frequency-cell { min-width:160px; max-width:240px; white-space:normal; vertical-align:top; }
-.ofp-frequency-mode,.ofp-frequency-cell > small { display:block; font-size:10px; line-height:1.4; color:#657984; margin-bottom:5px; }
-.ofp-frequency-segment { margin:4px 0; font-size:12px; }
-.ofp-frequency-segment small { display:block; font-size:10px; color:#657984; }
-.ofp-frequency-segment strong { font-variant-numeric:tabular-nums; }
-.ofp-frequency-input { display:block; width:100%; min-width:0; margin-top:7px; box-sizing:border-box; font-size:11px; padding:6px; }
-@media print { .ofp-frequency-input { display:none; } }
+.ofp-table .ofp-frequency-cell { min-width:86px; max-width:120px; white-space:normal; vertical-align:middle; }
+.ofp-frequency-cell > strong { display:block; font-size:12px; font-variant-numeric:tabular-nums; }
+.ofp-frequency-link { display:block; margin:4px auto 0; padding:2px 7px; border:1px solid #c7d9de; border-radius:4px; background:#f6fafb; color:#195d70; font:inherit; font-size:11px; cursor:pointer; }
+.ofp-pattern-row td { background:#f0f6f7; }
+.ofp-pattern-label { display:block; margin-top:3px; color:#426d7b; font-size:11px; }
+@media print { .ofp-frequency-link { display:none; } }
