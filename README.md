@@ -23,7 +23,7 @@ Browser-based VFR flight planning for Norwegian flight training, with the Cessna
 - Optional C182T zero-wind maximum-glide visualization based on POH Figure 3-1 and the modeled route altitude. The overlay follows the plotted route path.
 - Automatic land/water and coastline screening for the glide overlay. Sampled over-water route sections are checked against a bundled Natural Earth 1:10m land mask: red route sections have no coastline inside the modeled zero-wind glide range, while amber dashed sections have 1 NM or less modeled coastline margin.
 - UiT-style operational flight-plan navigation log with accumulated distance/time and editable planned level (PL) per leg.
-- Individual OFP leg distance is displayed rounded upward to the next whole NM; accumulated and total route distance remain shown to the nearest 0.5 NM. Internal calculations retain exact distance.
+- Individual OFP leg distance and total route distance are displayed rounded upward to the next whole NM; accumulated distance remains shown to the nearest 0.5 NM. Internal calculations retain exact distance.
 - A solid horizontal separator is drawn across the OFP after every intermediate waypoint selected as `Airport / T&G`, making the start of the next flight-plan sector easy to identify.
 - Complete C182T POH Figure 5-9 cruise-performance model from sea level through 14,000 ft, 2000-2400 RPM where published, ISA -20°C to ISA +20°C, with bounded interpolation and no extrapolation.
 - C182T POH Figure 5-8 climb-performance model with selectable Normal Climb 90 KIAS and Maximum Rate of Climb profiles.

@@ -75,7 +75,7 @@ export class OFPTable {
         </div>
         <div class="route-total">
           <span>Total route</span>
-          <strong title="Exact calculated distance: ${totalDistance.toFixed(2)} NM">${this.distanceLabel(totalDistance)} NM</strong>
+          <strong title="Exact calculated distance: ${totalDistance.toFixed(2)} NM; total display rounds up to the next whole NM">${ceilLegDistanceNm(totalDistance)} NM</strong>
         </div>
       </div>
       <div class="table-scroll">
@@ -120,7 +120,7 @@ export class OFPTable {
       <div class="table-legend">
         <span><i class="dot calculated-dot"></i> Calculated</span>
         <span><i class="dot pending-dot"></i> Added in later phases</span>
-        <span>Leg DIST rounds up to the next whole NM. Accumulated/total distance remains shown to nearest 0.5 NM · headings/WCA shown to whole degrees</span>
+        <span>Leg DIST and total route distance round up to the next whole NM. Accumulated distance remains shown to nearest 0.5 NM · headings/WCA shown to whole degrees</span>
         <span>TAS shows cruise TAS when a cruise portion exists; an all-climb/descent row shows that phase TAS. GS is whole-leg effective GS from flown distance / flight time.</span>
         <span>MSA is entered manually. Use the ±1 NM map corridor to inspect terrain/obstacles.</span>
         <span class="msa-legend-warning">PL below entered MSA is highlighted.</span>
