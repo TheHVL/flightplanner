@@ -1,7 +1,6 @@
 /* Four planning stages, one reusable editor. */
 .aip-map-point { display: grid; place-items: center; background: white; border: 2px solid #245a91; border-radius: 4px; color: #245a91; font-size: 11px; font-weight: 700; cursor: pointer; }
 .aip-map-point--reporting-point { border: 0; background: transparent; color: #9a6010; font-size: 16px; text-shadow: 0 0 2px white, 0 0 2px white; }
-.aip-map-label { padding: 2px 4px; font-size: 10px; pointer-events: none; }
 .aip-map-help { flex: 0 0 auto; margin: 0; padding: 4px 10px; font-size: 10px; color: #60738b; line-height: 1.4; }
 .workflow-intro { margin: 0; padding: 3px 5px 9px; font-size: 11px; line-height: 1.5; color: #61718a; }
 .leg-field-guide, .ofp-editor-hint { font-size: 11px; line-height: 1.5; color: #61718a; margin: 9px 0; }
