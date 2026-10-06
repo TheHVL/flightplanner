@@ -5,8 +5,8 @@
   "issueUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/html/index-en-GB.html",
   "publicationDate": null,
   "nextEffectiveDate": null,
-  "generatedAt": "2026-10-06T10:48:17.542Z",
-  "checkedAt": "2026-10-06T10:48:17.542Z",
+  "generatedAt": "2026-10-06T14:18:15.694Z",
+  "checkedAt": "2026-10-06T14:18:15.694Z",
   "aerodromes": [
     {
       "icao": "ENAL",
@@ -7726,7 +7726,16 @@
         "ENDU:SØRREISA"
       ],
       "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623256.pdf",
-      "remarks": "MAX 2500 ft on the charted sector. Unless otherwise cleared, VFR arrivals enter CTR inbound at 2000 ft; departures climb and maintain 2500 ft until leaving CTR. Imported as an ordered reporting-point sequence. The drawn connecting lines do not reproduce chart bends; shape the route against the published chart. Aerodrome join, holding and circuit are not included. ATC clearance and published restrictions apply."
+      "remarks": "MAX 2500 ft on the charted sector. Unless otherwise cleared, VFR arrivals enter CTR inbound at 2000 ft; departures climb and maintain 2500 ft until leaving CTR. Imported as an ordered reporting-point sequence. The drawn connecting lines do not reproduce chart bends; shape the route against the published chart. Aerodrome join, holding and circuit are not included. ATC clearance and published restrictions apply.",
+      "segments": [
+        {
+          "fromPointId": "ENDU:FINNSNES",
+          "toPointId": "ENDU:SØRREISA",
+          "maxAltitudeFt": 2500,
+          "direction": "both"
+        }
+      ],
+      "chartSha256": "f93dd046804a5e00cf2b8a5baa76d5e5a4083a077fa6ff2429e2e88930e9b966"
     },
     {
       "id": "ENDU:2",
@@ -7737,7 +7746,16 @@
         "ENDU:SØRREISA"
       ],
       "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623256.pdf",
-      "remarks": "MAX 2500 ft on the charted sector. Unless otherwise cleared, VFR arrivals enter CTR inbound at 2000 ft; departures climb and maintain 2500 ft until leaving CTR. Imported as an ordered reporting-point sequence. The drawn connecting lines do not reproduce chart bends; shape the route against the published chart. Aerodrome join, holding and circuit are not included. ATC clearance and published restrictions apply."
+      "remarks": "MAX 2500 ft on the charted sector. Unless otherwise cleared, VFR arrivals enter CTR inbound at 2000 ft; departures climb and maintain 2500 ft until leaving CTR. Imported as an ordered reporting-point sequence. The drawn connecting lines do not reproduce chart bends; shape the route against the published chart. Aerodrome join, holding and circuit are not included. ATC clearance and published restrictions apply.",
+      "segments": [
+        {
+          "fromPointId": "ENDU:ESPENES",
+          "toPointId": "ENDU:SØRREISA",
+          "maxAltitudeFt": 2500,
+          "direction": "both"
+        }
+      ],
+      "chartSha256": "f93dd046804a5e00cf2b8a5baa76d5e5a4083a077fa6ff2429e2e88930e9b966"
     },
     {
       "id": "ENTC:3",
@@ -7749,7 +7767,22 @@
         "ENTC:HÅKØYA"
       ],
       "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623173.pdf",
-      "remarks": "ANSNES–RYA MAX 2500 ft; RYA–HÅKØYA MAX 1500 ft. Imported as an ordered reporting-point sequence. The drawn connecting lines do not reproduce chart bends; shape the route against the published chart. Aerodrome join, holding and circuit are not included. ATC clearance and published restrictions apply."
+      "remarks": "ANSNES–RYA MAX 2500 ft; RYA–HÅKØYA MAX 1500 ft. Imported as an ordered reporting-point sequence. The drawn connecting lines do not reproduce chart bends; shape the route against the published chart. Aerodrome join, holding and circuit are not included. ATC clearance and published restrictions apply.",
+      "segments": [
+        {
+          "fromPointId": "ENTC:ANSNES",
+          "toPointId": "ENTC:RYA",
+          "maxAltitudeFt": 2500,
+          "direction": "both"
+        },
+        {
+          "fromPointId": "ENTC:RYA",
+          "toPointId": "ENTC:HÅKØYA",
+          "maxAltitudeFt": 1500,
+          "direction": "both"
+        }
+      ],
+      "chartSha256": "864c552dba14af7f1fefbef08344728a1b7f3f45ea1a84d6ad2275ca8a45be64"
     },
     {
       "id": "ENTC:4",
@@ -7761,7 +7794,22 @@
         "ENTC:BREIVIKA"
       ],
       "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623173.pdf",
-      "remarks": "SELNES–BERG MAX 2500 ft; BERG–BREIVIKA MAX 1000 ft. Imported as an ordered reporting-point sequence. The drawn connecting lines do not reproduce chart bends; shape the route against the published chart. Aerodrome join, holding and circuit are not included. ATC clearance and published restrictions apply."
+      "remarks": "SELNES–BERG MAX 2500 ft; BERG–BREIVIKA MAX 1000 ft. Imported as an ordered reporting-point sequence. The drawn connecting lines do not reproduce chart bends; shape the route against the published chart. Aerodrome join, holding and circuit are not included. ATC clearance and published restrictions apply.",
+      "segments": [
+        {
+          "fromPointId": "ENTC:SELNES",
+          "toPointId": "ENTC:BERG",
+          "maxAltitudeFt": 2500,
+          "direction": "both"
+        },
+        {
+          "fromPointId": "ENTC:BERG",
+          "toPointId": "ENTC:BREIVIKA",
+          "maxAltitudeFt": 1000,
+          "direction": "both"
+        }
+      ],
+      "chartSha256": "864c552dba14af7f1fefbef08344728a1b7f3f45ea1a84d6ad2275ca8a45be64"
     },
     {
       "id": "ENTC:5",
@@ -7773,31 +7821,64 @@
         "ENTC:REMMAN"
       ],
       "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623173.pdf",
-      "remarks": "MUSVÆR–RAKNES MAX 2500 ft; RAKNES–REMMAN MAX 1000 ft. Imported as an ordered reporting-point sequence. The drawn connecting lines do not reproduce chart bends; shape the route against the published chart. Aerodrome join, holding and circuit are not included. ATC clearance and published restrictions apply."
+      "remarks": "RAKNES to MUSVÆR outbound MAX 2500 ft; RAKNES–REMMAN MAX 1000 ft. The MUSVÆR leg is drawn outbound only. Reporting-point sequence only: chart bends, aerodrome join, holding and pattern are not included. ATC clearance and published restrictions apply.",
+      "segments": [
+        {
+          "fromPointId": "ENTC:MUSVÆR",
+          "toPointId": "ENTC:RAKNES",
+          "maxAltitudeFt": 2500,
+          "direction": "reverse"
+        },
+        {
+          "fromPointId": "ENTC:RAKNES",
+          "toPointId": "ENTC:REMMAN",
+          "maxAltitudeFt": 1000,
+          "direction": "both"
+        }
+      ],
+      "chartSha256": "864c552dba14af7f1fefbef08344728a1b7f3f45ea1a84d6ad2275ca8a45be64"
     },
     {
       "id": "ENTC:6",
-      "name": "Northeast sector: Nipøya to Movikvann",
+      "name": "Northeast sector: Nipøya to Tønsnes",
       "aerodromeIcao": "ENTC",
       "pointIds": [
         "ENTC:NIPØYA",
-        "ENTC:TØNSNES",
-        "ENTC:MOVIKVANN"
+        "ENTC:TØNSNES"
       ],
       "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623173.pdf",
-      "remarks": "NIPØYA–TØNSNES MAX 2500 ft; TØNSNES–MOVIKVANN MAX 1000 ft. Imported as an ordered reporting-point sequence. The drawn connecting lines do not reproduce chart bends; shape the route against the published chart. Aerodrome join, holding and circuit are not included. ATC clearance and published restrictions apply."
+      "remarks": "NIPØYA to TØNSNES inbound MAX 1000 ft; reverse direction outbound MAX 2500 ft. MOVIKVANN is on a separate aerodrome route and is not connected to TØNSNES by a charted leg. Reporting-point sequence only: chart bends, aerodrome join, holding and pattern are not included. ATC clearance and published restrictions apply.",
+      "segments": [
+        {
+          "fromPointId": "ENTC:NIPØYA",
+          "toPointId": "ENTC:TØNSNES",
+          "maxAltitudeFt": 1000,
+          "direction": "both",
+          "reverseMaxAltitudeFt": 2500
+        }
+      ],
+      "chartSha256": "864c552dba14af7f1fefbef08344728a1b7f3f45ea1a84d6ad2275ca8a45be64"
     },
     {
       "id": "ENSR:7",
-      "name": "Western sector: Rotsundet to Storslett",
+      "name": "Western sector: Rotsundet to Stortind",
       "aerodromeIcao": "ENSR",
       "pointIds": [
         "ENSR:ROTSUNDET",
-        "ENSR:STORTIND",
-        "ENSR:STORSLETT"
+        "ENSR:STORTIND"
       ],
       "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/643749.pdf",
-      "remarks": "Charted sectors marked 2000 ft. Imported as an ordered reporting-point sequence. The drawn connecting lines do not reproduce chart bends; shape the route against the published chart. Aerodrome join, holding and circuit are not included. ATC clearance and published restrictions apply."
+      "remarks": "Charted leg marked 2000 ft, not labelled MAX. STORTIND joins the aerodrome via the drawn pattern, not a reporting-point leg to STORSLETT. Reporting-point sequence only: aerodrome join, holding and pattern are not included. Review the charted altitude and restrictions.",
+      "segments": [
+        {
+          "fromPointId": "ENSR:ROTSUNDET",
+          "toPointId": "ENSR:STORTIND",
+          "maxAltitudeFt": null,
+          "direction": "review",
+          "chartAltitudeFt": 2000
+        }
+      ],
+      "chartSha256": "fa9c94b074a03a5b49465b2a86601067cde480460c5441ffe47a5061a54d4668"
     },
     {
       "id": "ENSR:8",
@@ -7809,7 +7890,24 @@
         "ENSR:STORSLETT"
       ],
       "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/643749.pdf",
-      "remarks": "Charted sectors marked 2000 ft. Imported as an ordered reporting-point sequence. The drawn connecting lines do not reproduce chart bends; shape the route against the published chart. Aerodrome join, holding and circuit are not included. ATC clearance and published restrictions apply."
+      "remarks": "Charted legs marked 2000 ft, not labelled MAX. The NORDKJOSEN to STORSLETT leg and return via the aerodrome pattern require direction and altitude review. Reporting-point sequence only: aerodrome join, holding and pattern are not included. Check the published chart and restrictions.",
+      "segments": [
+        {
+          "fromPointId": "ENSR:STRAUMFJORDEN",
+          "toPointId": "ENSR:NORDKJOSEN",
+          "maxAltitudeFt": null,
+          "direction": "review",
+          "chartAltitudeFt": 2000
+        },
+        {
+          "fromPointId": "ENSR:NORDKJOSEN",
+          "toPointId": "ENSR:STORSLETT",
+          "maxAltitudeFt": null,
+          "direction": "review",
+          "chartAltitudeFt": 2000
+        }
+      ],
+      "chartSha256": "fa9c94b074a03a5b49465b2a86601067cde480460c5441ffe47a5061a54d4668"
     },
     {
       "id": "ENSR:9",
@@ -7820,7 +7918,37 @@
         "ENSR:OKSFJORDHAMN"
       ],
       "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/643749.pdf",
-      "remarks": "Charted sector marked 2000 ft. This sector is separate from the aerodrome routes. Imported as an ordered reporting-point sequence. The drawn connecting lines do not reproduce chart bends; shape the route against the published chart. Aerodrome join, holding and circuit are not included. ATC clearance and published restrictions apply."
+      "remarks": "Charted sector marked 2000 ft. This sector is separate from the aerodrome routes. Imported as an ordered reporting-point sequence. The drawn connecting lines do not reproduce chart bends; shape the route against the published chart. Aerodrome join, holding and circuit are not included. ATC clearance and published restrictions apply.",
+      "segments": [
+        {
+          "fromPointId": "ENSR:REISAFJORDEN",
+          "toPointId": "ENSR:OKSFJORDHAMN",
+          "maxAltitudeFt": null,
+          "direction": "review",
+          "chartAltitudeFt": 2000
+        }
+      ],
+      "chartSha256": "fa9c94b074a03a5b49465b2a86601067cde480460c5441ffe47a5061a54d4668"
+    },
+    {
+      "id": "ENDU:10",
+      "name": "Northern sector: Nora to Rossvoll",
+      "aerodromeIcao": "ENDU",
+      "pointIds": [
+        "ENDU:NORA",
+        "ENDU:ROSSVOLL"
+      ],
+      "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623256.pdf",
+      "remarks": "NORA–ROSSVOLL MAX 2500 ft. Unless otherwise cleared, VFR arrivals enter CTR inbound at 2000 ft; departures climb and maintain 2500 ft until leaving CTR. Reporting-point sequence only: chart bends, airport join, holding and pattern are not included. ATC clearance and published restrictions apply.",
+      "segments": [
+        {
+          "fromPointId": "ENDU:NORA",
+          "toPointId": "ENDU:ROSSVOLL",
+          "maxAltitudeFt": 2500,
+          "direction": "both"
+        }
+      ],
+      "chartSha256": "f93dd046804a5e00cf2b8a5baa76d5e5a4083a077fa6ff2429e2e88930e9b966"
     }
   ],
   "coverageWarnings": [
