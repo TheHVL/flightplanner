@@ -3,6 +3,8 @@ import { TerrainRouter } from '../src/routing/terrainRouter';
 import { projectTerrainPoint, rasterCorridorMaximumM, unprojectTerrainPoint, type TerrainRaster } from '../src/routing/terrainRaster';
 import { northernAirports } from '../src/routing/northernAirports';
 import type { AipAerodromeCatalog } from '../src/aip/aerodromes';
+import type { RadioCatalog } from '../src/frequencies/catalog';
+import { restrictionSegmentAllowed } from '../src/routing/restrictions';
 
 function raster(): TerrainRaster {
   return { west: 600000, north: 7740000, resolutionM: 200, width: 250, height: 250,
@@ -15,6 +17,18 @@ const point = (x: number, y: number) => unprojectTerrainPoint({ x: 600000 + x, y
 const signal = () => new AbortController().signal;
 
 describe('generic terrain route search', () => {
+  it('detours around a published restriction on flat terrain and preserves avoidance during simplification', async () => {
+    const r = raster();
+    const polygon = [[21000,17000],[29000,17000],[29000,33000],[21000,33000],[21000,17000]].map(([x,y]) => { const p = point(x,y); return [p.lon,p.lat]; });
+    const data = { restrictions: [{ volumes: [{ polygon }] }] } as unknown as RadioCatalog;
+    const allowed = restrictionSegmentAllowed(data, r), from = point(10000,25000), to = point(40000,25000);
+    expect(allowed(projectTerrainPoint(from), projectTerrainPoint(to))).toBe(false);
+    const route = await new TerrainRouter(r).findPath(from, to, 5000, signal(), {}, allowed);
+    expect(route).not.toBeNull(); expect(route!.points.length).toBeGreaterThan(2);
+    for (let i = 1; i < route!.points.length; i++) expect(allowed(projectTerrainPoint(route!.points[i - 1]), projectTerrainPoint(route!.points[i]))).toBe(true);
+    // No unchecked direct fallback when an endpoint is inside an avoided footprint.
+    expect(await new TerrainRouter(r).findPath(point(25000,25000), to, 9000, signal(), {}, allowed)).toBeNull();
+  });
   it('detours around a ridge and cannot simplify the turns back across it', async () => {
     const r = raster(); paint(r, 105, 145, 70, 180, 1600);
     const from = point(10000, 25000), to = point(40000, 25000);

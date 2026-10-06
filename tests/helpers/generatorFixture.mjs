@@ -2,6 +2,17 @@ import { projectTerrainPoint } from '../../src/routing/terrainRaster';
 import { readFileSync } from 'node:fs';
 import { verifiedRoutes } from '../../scripts/aip/parse.mjs';
 export const generatorNow = new Date('2026-10-06T12:00:00Z');
+export function generatorRadioFixture() {
+  const radio = JSON.parse(readFileSync('tests/fixtures/aip/northern-radio-areas.json', 'utf8'));
+  const { catalog } = generatorFixture();
+  radio.checkedAt = generatorNow.toISOString(); radio.effectiveDate = catalog.effectiveDate; radio.nextEffectiveDate = catalog.nextEffectiveDate;
+  // Synthetic remote footprint keeps UI tests independent of live publication changes.
+  const sourceUrl = 'https://aim-prod.avinor.no/no/AIP/ENR-5.1';
+  radio.restrictionCoverage = { sourceUrl, sha256: 'a'.repeat(64), publishedAreaCount: 1 };
+  radio.restrictions = [{ id: 'ENR99999', name: 'Synthetic remote restriction', type: 'R', sourceUrl, activation: 'unknown', remarks: '',
+    volumes: [{ polygon: [[0,0],[1,0],[1,1],[0,1],[0,0]], lower: { reference: 'GND', value: 0 }, upper: { reference: 'AMSL', value: 5000 }, publishedLimits: 'GND–5000 FT AMSL' }] }];
+  return radio;
+}
 export function generatorFixture() {
   const catalog = JSON.parse(readFileSync('tests/fixtures/aip/northern-routing.json', 'utf8'));
   const definitions = JSON.parse(readFileSync('scripts/aip/verified-vfr-routes.json', 'utf8'));

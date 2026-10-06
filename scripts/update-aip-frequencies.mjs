@@ -9,6 +9,7 @@ import { load } from 'cheerio';
 import { resolveIssue, parseAerodromeAirspaceDescription, parseCoordinate } from './aip/parse.mjs';
 import { createBorderResolver } from './aip/countryBorder.mjs';
 import { parsePolarisSectors, parseTerminalAirspaces, parseAerodromeRadioArea, sectionByTitle } from './aip/parseFrequencies.mjs';
+import { parsePublishedRestrictions } from './aip/parseRestrictions.mjs';
 const output = new URL('../public/aip-frequencies.json', import.meta.url);
 const statusFile = new URL('../public/aip-frequency-status.json', import.meta.url);
 const attemptedAt = new Date().toISOString(); let effectiveDate = null;
@@ -68,9 +69,10 @@ async function main() {
   if (catalog.effectiveDate !== effectiveDate) throw new Error('Frequency and aerodrome data must use the same current AIP edition.');
   let previous; try { previous = JSON.parse(await readFile(output, 'utf8')); } catch { /* First import. */ }
   if (previous?.effectiveDate > effectiveDate) throw new Error('Refusing a frequency-data edition downgrade.');
-  const [enr21, enr22, border] = await Promise.all([
+  const [enr21, enr22, enr51, border] = await Promise.all([
     source(new URL('eAIP/EN-ENR-2.1-en-GB.html', issue.issueRoot).toString()),
-    source(new URL('eAIP/EN-ENR-2.2-en-GB.html', issue.issueRoot).toString()), borderData(),
+    source(new URL('eAIP/EN-ENR-2.2-en-GB.html', issue.issueRoot).toString()),
+    source(new URL('eAIP/EN-ENR-5.1-en-GB.html', issue.issueRoot).toString()), borderData(),
   ]);
   const sectors = parsePolarisSectors(enr22.bytes.toString(), enr22.url, border.resolver);
   if (sectors.length < 29 || new Set(sectors.map(s => s.id)).size !== sectors.length) throw new Error('Polaris sector import is incomplete.');
@@ -78,6 +80,12 @@ async function main() {
   const terminals = parseTerminalAirspaces(enr21.bytes.toString(), enr21.url, border.resolver);
   if (terminals.spaces.filter(s => s.type === 'TMA').length < 20) throw new Error('TMA radio-area import is incomplete.');
   const warnings = [...terminals.warnings], extra = [];
+  const restrictions = parsePublishedRestrictions(enr51.bytes.toString(), enr51.url, border.resolver);
+  for (const prior of previous?.restrictions ?? []) if (!restrictions.areas.some(area => area.id === prior.id)) {
+    // A genuine publication removal is possible, but requires review before reducing coverage.
+    throw new Error(`Previously covered restriction missing: ${prior.id}. Review its published removal.`);
+  }
+  warnings.push(...restrictions.warnings);
   for (const pattern of [/Traffic Information Areas/i]) {
     const part = parseTerminalAirspaces(sectionByTitle(enr22.bytes.toString(), pattern), enr22.url, border.resolver);
     extra.push(...part.spaces); warnings.push(...part.warnings);
@@ -106,11 +114,13 @@ async function main() {
   const airspaces = [...sectors, ...terminals.spaces, ...extra, ...aerodromeAreas].sort((a, b) => a.id.localeCompare(b.id));
   if (new Set(airspaces.map(s => s.id)).size !== airspaces.length) throw new Error('Duplicate imported radio-area ID.');
   const payload = { schemaVersion: 1, source: 'Avinor AIP Norway', ...issue, checkedAt: attemptedAt, generatedAt: attemptedAt,
-    sources: [enr21, enr22].map(({url, sha256}) => ({url, sha256})), boundarySource: border.metadata, airspaces, withheldAreas, coverageWarnings: warnings };
+    sources: [enr21, enr22, enr51].map(({url, sha256}) => ({url, sha256})), boundarySource: border.metadata, airspaces, withheldAreas, coverageWarnings: warnings,
+    restrictions: restrictions.areas, restrictionCoverage: { sourceUrl: enr51.url, sha256: enr51.sha256, publishedAreaCount: restrictions.publishedAreaCount } };
   const staged = new URL('../public/aip-frequencies.json.tmp', import.meta.url);
   await writeFile(staged, JSON.stringify(payload) + '\n'); await rename(staged, output);
   await writeFile(statusFile, JSON.stringify({ state: 'success', attemptedAt, effectiveDate }, null, 2) + '\n');
   console.log(`Imported ${sectors.length} Polaris sectors and ${airspaces.length - sectors.length} ATS radio areas, AIP ${effectiveDate}.`);
+  console.log(`Imported ${restrictions.areas.length} ENR 5.1 restriction footprints; activation remains unknown.`);
   for (const warning of warnings) console.warn(warning);
 }
 main().catch(async error => { console.error(error.message); await writeFile(statusFile, JSON.stringify({ state: 'failed', attemptedAt, effectiveDate, error: error.message }, null, 2) + '\n'); process.exitCode = 1; });

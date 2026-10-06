@@ -29,6 +29,7 @@
 .generator-metrics strong { color: #17344e; font-size: 20px; }
 .generator-check-state { background: #f1f5f9; padding: 10px; border-radius: 8px; line-height: 1.5; font-size: 14px; }
 .generator-check-state.has-conflict { color: #9f1239; background: #fff1f2; }
+.generator-check-state.has-incomplete { color: #9a3412; background: #fff7ed; }
 .generator-leg-list { padding-left: 24px; line-height: 1.7; }
 .generator-leg-list strong { float: right; margin-left: 12px; }
 .generator-coverage { padding: 20px; margin-top: 22px; line-height: 1.6; }

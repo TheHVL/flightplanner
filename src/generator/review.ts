@@ -4,12 +4,19 @@ import { reviewLegAirspace, type AirspaceEncounter } from '../routing/airspace';
 import { buildTerrainProbes, fetchTerrainReview, type TerrainReview } from '../routing/terrain';
 import type { RadioCatalog } from '../frequencies/catalog';
 import type { GeneratorRequest, RouteCandidate } from './candidates';
+import { airspaceRouteIssues, applyPublishedMax, rasterRouteIssues, sortRouteIssues, terrainRouteIssues, type RouteIssue } from '../routing/issues';
+import { hasRestrictionCoverage } from '../routing/restrictions';
 
 export interface CandidateReview {
   candidate: RouteCandidate; terrain: TerrainReview;
   transitConflicts: number; airportLowSamples: number; missingHeights: number;
   unknownAltitudes: number; minimumTransitMarginFt: number | null;
   airspace: AirspaceEncounter[]; airspaceAvailable: boolean;
+  restrictionCoverageAvailable: boolean; issues: RouteIssue[];
+}
+export function candidateReviewBlocksTransfer(review: CandidateReview): boolean {
+  return !!(review.candidate.profileIssues.length || review.candidate.searchTerrain.conflicts || review.candidate.searchTerrain.missingCorridors ||
+    review.transitConflicts || review.missingHeights || review.unknownAltitudes || !review.airspaceAvailable || !review.restrictionCoverageAvailable || review.issues.some(issue => issue.blocksTransfer));
 }
 /** Checks rank draft alternatives. Missing data never produces a clear/safe result. */
 export async function reviewCandidates(candidates: RouteCandidate[], request: GeneratorRequest, airspace: RadioCatalog | null,
@@ -51,8 +58,20 @@ export async function reviewCandidates(candidates: RouteCandidate[], request: Ge
       const result = airspace ? reviewLegAirspace(leg, airspace, distance => model.at(leg.index, distance), model.breaks.map(value => value - offset)) : [];
       offset += leg.distanceNm; return result;
     });
+    const capAt = (legIndex: number) => {
+      const leg = candidate.legs.find(l => l.index === legIndex);
+      return candidate.reviewedEdges.find(edge => edge.fromId === leg?.from.aipId && edge.toId === leg?.to.aipId)?.maxAltitudeFt ?? null;
+    };
+    const restrictionCoverageAvailable = hasRestrictionCoverage(airspace);
+    const issues: RouteIssue[] = [...(candidate.profileWarnings ?? []), ...(candidate.coverageIssues ?? []),
+      ...applyPublishedMax(terrainRouteIssues(review, candidate.legs, airports), capAt),
+      ...rasterRouteIssues(candidate.rasterIssues ?? [], candidate.legs, leg => capAt(leg.index)), ...airspaceRouteIssues(encounters)];
+    if (!airspace || !restrictionCoverageAvailable) issues.push({ id: 'airspace-unavailable', severity: 'incomplete', category: 'coverage', blocksTransfer: true,
+      title: airspace ? 'Published restriction coverage unavailable' : 'Published airspace data unavailable',
+      detail: 'The current published restriction footprints could not be verified for this draft. An empty result does not establish unrestricted airspace.',
+      action: 'Generate again after the published-data refresh succeeds. Review the official AIP and current NOTAM before flight.' });
     return { candidate, terrain: review, transitConflicts, airportLowSamples, missingHeights, unknownAltitudes, minimumTransitMarginFt,
-      airspace: encounters, airspaceAvailable: !!airspace };
-  }).sort((a, b) => a.candidate.profileIssues.length - b.candidate.profileIssues.length || (a.candidate.searchTerrain.conflicts + a.transitConflicts) - (b.candidate.searchTerrain.conflicts + b.transitConflicts) ||
+      airspace: encounters, airspaceAvailable: !!airspace, restrictionCoverageAvailable, issues: sortRouteIssues(issues) };
+  }).sort((a, b) => Number(candidateReviewBlocksTransfer(a)) - Number(candidateReviewBlocksTransfer(b)) || a.candidate.profileIssues.length - b.candidate.profileIssues.length || (a.candidate.searchTerrain.conflicts + a.transitConflicts) - (b.candidate.searchTerrain.conflicts + b.transitConflicts) ||
     (a.candidate.searchTerrain.missingCorridors + a.missingHeights + a.unknownAltitudes) - (b.candidate.searchTerrain.missingCorridors + b.missingHeights + b.unknownAltitudes) || Math.abs(a.candidate.durationDifference) - Math.abs(b.candidate.durationDifference));
 }

@@ -10,6 +10,7 @@ vi.mock('../src/map/MapManager', () => ({ MapManager: class {
   constructor(_element: HTMLElement, callbacks: MapManagerCallbacks) { map.callbacks = callbacks; }
   invalidateSize() {} setChartDetail() {} setMsaCorridorVisible() {} setGlideEnvelopeVisible() {}
   renderMsaCorridor() {} renderVerticalProfileConflicts() {} renderVerticalProfileMarkers() {}
+  renderRouteIssues() {} focusRouteIssue() {}
   renderGlideEnvelope() {} renderGlideCoastlineSegments() {} setSelectedLeg() {}
   setPublishedPoints() {} setSnapEnabled() {}
   renderRoute(_points: unknown, legs: RouteLeg[], moved: MapManagerCallbacks['onWaypointMoved']) { map.legs = legs; map.moved = moved; }

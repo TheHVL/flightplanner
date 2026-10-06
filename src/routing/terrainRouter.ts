@@ -77,7 +77,7 @@ export class TerrainRouter {
     return anchors;
   }
   async findPath(from: Coordinate, to: Coordinate, altitudeFt: number, signal: AbortSignal,
-    levels: { departureFt?: number; arrivalFt?: number } = {}): Promise<TerrainPath | null> {
+    levels: { departureFt?: number; arrivalFt?: number } = {}, segmentAllowed: (a: ProjectedPoint, b: ProjectedPoint) => boolean = () => true): Promise<TerrainPath | null> {
     signal.throwIfAborted();
     const start = projectTerrainPoint(from), finish = projectTerrainPoint(to), ceilingM = altitudeFt * 0.3048 - MARGIN_M;
     // Conservative geometric climb/descent allowance near chart-limited gates.
@@ -87,6 +87,7 @@ export class TerrainRouter {
       levels.arrivalFt === undefined ? altitudeFt : levels.arrivalFt + Math.hypot(point.x - finish.x, point.y - finish.y) / 1852 * 250) * 0.3048 - MARGIN_M;
     const varyingLevels = levels.departureFt !== undefined || levels.arrivalFt !== undefined;
     const segmentMaximum = (a: ProjectedPoint, b: ProjectedPoint): number | null => {
+      if (!segmentAllowed(a, b)) return null;
       const steps = varyingLevels ? Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / 500)) : 1;
       let maximum = 0;
       for (let i = 0; i < steps; i++) {
@@ -117,6 +118,7 @@ export class TerrainRouter {
         if (col < 0 || row < 0 || col >= this.width || row >= this.height) continue;
         const next = row * this.width + col;
         if (closed[next] || this.blocked[next] || this.maxima[next] > ceilingAt(this.point(next))) continue;
+        if (!segmentAllowed(point, this.point(next))) continue;
         const step = Math.hypot(dx, dy) * GRID_M;
         const terrainPreference = 1 + 0.35 * (this.maxima[next] / Math.max(1, ceilingM)) ** 2;
         const nextCost = cost[id] + step * terrainPreference;

@@ -10,6 +10,7 @@ import './savedPlans.css';
 import './planningMenus.css';
 import './frequencies.css';
 import './planningWorkflow.css';
+import './routeIssues.css';
 import { publishedMapPoints, type PublishedMapPoint } from './aip/mapPoints';
 import { PlanningWorkflow, planningSidebarMarkup } from './components/PlanningWorkflow';
 import { LEG_SELECTED, openLegEditor } from './components/legEditorEvents';
@@ -132,6 +133,7 @@ root.innerHTML = `
       </section>
     </main>
 
+    <section id="route-check-summary" class="route-review-summary" aria-label="Current route check summary" hidden></section>
     <section id="ofp-table" class="ofp-panel panel"></section>
   </div>
 `;
@@ -187,7 +189,6 @@ window.setTimeout(() => warningAck.focus(), 0);
 const store = new FlightPlanStore();
 const moveMapWaypoint = (id: string, lat: number, lon: number, point?: PublishedMapPoint) => store.updateWaypoint(id, { lat, lon }, point);
 const frequencyPlanner = new FrequencyPlanner(store);
-new RouteReviewPanel(document.querySelector<HTMLElement>('#route-review-panel')!, store, frequencyPlanner);
 const routeShapeController = new RouteShapeController(store);
 restoreWorkingRoute(store, routeShapeController);
 const transferToken = new URL(location.href).searchParams.get('generatedRoute');
@@ -256,6 +257,11 @@ document.querySelector<HTMLInputElement>('#aip-snap-toggle')!.addEventListener('
 });
 
 window.addEventListener(LEG_SELECTED, () => mapManager.setSelectedLeg(legEditor.getSelectedLeg()));
+new RouteReviewPanel(document.querySelector<HTMLElement>('#route-review-panel')!, store, frequencyPlanner, {
+  summaryElement: document.querySelector<HTMLElement>('#route-check-summary')!,
+  onIssues: (issues, legs) => mapManager.renderRouteIssues(issues, legs),
+  onFocusIssue: (issue, legs) => mapManager.focusRouteIssue(issue, legs),
+});
 document.querySelector('[data-view-ofp]')!.addEventListener('click', () => {
   tableElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
   tableElement.querySelector<HTMLButtonElement>('button')?.focus({ preventScroll: true });

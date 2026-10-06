@@ -9,6 +9,9 @@ import { fetchRouteTerrainRaster, projectTerrainPoint, rasterCorridorMaximumM, t
 import { TerrainRouter } from '../routing/terrainRouter';
 import { candidateAltitudeModel } from './model';
 import { coordinateAtRouteDistance } from '../navigation/geodesy';
+import type { RadioCatalog } from '../frequencies/catalog';
+import { restrictionSegmentAllowed } from '../routing/restrictions';
+import { profileRouteIssues, type RasterLegIssue, type RouteIssue } from '../routing/issues';
 
 export interface AirportVisit { icao: string; activity: 'touch-and-go' | 'patterns' | 'land'; count: number; minutesEach: number; }
 export interface GeneratorRequest {
@@ -22,6 +25,9 @@ export interface RouteCandidate {
   distanceNm: number; flightMinutes: number; patternMinutes: number; totalMinutes: number;
   fuelGal: number | null; durationDifference: number; sourceNotes: string[]; profileIssues: string[];
   reviewedEdges: VfrRoutingEdge[];
+  profileWarnings: RouteIssue[];
+  coverageIssues: RouteIssue[];
+  rasterIssues: RasterLegIssue[];
   searchTerrain: { resolutionM: number; fetchedAt: string; highestRasterFt: number | null; conflicts: number; missingCorridors: number };
 }
 export const INITIAL_GENERATOR_AIRPORTS = ['ENDU', 'ENSR', 'ENTC'];
@@ -69,6 +75,7 @@ function terminalOptions(airport: AipAerodrome, other: AipAerodrome, outbound: b
 
 export interface GenerationOptions {
   signal?: AbortSignal; raster?: TerrainRaster;
+  airspace?: RadioCatalog | null;
   progress?: (message: string) => void;
 }
 /** Search all available terminal combinations through a generic terrain graph.
@@ -91,6 +98,7 @@ export async function generateRouteCandidates(request: GeneratorRequest, catalog
   options.progress?.(`Building terrain search (${raster.resolutionM} m raster)…`);
   await new Promise<void>(resolve => setTimeout(resolve, 0)); signal.throwIfAborted();
   const router = new TerrainRouter(raster);
+  const segmentAllowed = restrictionSegmentAllowed(options.airspace ?? null, raster);
   let paths: DraftPoint[][] = [[airportPoint(airports[0])]];
   const connectorCache = new Map<string, Awaited<ReturnType<TerrainRouter['findPath']>>>();
   for (const [index, pair] of pairs.entries()) {
@@ -103,13 +111,13 @@ export async function generateRouteCandidates(request: GeneratorRequest, catalog
       const arrivalCap = inputs.edges.find(e => e.fromId === end.aipId && e.toId === inbound[1]?.aipId)?.maxAltitudeFt ?? undefined;
       const key = `${start.aipId}|${end.aipId}|${departureCap}|${arrivalCap}`;
       if (!connectorCache.has(key)) connectorCache.set(key, await router.findPath(start, end, request.altitudeFt, signal,
-        { departureFt: departureCap, arrivalFt: arrivalCap }));
+        { departureFt: departureCap, arrivalFt: arrivalCap }, segmentAllowed));
       const connector = connectorCache.get(key); if (!connector) continue;
       const turns: DraftPoint[] = connector.points.slice(1, -1).map((point, i) => ({ ...point,
         name: `Terrain turn ${i + 1}`, aipId: `terrain:${point.lat.toFixed(6)}:${point.lon.toFixed(6)}` }));
       hops.push([...out, ...turns, ...inbound, airportPoint(pair.to)]);
     }
-    if (!hops.length) throw new Error(`No terrain-based connection found for ${pair.from.icao} → ${pair.to.icao} at ${request.altitudeFt} ft. Try a higher preferred altitude or a different itinerary. Missing terrain and the bounded search window can also prevent a result.`);
+    if (!hops.length) throw new Error(`No draft connection found for ${pair.from.icao} → ${pair.to.icao} at ${request.altitudeFt} ft within the terrain search and published restriction footprints. Try another itinerary or entry/exit. A higher preferred altitude cannot override terminal MAX limits or the conservative restriction avoidance. Missing terrain and the bounded search window can also prevent a result.`);
     // Feasibility and shorter coherent paths come before duration. Preserve
     // multiple terminal choices so the later profile review can reject a join.
     paths = paths.flatMap(path => hops.map(hop => [...path, ...hop])).sort((a, b) => distance(a) - distance(b)).slice(0, 48);
@@ -143,6 +151,8 @@ export function compareCandidates(a: RouteCandidate, b: RouteCandidate): number 
 function checkRasterProfile(candidate: RouteCandidate, request: GeneratorRequest, raster: TerrainRaster): void {
   const model = candidateAltitudeModel(candidate, request), airports = candidate.draft.waypoints.filter(p => /^[A-Z]{4}$/.test(p.aipId ?? ''));
   for (const leg of candidate.legs) {
+    const summary: RasterLegIssue = { legIndex: leg.index, startNm: 0, endNm: leg.distanceNm, highestFt: null, altitudeFt: null, conflicts: 0, missing: 0 };
+    let minimumMargin = Infinity;
     const steps = Math.max(1, Math.ceil(leg.distanceNm / 0.5));
     for (let i = 0; i < steps; i++) {
       const fromDistance = leg.distanceNm * i / steps, toDistance = leg.distanceNm * (i + 1) / steps;
@@ -152,11 +162,14 @@ function checkRasterProfile(candidate: RouteCandidate, request: GeneratorRequest
       if (airports.some(a => greatCircleDistanceNm(a, from) <= 3 && greatCircleDistanceNm(a, to) <= 3)) continue;
       const maximum = rasterCorridorMaximumM(raster, projectTerrainPoint(from), projectTerrainPoint(to));
       const altitudes = [model.at(leg.index, fromDistance), model.at(leg.index, toDistance)];
-      if (maximum === null || altitudes.some(a => a === null)) { candidate.searchTerrain.missingCorridors++; continue; }
+      if (maximum === null || altitudes.some(a => a === null)) { candidate.searchTerrain.missingCorridors++; summary.missing++; continue; }
       const highestFt = maximum / 0.3048;
       candidate.searchTerrain.highestRasterFt = Math.max(candidate.searchTerrain.highestRasterFt ?? 0, highestFt);
-      if (Math.min(...altitudes as number[]) - highestFt < 500) candidate.searchTerrain.conflicts++;
+      const altitude = Math.min(...altitudes as number[]), margin = altitude - highestFt;
+      if (margin < 500) { candidate.searchTerrain.conflicts++; summary.conflicts++; }
+      if (margin < minimumMargin) { minimumMargin = margin; summary.highestFt = highestFt; summary.altitudeFt = altitude; summary.startNm = fromDistance; summary.endNm = toDistance; }
     }
+    if (summary.conflicts || summary.missing) candidate.rasterIssues.push(summary);
   }
 }
 
@@ -173,7 +186,7 @@ function createCandidate(path: DraftPoint[], request: GeneratorRequest, catalog:
   store.updatePerformanceSettings({ usePohPerformance: true, rpm: request.rpm, manifoldPressureInHg: request.manifoldPressureInHg,
     pressureAltitudeFt: request.altitudeFt, oatC: 15 - request.altitudeFt * 0.0019812 });
   const waypoints = store.getWaypoints(), legs = store.getLegs(), reviewedEdges: VfrRoutingEdge[] = [];
-  const notes = new Set<string>(['Inter-airport connectors were searched using Kartverket terrain data. Published terminal point sequences still need their actual chart bends and airport joins reviewed. ATC clearance, restricted airspace, obstacles and weather are not resolved.', `Search raster: ${raster.resolutionM} m nearest-neighbour samples, fetched ${raster.fetchedAt}. Peaks between raster samples can be missed. This is not automatic MSA or verified terrain-safe routing.`, 'Terrain turns are custom geographic waypoints, not named landmarks or published VFR reporting points. Review water crossings and gliding distance to land.']);
+  const notes = new Set<string>(['Inter-airport connectors were searched using Kartverket terrain data. Published terminal point sequences still need their actual chart bends and airport joins reviewed. ATC clearance, restriction activation, NOTAM, obstacles and weather are not resolved.', `Search raster: ${raster.resolutionM} m nearest-neighbour samples, fetched ${raster.fetchedAt}. Peaks between raster samples can be missed. This is not automatic MSA or verified terrain-safe routing.`, 'Terrain turns are custom geographic waypoints, not named landmarks or published VFR reporting points. Review water crossings and gliding distance to land.']);
   for (const point of path.filter(p => p.elevationFt !== undefined)) if (!edges.some(edge => edge.fromId.startsWith(`${point.aipId}:`))) notes.add(`${point.aipId}: verified directional terminal procedures are unavailable. Reporting-point anchors and airport joins require chart review.`);
   if (path.some(p => p.aipId === 'ENSR') && !edges.some(edge => edge.fromId.startsWith('ENSR:'))) notes.add('ENSR uses individual reporting-point anchors. Its charted segment directions and unqualified altitude labels remain unresolved; this draft does not apply those procedures.');
   for (const leg of legs) {
@@ -220,11 +233,28 @@ function createCandidate(path: DraftPoint[], request: GeneratorRequest, catalog:
   notes.add('Approach draft levels may be lower than the preferred altitude to allow the modeled 500 ft/min descent at 120 KTAS. Check them against chart procedures and terrain.');
   const fuel = calculateFuelPlanForStore(store, { ...DEFAULT_FUEL_PLANNING_SETTINGS, descentFuelFlowGph: request.descentFuelFlowGph, circuitFuelFlowGph: request.patternFuelFlowGph });
   const issues: string[] = [];
+  const profileWarnings = fuel.verticalProfile ? profileRouteIssues(fuel.verticalProfile, legs) : [];
   if (!fuel.verticalProfile || fuel.verticalProfile.profilesOverlap || fuel.verticalProfile.climbPerformanceIncomplete) issues.push('Climb/descent profile needs correction.');
   if (fuel.legs.some(l => !!l.performanceError || !!l.phaseWarning) || fuel.legs.some(l => !Number.isFinite(l.flightTimeMin))) issues.push('Aircraft performance is incomplete for this draft.');
+  fuel.legs.forEach((fuelLeg, index) => {
+    if (fuelLeg.performanceError || fuelLeg.phaseWarning) profileWarnings.push({ id: `performance-${index}`, severity: 'incomplete', category: 'profile', blocksTransfer: true,
+      legIndex: index, title: 'Aircraft performance unavailable', detail: fuelLeg.performanceError || fuelLeg.phaseWarning || '',
+      action: 'Review the published aircraft performance at this altitude and cruise power. Correct the aircraft assumptions and generate again.', focus: 'profile' });
+  });
+  if (issues.length && !profileWarnings.length) profileWarnings.push({ id: 'profile-incomplete', severity: 'incomplete', category: 'profile', blocksTransfer: true,
+    title: 'Climb/descent calculation incomplete', detail: issues.join(' '), action: 'Check the aircraft assumptions and available climb/descent distance, then generate again.', focus: 'profile' });
+  const coverageIssues: RouteIssue[] = [];
+  for (const [index, point] of path.entries()) if (point.elevationFt !== undefined) {
+    const airport = catalog.aerodromes.find(a => a.icao === point.aipId)!;
+    const missing = !edges.some(edge => edge.fromId.startsWith(`${point.aipId}:`));
+    coverageIssues.push({ id: `procedure-${index}`, severity: 'review', category: 'coverage', blocksTransfer: false,
+      legIndex: Math.min(index, legs.length - 1), title: `${point.aipId}: ${missing ? 'directional procedure coverage unavailable' : 'airport joins and chart tracks need review'}`,
+      detail: missing ? 'This airport uses a reporting-point anchor or an unverified airport connection. It is not a published VFR procedure.' : 'Reporting-point directions and MAX limits are available, but chart bends, runway joins and pattern geometry are not encoded.',
+      action: 'Open the airport’s published chart and procedures before using this draft. Review and shape the terminal track in Manual Planner.', sourceUrl: airport.sourceUrl });
+  }
   const flightMinutes = fuel.legs.reduce((sum, l) => sum + l.flightTimeMin, 0), patternMinutes = store.getTotalWaypointActivityMinutes();
   return { id, name: '', draft: store.exportWorkingDraftState(), legs: calculateRouteLegs(waypoints), distanceNm: distance(path), flightMinutes, patternMinutes,
     totalMinutes: flightMinutes + patternMinutes, fuelGal: fuel.tripFuelGal, durationDifference: flightMinutes + patternMinutes - request.lessonMinutes,
-    sourceNotes: [...notes], profileIssues: issues, reviewedEdges,
+    sourceNotes: [...notes], profileIssues: issues, reviewedEdges, profileWarnings, coverageIssues, rasterIssues: [],
     searchTerrain: { resolutionM: raster.resolutionM, fetchedAt: raster.fetchedAt, highestRasterFt: null, conflicts: 0, missingCorridors: 0 } };
 }
