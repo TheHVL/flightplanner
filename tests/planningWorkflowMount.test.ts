@@ -5,14 +5,14 @@ import { expect, it, vi } from 'vitest';
 import type { MapManagerCallbacks } from '../src/map/MapManager';
 import type { RouteLeg } from '../src/types';
 
-const map = vi.hoisted(() => ({ callbacks: null as MapManagerCallbacks | null, legs: [] as RouteLeg[] }));
+const map = vi.hoisted(() => ({ callbacks: null as MapManagerCallbacks | null, moved: null as MapManagerCallbacks['onWaypointMoved'] | null, legs: [] as RouteLeg[] }));
 vi.mock('../src/map/MapManager', () => ({ MapManager: class {
   constructor(_element: HTMLElement, callbacks: MapManagerCallbacks) { map.callbacks = callbacks; }
   invalidateSize() {} setChartDetail() {} setMsaCorridorVisible() {} setGlideEnvelopeVisible() {}
   renderMsaCorridor() {} renderVerticalProfileConflicts() {} renderVerticalProfileMarkers() {}
   renderGlideEnvelope() {} renderGlideCoastlineSegments() {} setSelectedLeg() {}
   setPublishedPoints() {} setSnapEnabled() {}
-  renderRoute(_points: unknown, legs: RouteLeg[]) { map.legs = legs; }
+  renderRoute(_points: unknown, legs: RouteLeg[], moved: MapManagerCallbacks['onWaypointMoved']) { map.legs = legs; map.moved = moved; }
 } }));
 
 it('mounts the complete workflow and connects map requests to the shared editor', async () => {
@@ -48,10 +48,11 @@ it('mounts the complete workflow and connects map requests to the shared editor'
   const airport = points.find(p => p.aipId === 'ENTC')!;
   const reporting = points.find(p => p.aipId === 'ENDU:ROSSVOLL')!;
   expect(document.querySelector<HTMLInputElement>('#aip-snap-toggle')!.checked).toBe(true);
-  map.callbacks!.onWaypointMoved(second.to.id, airport.lat, airport.lon, airport);
+  expect(map.moved).toBe(map.callbacks!.onWaypointMoved);
+  map.moved!(second.to.id, airport.lat, airport.lon, airport);
   map.callbacks!.onWaypointSelected!(second.to.id);
   expect(document.querySelector('[aria-label="Arrival pattern"]')).not.toBeNull();
-  map.callbacks!.onWaypointMoved(second.to.id, reporting.lat, reporting.lon, reporting);
+  map.moved!(second.to.id, reporting.lat, reporting.lon, reporting);
   map.callbacks!.onWaypointSelected!(second.to.id);
   expect(document.querySelector('[aria-label="Arrival pattern"]')).toBeNull();
   expect(document.querySelector('[data-leg-visit-title]')!.textContent).toBe('Waypoint · ROSSVOLL');
