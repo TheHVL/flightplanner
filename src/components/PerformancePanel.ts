@@ -15,6 +15,7 @@ export class PerformancePanel {
   constructor(
     private readonly element: HTMLElement,
     private readonly store: FlightPlanStore,
+    private readonly view: 'full' | 'settings' | 'fuel' = 'full',
   ) {
     this.element.addEventListener('input', (event) => this.handleInput(event));
     this.store.subscribe(() => this.refreshFuelResult());
@@ -75,6 +76,12 @@ export class PerformancePanel {
         </div></details>
       </div>
     `);
+    if (this.view === 'settings') this.element.querySelector('.fuel-planning-section')?.remove();
+    if (this.view === 'fuel') {
+      const fuel = this.element.querySelector('.fuel-planning-section');
+      if (fuel) this.element.replaceChildren(fuel);
+      this.element.querySelector('h3')!.textContent = 'Trip fuel';
+    }
     this.refreshResult();
     this.refreshFuelResult();
   }

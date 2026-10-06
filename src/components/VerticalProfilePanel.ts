@@ -28,15 +28,21 @@ import {
 export class VerticalProfilePanel {
   private readonly aipStatus = new Map<string, string>();
   private loadingAipKey: string | null = null;
+  private selectedWaypointId = '';
 
   constructor(
     private readonly element: HTMLElement,
     private readonly store: FlightPlanStore,
+    private readonly view: 'full' | 'settings' | 'profile' | 'waypoint' = 'full',
   ) {
     this.element.addEventListener('change', (event) => this.handleChange(event));
     this.element.addEventListener('click', (event) => void this.handleClick(event));
     this.store.subscribe(() => this.render());
     window.addEventListener(FUEL_SETTINGS_CHANGED_EVENT, () => this.render());
+    if (view === 'waypoint') window.addEventListener('flightplanner-select-waypoint-visit', event => {
+      this.selectedWaypointId = (event as CustomEvent<{ waypointId: string }>).detail.waypointId;
+      this.render();
+    });
   }
 
   render(): void {
@@ -47,6 +53,23 @@ export class VerticalProfilePanel {
     const waypoints = this.store.getWaypoints();
     const plannedAltitudesFt = legs.map((leg) => this.store.getPlannedAltitudeFt(leg.from.id, leg.to.id));
     const constraints = this.store.getVerticalWaypointConstraints();
+
+    if (this.view === 'waypoint') {
+      const point = waypoints.find(p => p.id === this.selectedWaypointId);
+      if (!point) { setPanelMarkup(this.element, '<p class="hint">Choose a waypoint in the route to prepare an airport visit.</p>'); return; }
+      const title = this.element.closest('details[data-leg-visit]')?.querySelector('[data-leg-visit-title]');
+      if (title) title.textContent = `Airport / pattern · ${point.name}`;
+      const index = waypoints.indexOf(point);
+      if (index === 0 || index === waypoints.length - 1) {
+        const endpoint = index === 0 ? 'departure' : 'destination';
+        const elevation = index === 0 ? settings.departureElevationFt : settings.destinationElevationFt;
+        const code = index === 0 ? settings.departureIcaoCode : settings.destinationIcaoCode;
+        setPanelMarkup(this.element, `<h3 class="menu-group-title">${this.escape(point.name)} · ${endpoint}</h3><div class="vertical-input-grid">${this.numberField('Field elevation', index === 0 ? 'dep-elev' : 'dest-elev', elevation, 'ft', 0, 20000, 10)}</div>${this.endpointAipControls(endpoint, point.name, code, elevation)}${index === waypoints.length - 1 ? this.arrivalPatternControls(waypoints) : '<p class="menu-note">The departure climb starts at this field elevation.</p>'}`);
+      } else {
+        setPanelMarkup(this.element, this.waypointControls(waypoints, plannedAltitudesFt, point.id));
+      }
+      return;
+    }
 
     let resultHtml = '<div class="vertical-empty">Add at least two waypoints to calculate the vertical profile.</div>';
     if (legs.length > 0) {
@@ -148,6 +171,13 @@ export class VerticalProfilePanel {
         : `<div class="vertical-poh-note"><strong>POH Figure 5-8:</strong> 3100 lb, flaps up, 2400 RPM, full throttle, mixture at Maximum Power Fuel Flow placard, cowl flaps OPEN. The POH table gives zero-wind air distance, time and fuel. Flightplanner derives average climb TAS from air distance/time, then applies the active per-leg wind to place TOC on the ground track. Time/fuel/distance are increased 10% for each 10°C above ISA, using route-weather OAT where available and manual OAT as fallback. ${fuelSettings.climbPerformanceMode === 'poh-normal-90' ? 'Normal climb is published through 10,000 ft.' : 'Maximum-rate climb is published through 14,000 ft.'}</div>`}
       <div class="nav-help vertical-help"><strong>How it works:</strong> Auto follows the PL before and after a waypoint. A higher outbound PL creates a TOC after the waypoint. If the previous climb is still in progress, it continues into this leg before the next altitude increment; the climb is never counted twice. A lower outbound PL creates a TOD before the waypoint, reaching the lower level before that leg begins. POH climb time/fuel stay tied to Figure 5-8 while wind changes the ground position of TOC. Descent time uses the selected rate, and descent TAS plus active wind sets the TOD ground distance. Airport/T&amp;G descends to field elevation and climbs again. Pattern does the same and adds a separate OFP row for the selected time and fuel. Off suppresses automatic vertical events at that waypoint. Until QNH conversion is added, entered elevations and PL are used as pressure-altitude proxies for POH climb calculations.</div></details>
     `);
+    if (this.view === 'profile') {
+      setPanelMarkup(this.element, `<div class="panel-heading"><h2>Climb &amp; descent review</h2></div><p class="hint">Review the profile below. Edit airport elevations and pattern in Prepare legs; performance defaults are in Settings.</p>${totalCircuitMinutes ? `<p class="menu-note">Pattern time: ${this.minutesLabel(totalCircuitMinutes)}, included in the OFP.</p>` : ''}${resultHtml}`);
+    } else if (this.view === 'settings') {
+      for (const node of this.element.querySelectorAll('[data-menu-section="airport-elevations"], [data-menu-section="airport-visits"], [data-menu-section="arrival-pattern"], .vertical-circuit-total, .vertical-overview, .vertical-events, .vertical-warning-list, .vertical-conflict-panel, .vertical-empty')) node.remove();
+      this.element.querySelector('h2')!.textContent = 'Climb & descent defaults';
+      this.element.querySelector('.hint')!.textContent = 'These performance settings apply to the whole flight. Prepare airport visits beside the waypoint in Prepare legs.';
+    }
   }
 
   private arrivalPatternControls(waypoints: ReturnType<FlightPlanStore['getWaypoints']>): string {
@@ -199,6 +229,7 @@ export class VerticalProfilePanel {
   private waypointControls(
     waypoints: ReturnType<FlightPlanStore['getWaypoints']>,
     plannedAltitudesFt: Array<number | null>,
+    selectedId?: string,
   ): string {
     if (waypoints.length <= 2) return '';
 
@@ -219,6 +250,7 @@ export class VerticalProfilePanel {
             const statusKey = `waypoint:${waypoint.id}`;
             const status = this.aipStatus.get(statusKey);
             const loading = this.loadingAipKey === statusKey;
+            if (selectedId && waypoint.id !== selectedId) return '';
             return `
               <div class="vertical-waypoint-row vertical-waypoint-row--${constraint.mode}">
                 <div class="vertical-waypoint-name">
@@ -235,7 +267,7 @@ export class VerticalProfilePanel {
                   <div class="vertical-airport-tools">
                     <input class="vertical-aip-code" type="text" maxlength="4" placeholder="ICAO" value="${this.escape(suggestedIcao)}" data-vertical-waypoint-icao="${waypoint.id}" aria-label="ICAO code for ${this.escape(waypoint.name)}" />
                     <button class="vertical-aip-button" type="button" data-aip-waypoint-lookup="${waypoint.id}" ${loading ? 'disabled' : ''}>${loading ? 'Loading…' : 'Use AIP'}</button>
-                    <label class="vertical-airport-elevation"><input type="number" min="0" max="20000" step="10" placeholder="Elev" data-vertical-waypoint-elevation="${waypoint.id}" value="${constraint.elevationFt ?? ''}" /><span>ft</span></label>
+                    <label class="vertical-airport-elevation"><input type="number" min="0" max="20000" step="10" aria-label="Field elevation at ${this.escape(waypoint.name)}" placeholder="Elev" data-vertical-waypoint-elevation="${waypoint.id}" value="${constraint.elevationFt ?? ''}" /><span>ft</span></label>
                     ${status ? `<small class="vertical-aip-status">${this.escape(status)}</small>` : ''}
                   </div>` : ''}
                 ${constraint.mode === 'circuits' ? `

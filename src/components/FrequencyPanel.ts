@@ -7,12 +7,12 @@ import type { ChannelSuggestion } from '../frequencies/routeFrequencies';
 export class FrequencyPanel {
   private selectedKey = '';
   private message = '';
-  constructor(private readonly element: HTMLElement, private readonly store: FlightPlanStore, private readonly planner: FrequencyPlanner) {
+  constructor(private readonly element: HTMLElement, private readonly store: FlightPlanStore, private readonly planner: FrequencyPlanner, private readonly embedded = false) {
     element.addEventListener('change', event => this.change(event));
     element.addEventListener('click', event => this.click(event));
     planner.subscribe(() => this.render()); store.subscribe(() => this.render());
     window.addEventListener(FUEL_SETTINGS_CHANGED_EVENT, () => this.render());
-    window.addEventListener('flightplanner-select-frequency-leg', event => {
+    if (!this.embedded) window.addEventListener('flightplanner-select-frequency-leg', event => {
       const { fromId, toId } = (event as CustomEvent<{ fromId: string; toId: string }>).detail;
       const key = `${fromId}->${toId}`;
       if (!this.planner.getPlans().some(plan => this.key(plan) === key)) return;
@@ -25,7 +25,13 @@ export class FrequencyPanel {
     });
     this.render();
   }
+  selectLeg(fromId: string, toId: string): void {
+    this.selectedKey = `${fromId}->${toId}`;
+    this.message = '';
+    this.render();
+  }
   render(): void {
+    const sourceOpen = this.element.querySelector<HTMLDetailsElement>('[data-frequency-data]')?.open ?? false;
     const plans = this.planner.getPlans();
     const selected = plans.find(p => this.key(p) === this.selectedKey) ?? plans[0];
     this.selectedKey = selected ? this.key(selected) : '';
@@ -59,6 +65,18 @@ export class FrequencyPanel {
       <p class="frequency-message" role="status">${e(this.message)}</p>
       <details class="menu-help" data-menu-section="frequency-help"><summary>Selection rules &amp; data coverage</summary><p class="menu-note">Local CTR/TIZ services take priority, followed by TMA/TIA services and Polaris radio sectors. Below a TMA, the overlying ATS service is suggested for information. Multiple published channels remain visible for confirmation. Opening hours, sector combinations, radio reception and NOTAM changes are not known live.</p><p class="menu-note">Altitude matching uses entered PL and the existing modeled climb/descent. Flight-level limits use a pressure-altitude approximation; verify the reference near a boundary. Great-circle paths are evaluated in chords of at most 1 NM. Country-border curves use Kartverket data simplified within 20 metres; connections to published border coordinates may differ by up to 1 km. Review the chart near boundaries.</p>${data ? `<p class="menu-note">Boundary data: <a href="${e(data.boundarySource.sourceUrl)}" target="_blank" rel="noopener noreferrer">${e(data.boundarySource.source)}</a> · ${e(data.boundarySource.license)}.</p>` : ''}${data?.coverageWarnings.length ? `<p class="menu-note">${data.coverageWarnings.map(w => e(w)).join('<br>')}</p>` : ''}<p class="menu-note">Automatic suggestions are recalculated when a saved plan is loaded. Manual entries remain saved and must be reviewed for the new flight.</p></details>
     `);
+    if (this.embedded) {
+      this.element.querySelector('.panel-heading')?.remove();
+      this.element.querySelector('.frequency-leg-label')?.remove();
+      this.element.querySelector('.hint')?.remove();
+      const source = document.createElement('details');
+      source.className = 'menu-subsection';
+      source.setAttribute('data-frequency-data', '');
+      source.open = sourceOpen;
+      source.innerHTML = '<summary>Frequency data &amp; publication status</summary>';
+      for (const node of this.element.querySelectorAll('.frequency-data-status, .frequency-toolbar')) source.append(node);
+      this.element.append(source);
+    }
     const choice = this.element.querySelector<HTMLSelectElement>('[data-frequency-choice]');
     if (choice) choice.value = selected?.manual ?? '';
   }

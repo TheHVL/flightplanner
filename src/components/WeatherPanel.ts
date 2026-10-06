@@ -1,3 +1,4 @@
+import { openLegEditor } from './legEditorEvents';
 import { setPanelMarkup } from '../utils/panelMarkup';
 import { escapeHtml } from '../utils/html';
 import type { FlightPlanStore, LegWeatherForecast } from '../flightplan/FlightPlanStore';
@@ -51,7 +52,7 @@ export class WeatherPanel {
       </label>
       <div class="weather-status" role="status" aria-live="polite">${escapeHtml(this.statusMessage)}</div>
       ${forecasts.length > 0 ? this.forecastList(forecasts) : ''}
-      ${legs.length > 0 ? `<details class="menu-subsection" data-menu-section="manual-winds"><summary>Manual wind backups by leg</summary>${this.manualWindList()}</details>` : ''}
+      ${legs.length > 0 ? `<details class="menu-subsection" data-menu-section="manual-winds"><summary>Review wind sources by leg</summary>${this.manualWindList()}</details>` : ''}
       <details class="menu-help" data-menu-section="weather-help"><summary>Wind priority &amp; forecast source</summary>      <div class="weather-priority-note">
         <strong>Wind priority:</strong> fetched forecast for the leg → manual leg backup → global default manual wind. Manual leg winds remain stored if a forecast is fetched later.
       </div>
@@ -113,43 +114,7 @@ export class WeatherPanel {
                 <strong>${escapeHtml(leg.from.name)} → ${escapeHtml(leg.to.name)}</strong>
                 <span>${status}</span>
               </div>
-              <label>
-                <span>From °T</span>
-                <input
-                  type="number"
-                  min="0"
-                  max="359"
-                  step="1"
-                  placeholder="—"
-                  data-manual-wind-from-id="${leg.from.id}"
-                  data-manual-wind-to-id="${leg.to.id}"
-                  data-manual-wind-field="direction"
-                  value="${manual?.windFromDeg ?? ''}"
-                  aria-label="Manual wind direction ${escapeHtml(leg.from.name)} to ${escapeHtml(leg.to.name)}"
-                />
-              </label>
-              <label>
-                <span>Speed kt</span>
-                <input
-                  type="number"
-                  min="0"
-                  max="150"
-                  step="1"
-                  placeholder="—"
-                  data-manual-wind-from-id="${leg.from.id}"
-                  data-manual-wind-to-id="${leg.to.id}"
-                  data-manual-wind-field="speed"
-                  value="${manual?.windSpeedKt ?? ''}"
-                  aria-label="Manual wind speed ${escapeHtml(leg.from.name)} to ${escapeHtml(leg.to.name)}"
-                />
-              </label>
-              <button
-                class="manual-wind-clear"
-                type="button"
-                data-manual-wind-clear-from="${leg.from.id}"
-                data-manual-wind-clear-to="${leg.to.id}"
-                ${manual ? '' : 'disabled'}
-              >Clear</button>
+              <button type="button" data-weather-edit-from="${leg.from.id}" data-weather-edit-to="${leg.to.id}">Edit leg</button>
             </div>`;
         }).join('')}
       </div>`;
@@ -196,6 +161,8 @@ export class WeatherPanel {
 
   private async handleClick(event: Event): Promise<void> {
     const target = event.target as HTMLElement;
+    const edit = target.closest<HTMLElement>('[data-weather-edit-from]');
+    if (edit) { openLegEditor({ fromId: edit.dataset.weatherEditFrom!, toId: edit.dataset.weatherEditTo! }); return; }
     const clearButton = target.closest<HTMLButtonElement>('[data-manual-wind-clear-from]');
     if (clearButton) {
       const fromId = clearButton.dataset.manualWindClearFrom;
