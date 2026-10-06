@@ -381,4 +381,6 @@ No private API keys belong in this repository.
 
 ## Sequential leg preparation and AIP catalog
 
-Use the new Prepare legs and AIP panels for keyboard-first PL/MSA/wind entry, searchable aerodromes/reporting points, published VFR point sequences, and aerodrome details. Daily Avinor publication checks include explicit effective dates and failure warnings. See [AIP data lifecycle and coverage](docs/AIP_DATA.md).
+Use the Prepare legs and AIP panels for keyboard-first PL/MSA/wind entry, searchable aerodromes/reporting points and aerodrome details. Published VFR sequences are reserved for the automatic planner's data foundation. Daily Avinor publication checks include explicit effective dates and failure warnings. See [AIP data lifecycle and coverage](docs/AIP_DATA.md).
+
+Under **Review OFP → Terrain & airspace**, an optional check samples fresh Kartverket surface heights along the plotted route and compares the modeled vertical profile with imported AIP terminal volumes. It keeps manual MSA entries intact. Coverage gaps, FL/AGL references and peaks between samples require review. This does not include obstacles, complete restricted airspace or NOTAM. See [automatic planner data foundation](docs/AUTOMATIC_PLANNER_DATA.md).
