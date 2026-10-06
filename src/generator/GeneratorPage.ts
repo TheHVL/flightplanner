@@ -3,10 +3,11 @@ import { radioFreshness, validateRadioCatalog, type RadioCatalog } from '../freq
 import { DEFAULT_FUEL_PLANNING_SETTINGS } from '../fuel/fuelPlanning';
 import { buildVfrRoutingInputs } from '../routing/vfrInputs';
 import { escapeHtml as e } from '../utils/html';
-import { generateRouteCandidates, GENERATOR_AIRPORTS, type AirportVisit, type GeneratorRequest, type RouteCandidate } from './candidates';
+import { generateRouteCandidates, INITIAL_GENERATOR_AIRPORTS, type AirportVisit, type GeneratorRequest, type RouteCandidate } from './candidates';
 import { reviewCandidates, type CandidateReview } from './review';
 import { stageGeneratedRoute } from './transfer';
 import { GeneratorMap } from './GeneratorMap';
+import { northernAirports } from '../routing/northernAirports';
 
 export class GeneratorPage {
   private readonly form: HTMLFormElement;
@@ -29,7 +30,7 @@ export class GeneratorPage {
         <nav class="planner-page-nav" aria-label="Planner pages"><a href="./">Manual planner</a><a href="generator.html" aria-current="page">Route Generator</a></nav></header>
       <div class="generator-intro"><h1>Build a training route</h1><p>Choose your airport visits, then compare route drafts. Your manual plan stays as it is until you transfer a draft.</p></div>
       <div class="generator-workspace"><section class="generator-controls panel"><form id="generator-form">
-        <h2>1. Airport route</h2><p class="hint">Initial coverage: ENDU, ENTC and ENSR.</p>
+        <h2>1. Airport route</h2><p class="hint">Mainland AIP airports at or north of Bodø, sorted by ICAO. Terminal procedure coverage varies by airport.</p>
         <div class="generator-fields generator-airport-fields"><label>Departure<select name="departure">${this.airportOptions('ENDU')}</select></label><label>Finish at<select name="destination">${this.airportOptions('ENDU')}</select></label></div>
         <div class="generator-visits" data-generator-visits></div><button type="button" data-generator-add class="ghost-button">+ Add airport visit</button>
         <h2>2. Lesson</h2><div class="generator-fields"><label>Flight date<input name="flightDate" type="date" value="${new Date().toISOString().slice(0, 10)}" required></label>
@@ -46,9 +47,9 @@ export class GeneratorPage {
       </form><p class="generator-status" data-generator-status role="status" aria-live="polite">Loading published airport data…</p><p class="hint" data-generator-edition></p></section>
       <section class="generator-preview"><div class="panel generator-map-heading"><h2>3. Compare drafts</h2><p class="hint">Select a draft below to preview it. Edit the chosen route in Manual Planner after transfer.</p></div>
         <div id="generator-map" aria-label="Generated route preview"></div><div data-generator-candidates></div></section></div>
-      <details class="generator-coverage panel"><summary>Sources, checks &amp; coverage</summary><p>Route sequences use checksum-verified AIP reporting points and available directional segment limits. Straight connecting lines do not reproduce chart bends, airport joins or pattern tracks. Each needs chart review and any required ATC clearance.</p>
-        <p>Terrain comes from Kartverket: up to 0.5 NM sample spacing across a strip 1 NM either side. The 500 ft sampled margin is a training review reference, not automatic MSA. Samples within 3 NM of an airport are displayed separately for arrival/departure review. Peaks between samples, obstacles, restricted/danger areas and NOTAM remain outside these checks.</p>
-        <p>Airspace checks cover imported AIP terminal volumes, not Polaris radio-sector boundaries. FL/AGL limits need review. Missing data remain unknown. Terrain and AIP sources are checked afresh when you generate; no route is declared safe or cleared.</p>
+      <details class="generator-coverage panel"><summary>Sources, checks &amp; coverage</summary><p>Route sequences use checksum-verified AIP reporting points and available directional segment limits. Terrain search shapes inter-airport connectors. Terminal point sequences do not reproduce the full chart bends, airport joins or pattern tracks. Each needs chart review and any required ATC clearance.</p>
+        <p>Route search uses a fresh Kartverket numeric terrain raster, normally at 200 m resolution and coarser for large itineraries. It prefers lower terrain and simplifies grid turns only after checking the returned raster corridor. This coarse model can miss small peaks. Selected drafts then receive a separate terrain check: up to 0.5 NM sample spacing across a strip 1 NM either side. The 500 ft sampled margin is a training review reference, not automatic MSA. Samples within 3 NM of an airport are displayed separately for arrival/departure review. Peaks between samples, obstacles, restricted/danger areas and NOTAM remain outside these checks.</p>
+        <p>Airspace checks cover imported AIP terminal volumes, not Polaris radio-sector boundaries. FL/AGL limits need review. Missing data remain unknown. Water crossings and gliding distance to land need manual review. Terrain and AIP sources are checked afresh when you generate; no route is declared safe or cleared.</p>
         <div data-generator-coverage-notes></div></details></div>`;
     this.form = root.querySelector<HTMLFormElement>('#generator-form')!;
     for (const name of ['departure', 'destination']) (this.form.elements.namedItem(name) as HTMLSelectElement).value = 'ENDU';
@@ -64,7 +65,7 @@ export class GeneratorPage {
     void this.initialSources();
   }
   private airportOptions(selected: string): string {
-    return GENERATOR_AIRPORTS.map(code => `<option value="${code}" ${code === selected ? 'selected' : ''}>${code}${this.catalog ? ` · ${e(this.catalog.aerodromes.find(a => a.icao === code)?.name ?? '')}` : ''}</option>`).join('');
+    return (this.catalog ? northernAirports(this.catalog).map(a => a.icao) : INITIAL_GENERATOR_AIRPORTS).map(code => `<option value="${code}" ${code === selected ? 'selected' : ''}>${code}${this.catalog ? ` · ${e(this.catalog.aerodromes.find(a => a.icao === code)?.name ?? '')}` : ''}</option>`).join('');
   }
   private renderVisits(): void {
     this.root.querySelector('[data-generator-visits]')!.innerHTML = this.visits.map((visit, i) => `<fieldset class="generator-visit" data-visit-index="${i}"><legend>Visit ${i + 1}</legend>
@@ -106,7 +107,7 @@ export class GeneratorPage {
       else { const other = index + Number(button.dataset.visitMove); if (other >= 0 && other < this.visits.length) [this.visits[index], this.visits[other]] = [this.visits[other], this.visits[index]]; }
       this.invalidate(); this.renderVisits();
     }
-    if (button.dataset.generatorSelect) { this.selected = button.dataset.generatorSelect; this.renderCandidates(); this.map.show(this.candidates, this.selected); }
+    if (button.dataset.generatorSelect) { this.selected = button.dataset.generatorSelect; this.renderCandidates(); this.map.show(this.candidates.slice(0, 3), this.selected); }
     if (button.hasAttribute('data-generator-transfer')) this.transfer();
   }
   private invalidate(message = 'Inputs changed. Generate new drafts for these settings.'): void {
@@ -124,14 +125,20 @@ export class GeneratorPage {
   private async initialSources(): Promise<void> {
     try {
       const [catalog, refresh] = await Promise.all([loadAipAerodromeCatalog(true), this.json('aip-status.json')]);
-      if (this.version !== 0) return;
       this.catalog = catalog; this.refresh = refresh as AipRefreshStatus;
+      if (this.version !== 0) { this.refreshAirportMenus(); return; }
       const inputs = buildVfrRoutingInputs(catalog, this.refresh, this.readRequest().flightDate);
       this.status(inputs.usable ? 'Choose your lesson settings, then generate route drafts.' : 'AIP verification needs attention. Generate will retry the published data.');
       this.showSources();
-      for (const select of this.form.querySelectorAll<HTMLSelectElement>('select[name="departure"],select[name="destination"]')) { const selected = select.value; select.innerHTML = this.airportOptions(selected); select.value = selected; }
-      this.renderVisits();
+      this.refreshAirportMenus();
     } catch (error) { if (this.version === 0) this.status(error instanceof Error ? error.message : 'Published data unavailable. Generate will retry.'); }
+  }
+  private refreshAirportMenus(): void {
+    this.readVisits();
+    for (const select of this.form.querySelectorAll<HTMLSelectElement>('select[name="departure"],select[name="destination"]')) {
+      const selected = select.value; select.innerHTML = this.airportOptions(selected); select.value = selected;
+    }
+    this.renderVisits();
   }
   private async generate(): Promise<void> {
     const version = ++this.version, controller = new AbortController(); this.controller = controller; this.runButton(true);
@@ -142,9 +149,14 @@ export class GeneratorPage {
       const [catalog, refresh] = await Promise.all([loadAipAerodromeCatalog(true), this.json('aip-status.json', controller.signal)]);
       if (version !== this.version) return;
       this.catalog = catalog; this.refresh = refresh as AipRefreshStatus; this.request = request;
-      this.candidates = generateRouteCandidates(request, catalog, this.refresh); this.selected = this.candidates[0]?.id ?? '';
+      this.refreshAirportMenus();
+      this.status('Loading terrain for route search…');
+      const candidates = await generateRouteCandidates(request, catalog, this.refresh, new Date(), { signal: controller.signal,
+        progress: message => { if (version === this.version) this.status(message); } });
+      if (version !== this.version) return;
+      this.candidates = candidates; this.selected = this.candidates[0]?.id ?? '';
       if (!this.candidates.length) throw new Error('No draft combinations are available for this itinerary.');
-      this.showSources(); this.renderCandidates(); this.map.show(this.candidates, this.selected);
+      this.showSources(); this.renderCandidates(); this.map.show(this.candidates.slice(0, 3), this.selected);
       let radio: RadioCatalog | null = null;
       try {
         const [data, status] = await Promise.all([this.json('aip-frequencies.json', controller.signal), this.json('aip-frequency-status.json', controller.signal)]);
@@ -156,10 +168,15 @@ export class GeneratorPage {
         if (version === this.version) this.status(`Checking terrain: ${done}/${total} points…`);
       });
       if (version !== this.version) return;
-      this.reviews = reviews; this.candidates = reviews.map(r => r.candidate); this.selected = this.candidates[0].id;
-      const usable = reviews.filter(r => !r.transitConflicts && !r.candidate.profileIssues.length).length;
+      this.reviews = reviews.slice(0, 3);
+      this.candidates = this.reviews.map((r, i) => {
+        r.candidate.name = i === 0 ? 'Terrain-based route' : `Alternative entry/exit route ${i}`;
+        return r.candidate;
+      });
+      this.selected = this.candidates[0].id;
+      const usable = this.reviews.filter(r => !r.transitConflicts && !r.candidate.profileIssues.length && !r.candidate.searchTerrain.conflicts && !r.candidate.searchTerrain.missingCorridors && !r.missingHeights && !r.unknownAltitudes).length;
       this.status(usable ? `${usable} draft${usable === 1 ? '' : 's'} available for chart review. Compare the duration and review notes before transferring.` : 'No draft meets the sampled terrain/profile checks. Adjust altitude, airports or aircraft settings and generate again.');
-      this.map.show(this.candidates, this.selected);
+      this.map.show(this.candidates.slice(0, 3), this.selected);
     } catch (error) { if (version === this.version) this.status(error instanceof Error ? error.message : 'Generation failed. Try again.'); }
     finally { if (version === this.version) { this.controller = null; this.runButton(false); this.renderCandidates(); } }
   }
@@ -171,15 +188,16 @@ export class GeneratorPage {
   }
   private renderCandidates(): void {
     const output = this.root.querySelector('[data-generator-candidates]')!;
-    output.innerHTML = this.candidates.map((candidate, i) => {
+    output.innerHTML = this.candidates.slice(0, 3).map((candidate, i) => {
       const review = this.reviews.find(r => r.candidate.id === candidate.id), selected = candidate.id === this.selected;
-      const blocked = candidate.profileIssues.length || review?.transitConflicts;
+      const blocked = candidate.profileIssues.length || candidate.searchTerrain.conflicts || candidate.searchTerrain.missingCorridors || review?.transitConflicts || review?.missingHeights || review?.unknownAltitudes;
       const delta = Math.round(candidate.durationDifference);
       return `<article class="panel generator-candidate ${selected ? 'is-selected' : ''}">
         <button type="button" class="generator-candidate-choice" data-generator-select="${candidate.id}" aria-pressed="${selected}"><strong>${i + 1}. ${e(candidate.name)}</strong><span>${selected ? 'Selected preview' : 'Preview this draft'}</span></button>
         <div class="generator-metrics"><span><strong>${Math.round(candidate.totalMinutes)} min</strong>incl. ${Math.round(candidate.patternMinutes)} min pattern</span><span><strong>${Math.ceil(candidate.distanceNm)} NM</strong>plotted draft</span><span><strong>${candidate.fuelGal === null ? 'Unknown fuel' : `${candidate.fuelGal.toFixed(1)} US gal`}</strong>trip estimate</span></div>
         <p class="hint">${delta === 0 ? 'Matches the duration target after rounding.' : `${Math.abs(delta)} min ${delta > 0 ? 'above' : 'below'} your target.`} Still-air estimate.</p>
-        <p class="generator-check-state ${blocked ? 'has-conflict' : ''}">${candidate.profileIssues.length ? e(candidate.profileIssues.join(' ')) : !review ? 'Terrain check pending.' : review.transitConflicts ? `${review.transitConflicts} transit samples below the 500 ft review margin.` : review.missingHeights || review.unknownAltitudes ? 'Terrain check incomplete. Missing heights or modeled altitudes need review.' : 'No low transit margin found in returned samples. Chart review remains required.'}</p>
+        <p class="hint">Terrain search: ${candidate.searchTerrain.resolutionM} m raster · ${candidate.searchTerrain.highestRasterFt === null ? 'controlling transit terrain unknown' : `highest returned transit terrain ${Math.ceil(candidate.searchTerrain.highestRasterFt)} ft`}. Coarse samples can miss peaks.</p>
+        <p class="generator-check-state ${blocked ? 'has-conflict' : ''}">${candidate.profileIssues.length ? e(candidate.profileIssues.join(' ')) : candidate.searchTerrain.conflicts ? `${candidate.searchTerrain.conflicts} raster corridor sections conflict with the modeled altitude. Try a higher preferred altitude or another itinerary.` : candidate.searchTerrain.missingCorridors ? 'Terrain search/profile coverage incomplete. Generate again before transferring.' : !review ? 'Terrain check pending.' : review.transitConflicts ? `${review.transitConflicts} transit samples below the 500 ft review margin.` : review.missingHeights || review.unknownAltitudes ? 'Terrain check incomplete. Missing heights or modeled altitudes need review.' : 'No low transit margin found in returned samples. Chart review remains required.'}</p>
         ${review ? `<p class="hint">${review.missingHeights} missing heights · ${review.unknownAltitudes} unknown modeled altitudes · ${review.airportLowSamples} low-margin airport-area samples.${review.airspaceAvailable ? '' : ' Terminal airspace verification unavailable.'}</p>` : ''}
         ${selected ? `<details class="menu-subsection"><summary>Route points &amp; planned levels</summary><ol class="generator-leg-list">${candidate.legs.map(leg => `<li>${e(leg.from.name)} → ${e(leg.to.name)} <strong>${candidate.draft.plannedAltitudesFt.find(([key]) => key === `${leg.from.id}->${leg.to.id}`)?.[1] ?? '?'} ft</strong></li>`).join('')}</ol></details>
           <details class="menu-subsection"><summary>Review notes &amp; sources</summary>${candidate.sourceNotes.map(note => `<p>${e(note)}</p>`).join('')}
@@ -194,7 +212,7 @@ export class GeneratorPage {
   }
   private transfer(): void {
     const candidate = this.candidates.find(c => c.id === this.selected), review = this.reviews.find(r => r.candidate.id === this.selected);
-    if (!candidate || !review || !this.request || this.controller || review.transitConflicts || candidate.profileIssues.length) return;
+    if (!candidate || !review || !this.request || this.controller || review.transitConflicts || candidate.profileIssues.length || candidate.searchTerrain.conflicts || candidate.searchTerrain.missingCorridors || review.missingHeights || review.unknownAltitudes) return;
     try {
       if (!this.catalog || !buildVfrRoutingInputs(this.catalog, this.refresh, this.request.flightDate).usable || Date.now() - Date.parse(review.terrain.fetchedAt) > 30 * 60000) throw new Error('These checks have expired. Generate fresh drafts before transferring.');
       const token = stageGeneratedRoute(candidate.draft, sessionStorage, Date.now(), { ...DEFAULT_FUEL_PLANNING_SETTINGS, descentFuelFlowGph: this.request.descentFuelFlowGph, circuitFuelFlowGph: this.request.patternFuelFlowGph });

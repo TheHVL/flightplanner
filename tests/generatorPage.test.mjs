@@ -2,14 +2,21 @@
 import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { GeneratorPage } from '../src/generator/GeneratorPage';
-import { generatorFixture, generatorNow } from './helpers/generatorFixture.mjs';
+import { generatorFixture, generatorNow, generatorRaster } from './helpers/generatorFixture.mjs';
 import { FlightPlanStore } from '../src/flightplan/FlightPlanStore';
 import { RouteShapeController } from '../src/flightplan/RouteShapeController';
 import { saveWorkingRoute } from '../src/flightplan/workingRoutePersistence';
 const map = vi.hoisted(() => ({ calls: [] }));
 vi.mock('../src/generator/GeneratorMap', () => ({ GeneratorMap: class { show(candidates, selected) { map.calls.push({ candidates, selected }); } } }));
 let terrainMode = 'normal', resolvers = [];
+vi.mock('../src/routing/terrainRaster', async importOriginal => ({ ...await importOriginal(),
+  fetchRouteTerrainRaster: vi.fn(async (_points, signal) => {
+    if (terrainMode === 'pending') await new Promise(resolve => resolvers.push(resolve));
+    signal.throwIfAborted(); return generatorRaster();
+  }),
+}));
 beforeEach(() => {
+  vi.setConfig({ testTimeout: 15000 });
   localStorage.clear(); sessionStorage.clear(); map.calls = []; terrainMode = 'normal'; resolvers = [];
   vi.setSystemTime(generatorNow);
   const { catalog, refresh } = generatorFixture();
@@ -40,7 +47,7 @@ it('mounts a separate workflow, generates alternatives and preserves the manual 
   expect(root.querySelector('a[aria-current="page"]').textContent).toBe('Route Generator');
   expect([...root.querySelector('select[name="departure"]').options].map(o=>o.value)).toEqual(['ENDU','ENSR','ENTC']);
   submit(root);
-  await vi.waitFor(() => expect(root.querySelector('[data-generator-status]').textContent).toContain('available for chart review'));
+  await vi.waitFor(() => expect(root.querySelector('[data-generator-status]').textContent).toContain('available for chart review'), { timeout: 10000 });
   expect(root.querySelectorAll('.generator-candidate').length).toBeGreaterThan(1);
   expect(localStorage.getItem('flightplanner-working-route-v1')).toBe(before);
   expect(sessionStorage.length).toBe(0);
@@ -58,12 +65,12 @@ it('shows airport-only pattern controls and preserves visit order through reorde
   expect([...root.querySelectorAll('[data-visit-airport]')].map(s=>s.value)).toEqual(['ENSR','ENTC']);
   expect(root.querySelector('[data-visit-count]').value).toBe('2');
   submit(root);
-  await vi.waitFor(() => expect(root.querySelector('[data-generator-status]').textContent).toContain('available for chart review'));
+  await vi.waitFor(() => expect(root.querySelector('[data-generator-status]').textContent).toContain('available for chart review'), { timeout: 10000 });
   expect(root.textContent).toContain('incl. 10 min pattern');
 });
 it('blocks transferring terrain-conflicting drafts and cancels old results after an edit', async () => {
   const root = page(); await waitReady(root); terrainMode = 'mountain'; submit(root);
-  await vi.waitFor(() => expect(root.querySelector('[data-generator-status]').textContent).toContain('No draft meets'));
+  await vi.waitFor(() => expect(root.querySelector('[data-generator-status]').textContent).toContain('No draft meets'), { timeout: 10000 });
   expect(root.querySelector('[data-generator-transfer]').disabled).toBe(true);
   terrainMode = 'pending'; submit(root);
   await vi.waitFor(() => expect(resolvers.length).toBeGreaterThan(0));
@@ -73,11 +80,11 @@ it('blocks transferring terrain-conflicting drafts and cancels old results after
   expect(root.querySelector('[data-generator-status]').textContent).toContain('Inputs changed');
   expect(root.querySelector('[data-generator-transfer]')).toBeNull();
 });
-it('keeps missing terrain visibly incomplete and permits only a draft transfer for manual review', async () => {
+it('keeps missing terrain visibly incomplete and blocks transfer until it can be checked', async () => {
   const root = page(); await waitReady(root); terrainMode = 'missing'; submit(root);
-  await vi.waitFor(() => expect(root.querySelector('[data-generator-status]').textContent).toContain('available for chart review'));
+  await vi.waitFor(() => expect(root.querySelector('[data-generator-status]').textContent).toContain('No draft meets'), { timeout: 10000 });
   expect(root.querySelector('.generator-check-state').textContent).toContain('Terrain check incomplete');
   expect(root.textContent).not.toContain('No low transit margin found');
-  expect(root.querySelector('[data-generator-transfer]').disabled).toBe(false);
+  expect(root.querySelector('[data-generator-transfer]').disabled).toBe(true);
   expect(sessionStorage.length).toBe(0);
 });

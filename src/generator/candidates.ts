@@ -4,6 +4,11 @@ import { calculateFuelPlanForStore, DEFAULT_FUEL_PLANNING_SETTINGS } from '../fu
 import { calculateRouteLegs, greatCircleDistanceNm } from '../navigation/geodesy';
 import { buildVfrRoutingInputs, type VfrRoutingEdge } from '../routing/vfrInputs';
 import type { Coordinate, RouteLeg } from '../types';
+import { northernAirports } from '../routing/northernAirports';
+import { fetchRouteTerrainRaster, projectTerrainPoint, rasterCorridorMaximumM, type TerrainRaster } from '../routing/terrainRaster';
+import { TerrainRouter } from '../routing/terrainRouter';
+import { candidateAltitudeModel } from './model';
+import { coordinateAtRouteDistance } from '../navigation/geodesy';
 
 export interface AirportVisit { icao: string; activity: 'touch-and-go' | 'patterns' | 'land'; count: number; minutesEach: number; }
 export interface GeneratorRequest {
@@ -17,14 +22,15 @@ export interface RouteCandidate {
   distanceNm: number; flightMinutes: number; patternMinutes: number; totalMinutes: number;
   fuelGal: number | null; durationDifference: number; sourceNotes: string[]; profileIssues: string[];
   reviewedEdges: VfrRoutingEdge[];
+  searchTerrain: { resolutionM: number; fetchedAt: string; highestRasterFt: number | null; conflicts: number; missingCorridors: number };
 }
-export const GENERATOR_AIRPORTS = ['ENDU', 'ENSR', 'ENTC'];
+export const INITIAL_GENERATOR_AIRPORTS = ['ENDU', 'ENSR', 'ENTC'];
 const airportPoint = (a: AipAerodrome): DraftPoint => ({ name: a.icao, aipId: a.icao, lat: a.lat!, lon: a.lon!, elevationFt: a.elevationFt });
 const distance = (points: Coordinate[]) => points.slice(1).reduce((sum, p, i) => sum + greatCircleDistanceNm(points[i], p), 0);
 
-export function validateGeneratorRequest(request: GeneratorRequest): void {
+export function validateGeneratorRequest(request: GeneratorRequest, catalog?: AipAerodromeCatalog): void {
   const airports = [request.departure, ...request.visits.map(v => v.icao), request.destination];
-  if (airports.some(code => !GENERATOR_AIRPORTS.includes(code))) throw new Error('Choose ENDU, ENTC or ENSR. This is the initial coverage area.');
+  if (airports.some(code => !/^EN[A-Z]{2}$/.test(code) || catalog && !northernAirports(catalog).some(a => a.icao === code))) throw new Error('Choose a published mainland airport at or north of Bodø. This is the terrain search coverage area.');
   if (!request.visits.length && request.departure === request.destination) throw new Error('Add an airport visit for a return flight.');
   if (request.visits.length > 4 || airports.some((code, i) => i > 0 && airports[i - 1] === code)) throw new Error('Use at most four visits and avoid consecutive visits to the same airport.');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(request.flightDate) || !Number.isFinite(Date.parse(request.flightDate))) throw new Error('Choose a flight date.');
@@ -54,59 +60,121 @@ function terminalOptions(airport: AipAerodrome, other: AipAerodrome, outbound: b
     // reporting point may anchor a draft connector; it is not a charted join.
     const nearest = [...points.values()].filter(p => p.aerodromeIcao === airport.icao)
       .sort((a, b) => greatCircleDistanceNm(airportPoint(airport), a) + greatCircleDistanceNm(a, airportPoint(other)) -
-        greatCircleDistanceNm(airportPoint(airport), b) - greatCircleDistanceNm(b, airportPoint(other))).slice(0, 3);
+        greatCircleDistanceNm(airportPoint(airport), b) - greatCircleDistanceNm(b, airportPoint(other)));
     return nearest.length ? nearest.map(p => [p]) : [[]];
   }
   return options.sort((a, b) => distance(outbound ? [airportPoint(airport), ...a, airportPoint(other)] : [airportPoint(other), ...a, airportPoint(airport)]) -
-    distance(outbound ? [airportPoint(airport), ...b, airportPoint(other)] : [airportPoint(other), ...b, airportPoint(airport)])).slice(0, 4);
+    distance(outbound ? [airportPoint(airport), ...b, airportPoint(other)] : [airportPoint(other), ...b, airportPoint(airport)]));
 }
 
-/** Bounded beam search across ordered airport visits, ranked against lesson duration. No arbitrary time-filling loops. */
-export function generateRouteCandidates(request: GeneratorRequest, catalog: AipAerodromeCatalog, refresh: AipRefreshStatus | null, now = new Date()): RouteCandidate[] {
-  validateGeneratorRequest(request);
+export interface GenerationOptions {
+  signal?: AbortSignal; raster?: TerrainRaster;
+  progress?: (message: string) => void;
+}
+/** Search all available terminal combinations through a generic terrain graph.
+ * Final sampled/profile review happens before selecting the three UI alternatives.
+ */
+export async function generateRouteCandidates(request: GeneratorRequest, catalog: AipAerodromeCatalog, refresh: AipRefreshStatus | null,
+  now = new Date(), options: GenerationOptions = {}): Promise<RouteCandidate[]> {
+  validateGeneratorRequest(request, catalog);
+  const signal = options.signal ?? new AbortController().signal; signal.throwIfAborted();
   const inputs = buildVfrRoutingInputs(catalog, refresh, request.flightDate, now);
   if (!inputs.usable) throw new Error('The current AIP edition could not be verified for this flight date. Reload published data before generating drafts.');
   const codes = [request.departure, ...request.visits.map(v => v.icao), request.destination];
-  const airports = codes.map(code => catalog.aerodromes.find(a => a.icao === code && a.lat !== null && a.lon !== null));
-  if (airports.some(a => !a)) throw new Error('An airport coordinate is unavailable. Check the current AIP.');
-  let paths: DraftPoint[][] = [[airportPoint(airports[0]!)]], visitedDistance = 0;
-  const totalDirect = airports.slice(1).reduce((sum, a, i) => sum + greatCircleDistanceNm(airportPoint(airports[i]!), airportPoint(a!)), 0);
-  const patternTime = request.visits.reduce((sum, v) => sum + (v.activity === 'patterns' ? v.count * v.minutesEach : 0), 0);
-  for (let i = 1; i < airports.length; i++) {
-    const from = airports[i - 1]!, to = airports[i]!;
-    const departures = terminalOptions(from, to, true, catalog, inputs.edges), arrivals = terminalOptions(to, from, false, catalog, inputs.edges);
-    const hops = departures.flatMap(out => arrivals.map(inbound => [...out, ...inbound, airportPoint(to)]));
-    visitedDistance += greatCircleDistanceNm(airportPoint(from), airportPoint(to));
-    const fraction = visitedDistance / totalDirect;
-    const targetDistance = Math.max(1, request.lessonMinutes - patternTime) * 120 / 60 * fraction;
-    paths = paths.flatMap(path => hops.map(hop => [...path, ...hop])).sort((a, b) => Math.abs(distance(a) - targetDistance) - Math.abs(distance(b) - targetDistance)).slice(0, 72);
+  const airports = codes.map(code => catalog.aerodromes.find(a => a.icao === code && a.lat !== null && a.lon !== null)!);
+  const pairs = airports.slice(1).map((to, i) => ({ from: airports[i], to,
+    departures: terminalOptions(airports[i], to, true, catalog, inputs.edges),
+    arrivals: terminalOptions(to, airports[i], false, catalog, inputs.edges) }));
+  const raster = options.raster ?? await fetchRouteTerrainRaster([
+    ...airports.map(airportPoint), ...pairs.flatMap(pair => [...pair.departures.flat(), ...pair.arrivals.flat()]),
+  ], signal, (done, total) => options.progress?.(`Loading terrain search tiles: ${done}/${total}…`));
+  options.progress?.(`Building terrain search (${raster.resolutionM} m raster)…`);
+  await new Promise<void>(resolve => setTimeout(resolve, 0)); signal.throwIfAborted();
+  const router = new TerrainRouter(raster);
+  let paths: DraftPoint[][] = [[airportPoint(airports[0])]];
+  const connectorCache = new Map<string, Awaited<ReturnType<TerrainRouter['findPath']>>>();
+  for (const [index, pair] of pairs.entries()) {
+    const hops: DraftPoint[][] = []; let done = 0;
+    for (const out of pair.departures) for (const inbound of pair.arrivals) {
+      signal.throwIfAborted();
+      options.progress?.(`Finding ${pair.from.icao} → ${pair.to.icao}: ${++done}/${pair.departures.length * pair.arrivals.length} entry/exit combinations…`);
+      const start = out.at(-1) ?? airportPoint(pair.from), end = inbound[0] ?? airportPoint(pair.to);
+      const departureCap = inputs.edges.find(e => e.fromId === out.at(-2)?.aipId && e.toId === start.aipId)?.maxAltitudeFt ?? undefined;
+      const arrivalCap = inputs.edges.find(e => e.fromId === end.aipId && e.toId === inbound[1]?.aipId)?.maxAltitudeFt ?? undefined;
+      const key = `${start.aipId}|${end.aipId}|${departureCap}|${arrivalCap}`;
+      if (!connectorCache.has(key)) connectorCache.set(key, await router.findPath(start, end, request.altitudeFt, signal,
+        { departureFt: departureCap, arrivalFt: arrivalCap }));
+      const connector = connectorCache.get(key); if (!connector) continue;
+      const turns: DraftPoint[] = connector.points.slice(1, -1).map((point, i) => ({ ...point,
+        name: `Terrain turn ${i + 1}`, aipId: `terrain:${point.lat.toFixed(6)}:${point.lon.toFixed(6)}` }));
+      hops.push([...out, ...turns, ...inbound, airportPoint(pair.to)]);
+    }
+    if (!hops.length) throw new Error(`No terrain-based connection found for ${pair.from.icao} → ${pair.to.icao} at ${request.altitudeFt} ft. Try a higher preferred altitude or a different itinerary. Missing terrain and the bounded search window can also prevent a result.`);
+    // Feasibility and shorter coherent paths come before duration. Preserve
+    // multiple terminal choices so the later profile review can reject a join.
+    paths = paths.flatMap(path => hops.map(hop => [...path, ...hop])).sort((a, b) => distance(a) - distance(b)).slice(0, 48);
+    options.progress?.(`Found terrain connections for airport section ${index + 1}/${pairs.length}…`);
   }
   const unique = [...new Map(paths.map(path => [path.map(p => p.aipId).join('|'), path])).values()];
-  const candidates = unique.map((path, i) => createCandidate(path, request, catalog, inputs.edges, `draft-${i}`));
-  candidates.sort((a, b) => a.profileIssues.length - b.profileIssues.length || Math.abs(a.durationDifference) - Math.abs(b.durationDifference) || a.distanceNm - b.distanceNm);
-  // Compare different terminal routes rather than three nearly identical point
-  // substitutions. Keep the shortest remaining option as a duration comparison.
-  const selected = candidates.slice(0, 1), first = selected[0];
-  if (!first) return [];
-  const firstPoints = new Set(first.draft.waypoints.map(p => p.aipId));
-  const difference = (candidate: RouteCandidate) => candidate.draft.waypoints.filter(p => !firstPoints.has(p.aipId)).length;
-  const alternatives = candidates.slice(1).filter(c => c.profileIssues.length === first.profileIssues.length && c.totalMinutes <= Math.max(request.lessonMinutes, first.totalMinutes) + 30);
-  const alternative = alternatives.sort((a, b) => difference(b) - difference(a) || Math.abs(a.durationDifference) - Math.abs(b.durationDifference))[0] ?? candidates[1];
-  if (alternative) selected.push(alternative);
-  const shortest = [...candidates].sort((a, b) => a.profileIssues.length - b.profileIssues.length || a.distanceNm - b.distanceNm).find(c => !selected.includes(c));
-  if (shortest) selected.push(shortest);
-  return selected.map((c, i) => ({ ...c, name: i === 0 ? 'Closest to lesson duration' : i === 1 ? 'Alternative reporting points' : c.distanceNm < selected[0].distanceNm ? 'Shorter alternative' : 'Another route option' }));
+  const candidates: RouteCandidate[] = [];
+  for (const [i, path] of unique.entries()) {
+    signal.throwIfAborted();
+    const candidate = createCandidate(path, request, catalog, inputs.edges, `draft-${i}`, raster);
+    checkRasterProfile(candidate, request, raster);
+    candidates.push(candidate);
+    if (i % 4 === 0) { await new Promise<void>(resolve => setTimeout(resolve, 0)); signal.throwIfAborted(); }
+  }
+  candidates.sort(compareCandidates);
+  // Fresh service checks on a diverse shortlist, then three displayed results.
+  const selected: RouteCandidate[] = [];
+  const signatures = new Set<string>();
+  for (const candidate of candidates) {
+    const signature = candidate.draft.waypoints.filter(p => p.aipId).map(p => p.aipId).join('|');
+    if (signatures.has(signature)) continue;
+    signatures.add(signature); selected.push(candidate);
+    if (selected.length === 6) break;
+  }
+  return selected.map((candidate, i) => ({ ...candidate, name: `Terrain route draft ${i + 1}` }));
+}
+export function compareCandidates(a: RouteCandidate, b: RouteCandidate): number {
+  return a.profileIssues.length - b.profileIssues.length || a.searchTerrain.conflicts - b.searchTerrain.conflicts ||
+    a.searchTerrain.missingCorridors - b.searchTerrain.missingCorridors || Math.abs(a.durationDifference) - Math.abs(b.durationDifference) || a.distanceNm - b.distanceNm;
+}
+function checkRasterProfile(candidate: RouteCandidate, request: GeneratorRequest, raster: TerrainRaster): void {
+  const model = candidateAltitudeModel(candidate, request), airports = candidate.draft.waypoints.filter(p => /^[A-Z]{4}$/.test(p.aipId ?? ''));
+  for (const leg of candidate.legs) {
+    const steps = Math.max(1, Math.ceil(leg.distanceNm / 0.5));
+    for (let i = 0; i < steps; i++) {
+      const fromDistance = leg.distanceNm * i / steps, toDistance = leg.distanceNm * (i + 1) / steps;
+      const from = coordinateAtRouteDistance([leg], fromDistance)!, to = coordinateAtRouteDistance([leg], toDistance)!;
+      // Retain the existing visible terminal-review treatment. This is not a
+      // validated approach corridor and never supplies operational MSA.
+      if (airports.some(a => greatCircleDistanceNm(a, from) <= 3 && greatCircleDistanceNm(a, to) <= 3)) continue;
+      const maximum = rasterCorridorMaximumM(raster, projectTerrainPoint(from), projectTerrainPoint(to));
+      const altitudes = [model.at(leg.index, fromDistance), model.at(leg.index, toDistance)];
+      if (maximum === null || altitudes.some(a => a === null)) { candidate.searchTerrain.missingCorridors++; continue; }
+      const highestFt = maximum / 0.3048;
+      candidate.searchTerrain.highestRasterFt = Math.max(candidate.searchTerrain.highestRasterFt ?? 0, highestFt);
+      if (Math.min(...altitudes as number[]) - highestFt < 500) candidate.searchTerrain.conflicts++;
+    }
+  }
 }
 
-function createCandidate(path: DraftPoint[], request: GeneratorRequest, catalog: AipAerodromeCatalog, edges: VfrRoutingEdge[], id: string): RouteCandidate {
+function createCandidate(path: DraftPoint[], request: GeneratorRequest, catalog: AipAerodromeCatalog, edges: VfrRoutingEdge[], id: string, raster: TerrainRaster): RouteCandidate {
   const store = new FlightPlanStore();
-  store.appendAipWaypoints(path.map(p => ({ ...p, aipEffectiveDate: catalog.effectiveDate })));
+  let turnNumber = 0;
+  store.appendAipWaypoints(path.map(p => ({ ...p, name: p.aipId.startsWith('terrain:') ? `Terrain turn ${++turnNumber}` : p.name, aipEffectiveDate: catalog.effectiveDate })));
+  // Geographic turns are editable custom waypoints, never published AIP points.
+  for (const point of store.getWaypoints()) if (point.aipId?.startsWith('terrain:')) {
+    store.updateWaypoint(point.id, { aipId: undefined, aipEffectiveDate: undefined });
+  }
   store.updateWeatherSettings({ useForecastWinds: false, departureTimeUtc: `${request.flightDate}T12:00` });
   store.updateNavigationSettings({ windFromDeg: 0, windSpeedKt: 0, automaticVariation: true });
   store.updatePerformanceSettings({ usePohPerformance: true, rpm: request.rpm, manifoldPressureInHg: request.manifoldPressureInHg,
     pressureAltitudeFt: request.altitudeFt, oatC: 15 - request.altitudeFt * 0.0019812 });
   const waypoints = store.getWaypoints(), legs = store.getLegs(), reviewedEdges: VfrRoutingEdge[] = [];
-  const notes = new Set<string>(['Draft airport joins and connecting lines must be shaped against the published charts. ATC clearance, restricted airspace, obstacles and weather are not resolved.']);
+  const notes = new Set<string>(['Inter-airport connectors were searched using Kartverket terrain data. Published terminal point sequences still need their actual chart bends and airport joins reviewed. ATC clearance, restricted airspace, obstacles and weather are not resolved.', `Search raster: ${raster.resolutionM} m nearest-neighbour samples, fetched ${raster.fetchedAt}. Peaks between raster samples can be missed. This is not automatic MSA or verified terrain-safe routing.`, 'Terrain turns are custom geographic waypoints, not named landmarks or published VFR reporting points. Review water crossings and gliding distance to land.']);
+  for (const point of path.filter(p => p.elevationFt !== undefined)) if (!edges.some(edge => edge.fromId.startsWith(`${point.aipId}:`))) notes.add(`${point.aipId}: verified directional terminal procedures are unavailable. Reporting-point anchors and airport joins require chart review.`);
   if (path.some(p => p.aipId === 'ENSR') && !edges.some(edge => edge.fromId.startsWith('ENSR:'))) notes.add('ENSR uses individual reporting-point anchors. Its charted segment directions and unqualified altitude labels remain unresolved; this draft does not apply those procedures.');
   for (const leg of legs) {
     const edge = edges.find(e => e.fromId === leg.from.aipId && e.toId === leg.to.aipId);
@@ -157,5 +225,6 @@ function createCandidate(path: DraftPoint[], request: GeneratorRequest, catalog:
   const flightMinutes = fuel.legs.reduce((sum, l) => sum + l.flightTimeMin, 0), patternMinutes = store.getTotalWaypointActivityMinutes();
   return { id, name: '', draft: store.exportWorkingDraftState(), legs: calculateRouteLegs(waypoints), distanceNm: distance(path), flightMinutes, patternMinutes,
     totalMinutes: flightMinutes + patternMinutes, fuelGal: fuel.tripFuelGal, durationDifference: flightMinutes + patternMinutes - request.lessonMinutes,
-    sourceNotes: [...notes], profileIssues: issues, reviewedEdges };
+    sourceNotes: [...notes], profileIssues: issues, reviewedEdges,
+    searchTerrain: { resolutionM: raster.resolutionM, fetchedAt: raster.fetchedAt, highestRasterFt: null, conflicts: 0, missingCorridors: 0 } };
 }

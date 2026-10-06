@@ -1,5 +1,6 @@
 import { aipFreshness, validateAipCatalog, type AipAerodromeCatalog, type AipRefreshStatus } from '../aip/aerodromes';
 import type { Coordinate } from '../types';
+import { northernAirports } from './northernAirports';
 
 export interface VfrRoutingNode extends Coordinate { id: string; airport: boolean; name: string; }
 export interface VfrRoutingEdge {
@@ -39,7 +40,7 @@ export function buildVfrRoutingInputs(catalog: AipAerodromeCatalog, status: AipR
     return result;
   }
   result.usable = true;
-  const airports = catalog.aerodromes.filter(a => ['ENDU', 'ENTC', 'ENSR'].includes(a.icao));
+  const airports = northernAirports(catalog);
   const points = (catalog.reportingPoints ?? []).filter(p => airports.some(a => a.icao === p.aerodromeIcao));
   result.nodes = [...airports.flatMap(a => a.lat === null || a.lon === null ? [] : [{ id: a.icao, name: a.name, lat: a.lat, lon: a.lon, airport: true }]),
     ...points.map(p => ({ id: p.id, name: p.name, lat: p.lat, lon: p.lon, airport: false }))];
@@ -60,7 +61,7 @@ export function buildVfrRoutingInputs(catalog: AipAerodromeCatalog, status: AipR
       if (['both', 'reverse'].includes(segment.direction)) add(true);
     }
   }
-  result.coverageWarnings.push('Coverage starts with ENDU, ENTC and ENSR. Airport joins, pattern geometry, inter-airport connections, obstacles and complete restricted airspace are not encoded. Chart bends must be reviewed before automatic routing.');
+  result.coverageWarnings.push('Airport selection covers mainland AIP airports at or north of Bodø. Verified terminal route coverage remains partial. Airport joins, pattern geometry, obstacles and complete restricted airspace are not encoded. Chart bends must be reviewed before automatic routing.');
   result.coverageWarnings = [...new Set(result.coverageWarnings)];
   return result;
 }
