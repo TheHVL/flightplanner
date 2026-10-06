@@ -1,7 +1,9 @@
 import { expect, it, vi } from 'vitest';
 import { generateRouteCandidates } from '../src/generator/candidates';
 import { reviewCandidates } from '../src/generator/review';
-import { generatorFixture, generatorNow, generatorRequest } from './helpers/generatorFixture.mjs';
+import { calculateRouteLegs } from '../src/navigation/geodesy';
+import { fetchTerrainReview } from '../src/routing/terrain';
+import { generatorFixture, generatorNow, generatorRequest, generatorRaster } from './helpers/generatorFixture.mjs';
 const mode = vi.hoisted(() => ({ value: 'conflict' }));
 vi.mock('../src/routing/terrain', async importOriginal => {
   const original = await importOriginal();
@@ -13,22 +15,31 @@ vi.mock('../src/routing/terrain', async importOriginal => {
     })), fetchedAt: generatorNow.toISOString(), sourceUrl: original.TERRAIN_SOURCE_URL, failedBatches: 0 };
   }) };
 });
-function candidates() {
+async function candidates() {
   const { catalog, refresh } = generatorFixture();
-  return generateRouteCandidates(generatorRequest, catalog, refresh, generatorNow);
+  return generateRouteCandidates(generatorRequest, catalog, refresh, generatorNow, { raster: generatorRaster() });
 }
 it('ranks returned terrain conflicts ahead of duration preference and retains airport-area cautions', async () => {
-  mode.value = 'conflict'; const drafts = candidates();
+  mode.value = 'conflict'; const drafts = await candidates();
+  // Put the first synthetic alternative in a distinct test region. Coordinate
+  // deduplication must share real heights, not candidate-dependent mountains.
+  drafts[0].draft.waypoints.forEach(point => { point.lat += 2; });
+  drafts[0].legs = calculateRouteLegs(drafts[0].draft.waypoints);
+  fetchTerrainReview.mockClear();
   const result = await reviewCandidates(drafts, generatorRequest, null, new AbortController().signal);
   expect(result[0].candidate.id).not.toBe(drafts[0].id);
-  expect(result[0].transitConflicts).toBe(0);
+  // Shared coordinates inherit the same physical height in every alternative.
+  expect(result[0].transitConflicts + result[0].candidate.searchTerrain.conflicts).toBeLessThan(result.find(r => r.candidate.id === drafts[0].id).transitConflicts + drafts[0].searchTerrain.conflicts);
   const blocked = result.find(r => r.candidate.id === drafts[0].id);
   expect(blocked.transitConflicts).toBeGreaterThan(0);
   expect(blocked.airportLowSamples).toBeGreaterThan(0);
   expect(result.every(r => r.airspaceAvailable === false)).toBe(true);
+  const requested = fetchTerrainReview.mock.calls.flatMap(([points]) => points).map(p => `${p.lon.toFixed(8)},${p.lat.toFixed(8)}`);
+  expect(new Set(requested).size).toBe(requested.length);
+  expect(requested.length).toBeLessThan(result.reduce((sum, r) => sum + r.terrain.probes.length, 0));
 });
 it('retains missing coverage and withholds modeled altitudes for conflicting profiles', async () => {
-  mode.value = 'missing'; const drafts = candidates();
+  mode.value = 'missing'; const drafts = await candidates();
   let result = await reviewCandidates(drafts, generatorRequest, null, new AbortController().signal);
   expect(result.every(r => r.missingHeights === r.terrain.probes.length && r.minimumTransitMarginFt === null)).toBe(true);
   mode.value = 'normal'; drafts[0].profileIssues = ['Climb/descent profile needs correction.'];
