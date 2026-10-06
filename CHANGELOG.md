@@ -8,6 +8,7 @@ This file records significant Flightplanner updates, formulas, source assumption
 - Route weather requests midpoint coordinates in batches of at most 50, with a 45-second timeout per batch. Ten legs use one HTTP request. The eight pressure levels and 32 variables remain for altitude/time interpolation. Wind-adjusted leg timing is sampled locally in flight order; incorrect location counts, missing data and out-of-window times fail without partially applying forecasts.
 - Forecasts retain retrieval time, Best Match automatic model selection and explicitly unknown underlying model/run timestamps. The UI shows full valid dates and retrieval age, which is not model-run age. A live reminder after two hours or unknown retrieval time appears in Route weather and above the OFP when forecast winds are enabled. Refreshing clears that reminder; aging does not silently alter winds. Loading a plan or changing its flight time cancels a pending request.
 - Rewrote README around the current four-step manual workflow, separate generator, school preset, rounding formulas, daily AIP refresh, source coverage, development and current limitations. Removed obsolete phase-status claims and outdated vertical-profile descriptions.
+- Live verification follow-up: forecast status now follows the wind-enable toggle, so it cannot keep prompting the user to enable winds that are already active. Stored forecasts are described as loaded; retrieval age determines the refresh reminder.
 
 ## 2026-10-07, school C182T preset
 

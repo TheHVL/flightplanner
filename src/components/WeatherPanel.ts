@@ -36,6 +36,9 @@ export class WeatherPanel {
     const manualWinds = this.store.getManualLegWinds();
     const legs = this.store.getLegs();
     const hasPerLegWindSource = forecasts.length > 0 || manualWinds.length > 0;
+    const displayedStatus = !this.loading && forecasts.length > 0
+      ? `Forecast loaded for ${forecasts.length} leg${forecasts.length === 1 ? '' : 's'}. ${settings.useForecastWinds ? 'Forecast winds are active in calculations.' : 'Enable “Use per-leg route winds” to apply them.'} Manual winds remain as backups.`
+      : this.statusMessage;
 
     setPanelMarkup(this.element, `
       <div class="panel-heading">
@@ -59,7 +62,7 @@ export class WeatherPanel {
         <input type="checkbox" data-weather-use ${settings.useForecastWinds ? 'checked' : ''} ${hasPerLegWindSource ? '' : 'disabled'} />
         <span>Use per-leg route winds in calculations</span>
       </label>
-      <div class="weather-status" role="status" aria-live="polite">${escapeHtml(this.statusMessage)}</div>
+      <div class="weather-status" role="status" aria-live="polite">${escapeHtml(displayedStatus)}</div>
       <div class="weather-status" data-weather-freshness role="status" aria-live="polite" hidden></div>
       ${forecasts.length > 0 ? this.forecastList(forecasts) : ''}
       ${legs.length > 0 ? `<details class="menu-subsection" data-menu-section="manual-winds"><summary>Review wind sources by leg</summary>${this.manualWindList()}</details>` : ''}
@@ -276,7 +279,7 @@ export class WeatherPanel {
       }
 
       this.store.setRouteWeatherForecasts(forecasts);
-      this.statusMessage = `Fresh forecast loaded for ${forecasts.length} leg${forecasts.length === 1 ? '' : 's'}. ${this.store.getWeatherSettings().useForecastWinds ? 'Forecast winds are active in calculations.' : 'Enable “Use per-leg route winds” to apply them.'} Manual winds remain as backups.`;
+      this.statusMessage = 'Forecast loaded. Review the source, valid time and retrieval age below.';
     } catch (error) {
       if (requestVersion !== this.requestVersion) return;
       this.store.clearWeatherForecasts();
