@@ -1,3 +1,4 @@
+import { approximateTasFromIas } from '../performance/airspeed';
 import type { Coordinate, RouteLeg } from '../types';
 import { calculateC182TClimb, type C182TClimbProfile } from '../performance/climbPerformance';
 import { totalRouteDistanceNm } from './geodesy';
@@ -88,6 +89,9 @@ export interface RouteVerticalProfileInput {
   climbGroundSpeedKt: number;
   /** Legacy field name retained for stored/UI compatibility. Used as descent TAS when legWinds is supplied. */
   descentGroundSpeedKt: number;
+  climbSpeedMode?: 'tas' | 'ias';
+  descentSpeedMode?: 'manual' | 'cruise';
+  legCruiseTasKt?: Array<number | null>;
   climbPerformanceMode?: ClimbPerformanceMode;
   climbOatC?: number | null;
   /** Optional active wind for every route leg. When supplied, TOC/TOD ground positions are wind-aware. */
@@ -130,6 +134,7 @@ export function calculateRouteVerticalProfile(input: RouteVerticalProfileInput):
     descentRateFpm,
     climbGroundSpeedKt,
     descentGroundSpeedKt,
+    climbSpeedMode = 'tas', descentSpeedMode = 'manual', legCruiseTasKt,
     climbPerformanceMode = 'manual',
     climbOatC = null,
     legWinds,
@@ -192,6 +197,10 @@ export function calculateRouteVerticalProfile(input: RouteVerticalProfileInput):
 
     if (climbPerformanceMode === 'manual') {
       timeMin = altitudeChangeFt / climbRateFpm;
+      if (climbSpeedMode === 'ias') {
+        const meanAltitude = (altitudeFromFt + altitudeToFt) / 2;
+        phaseTasKt = approximateTasFromIas(climbGroundSpeedKt, meanAltitude, climbOatAt(anchorIndex) ?? 15 - 0.0019812 * meanAltitude);
+      }
     } else {
       const profile: C182TClimbProfile = climbPerformanceMode === 'poh-normal-90' ? 'normal-90' : 'max-rate';
       try {
@@ -226,8 +235,8 @@ export function calculateRouteVerticalProfile(input: RouteVerticalProfileInput):
     const walk = legWinds
       ? walkPhaseForward(legs, waypointDistancesNm, legWinds, climbStartNm, timeMin, phaseTasKt)
       : {
-          routeDistanceNm: climbStartNm + (zeroWindDistanceNm ?? climbGroundSpeedKt * timeMin / 60),
-          groundDistanceNm: zeroWindDistanceNm ?? climbGroundSpeedKt * timeMin / 60,
+          routeDistanceNm: climbStartNm + (zeroWindDistanceNm ?? phaseTasKt * timeMin / 60),
+          groundDistanceNm: zeroWindDistanceNm ?? phaseTasKt * timeMin / 60,
         };
     const distanceNm = walk.groundDistanceNm;
     const routeEventDistanceNm = walk.routeDistanceNm;
@@ -271,13 +280,16 @@ export function calculateRouteVerticalProfile(input: RouteVerticalProfileInput):
     const altitudeChangeFt = altitudeFromFt - altitudeToFt;
     if (altitudeChangeFt <= 0) return;
     const timeMin = altitudeChangeFt / descentRateFpm;
-    const phaseTasKt = descentGroundSpeedKt;
+    const phaseTasKt = descentSpeedMode === 'cruise'
+      ? legCruiseTasKt?.[Math.max(0, Math.min(anchorIndex - 1, legs.length - 1))]
+      : descentGroundSpeedKt;
+    if (phaseTasKt === null || phaseTasKt === undefined || !Number.isFinite(phaseTasKt) || phaseTasKt <= 0) throw new Error('Cruise TAS is unavailable for the descent. Check the cruise power and conditions.');
     const anchorDistanceNm = waypointDistancesNm[anchorIndex];
     const walk = legWinds
       ? walkPhaseBackward(legs, waypointDistancesNm, legWinds, anchorDistanceNm, timeMin, phaseTasKt)
       : {
-          routeDistanceNm: anchorDistanceNm - descentGroundSpeedKt * timeMin / 60,
-          groundDistanceNm: descentGroundSpeedKt * timeMin / 60,
+          routeDistanceNm: anchorDistanceNm - phaseTasKt * timeMin / 60,
+          groundDistanceNm: phaseTasKt * timeMin / 60,
         };
     const routeEventDistanceNm = walk.routeDistanceNm;
     const distanceNm = walk.groundDistanceNm;

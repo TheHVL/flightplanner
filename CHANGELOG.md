@@ -2,6 +2,14 @@
 
 This file records significant Flightplanner updates, formulas, source assumptions, limitations and implementation decisions. New updates are added at the top.
 
+## 2026-10-07, school C182T preset
+
+- Added explicit Apply school C182T preset actions in Aircraft & defaults and the separate Route Generator. User-provided settings: cruise 2200 RPM / 20 inHg; climb 90 KIAS, 2400 RPM / 23 inHg with 500 ft/min planning rate; descent at cruise TAS, about 18 inHg with 700 ft/min and 10 US gal/h; pattern 12 US gal/h; start/taxi/takeoff 2 US gal; reserve 12 US gal.
+- The school climb is manual, not the full-throttle POH table. Climb fuel flow is unconfirmed and remains blank, withholding trip totals and generated-route transfer until entered. Power references describe the procedure and do not create unverified climb/descent performance tables.
+- IAS mode estimates climb TAS from density at the climb midpoint, treating IAS as EAS without aircraft instrument/position corrections. Density uses the standard pressure-altitude relation and the available OAT. PL/elevation remain pressure-altitude proxies. Descent follows cruise TAS at the inbound leg level/power/temperature and applies wind. These speed modes are shared by OFP, profile and map checks.
+- Added editable reserve and flight-specific contingency, trip/reserve/contingency subtotals and low-fuel notices. No automatic contingency percentage or fixed amount is assumed. Alternate and extra fuel remain separate reviews. Reserve stays outside trip consumption and OFP accumulated fuel.
+- Existing saved and working plans retain their original speed settings. New speed modes and fuel-policy fields survive save/load; legacy files remain accepted. Applying the preset preserves route, fuel onboard and entered contingency. Generator assumptions do not change the manual working route until explicit transfer.
+
 ## 2026-10-06, actionable route notices and restriction footprint coverage
 
 - Added shared leg-specific conflict, incomplete-check and review notices, retaining controlling terrain/altitude values and map locations. Published MAX conflicts explain why raising cruise altitude cannot resolve them. Manual notices open the existing leg/profile editors; a summary above the OFP keeps check status visible.

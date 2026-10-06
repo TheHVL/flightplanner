@@ -1,3 +1,4 @@
+import { applySchoolPreset, SCHOOL_PRESET_DESCRIPTION } from '../performance/schoolPreset';
 import { setPanelMarkup } from '../utils/panelMarkup';
 import { escapeHtml } from '../utils/html';
 import type { FlightPlanStore, PerformanceSettings } from '../flightplan/FlightPlanStore';
@@ -17,6 +18,11 @@ export class PerformancePanel {
     private readonly store: FlightPlanStore,
     private readonly view: 'full' | 'settings' | 'fuel' = 'full',
   ) {
+    this.element.addEventListener('click', event => {
+      if (!(event.target as HTMLElement).closest('[data-school-preset]')) return;
+      try { applySchoolPreset(this.store); this.render(); }
+      catch { this.element.querySelector('[data-preset-status]')!.textContent = 'Could not save the preset in this browser. Your aircraft settings have been kept.'; }
+    });
     this.element.addEventListener('input', (event) => this.handleInput(event));
     this.store.subscribe(() => this.refreshFuelResult());
     if (typeof window !== 'undefined') {
@@ -35,6 +41,8 @@ export class PerformancePanel {
         </div>
       </div>
       <p class="hint">Choose cruise power below. Each leg uses its planned level and forecast temperature when available.</p>
+      <details class="menu-subsection"><summary>School C182T preset</summary><p class="menu-note">${SCHOOL_PRESET_DESCRIPTION}</p>
+        <button type="button" class="ghost-button" data-school-preset>Apply school C182T preset</button><p class="hint" data-preset-status role="status">Applying replaces aircraft performance and phase fuel settings. Fuel onboard and flight-specific contingency stay as entered.</p></details>
       <h3 class="menu-group-title">Cruise power &amp; fallback conditions</h3>
       <label class="nav-toggle performance-toggle">
         <input type="checkbox" data-performance-boolean="usePohPerformance" ${settings.usePohPerformance ? 'checked' : ''} />
@@ -62,6 +70,11 @@ export class PerformancePanel {
           ${this.fuelNumberField('startupTaxiTakeoffGal', 'Start/taxi/takeoff', fuelSettings.startupTaxiTakeoffGal, 'gal', 0.1, 0, 20, false)}
           ${this.fuelNumberField('totalFuelOnboardGal', 'Fuel onboard', fuelSettings.totalFuelOnboardGal, 'gal', 0.1, 0, 100)}
         </div>
+        <h3 class="menu-group-title">Reserve &amp; flight-specific contingency</h3>
+        <div class="nav-input-grid fuel-grid">
+          ${this.fuelNumberField('reserveGal', 'Reserve', fuelSettings.reserveGal ?? 12, 'gal', 0.1, 0, 100, false)}
+          ${this.fuelNumberField('contingencyGal', 'Contingency', fuelSettings.contingencyGal ?? null, 'gal', 0.1, 0, 100)}
+        </div><p class="menu-note">The school preset holds 12 US gal in reserve. Choose contingency for this flight; no automatic percentage is assumed. Alternate and extra fuel need separate review.</p>
         <h3 class="menu-group-title">Manual fuel flows</h3>
         <p class="menu-note">Cruise and climb flows apply in manual modes. Descent and pattern flows are needed when those phases are planned.</p>
         <div class="nav-input-grid fuel-grid">
@@ -72,7 +85,7 @@ export class PerformancePanel {
         </div>
         <div id="fuel-result" class="fuel-result"></div>
         <details class="menu-help" data-menu-section="fuel-help"><summary>Fuel source &amp; assumptions</summary><div class="nav-help fuel-source">
-          <strong>Source/assumptions:</strong> the UiT OFP v4.2 fuel-requirements box states that Trip Fuel includes 1.7 US gal for startup, taxi and takeoff, so 1.7 gal is the default allowance. Figure 5-8 supplies climb fuel when a POH climb profile is selected. Figure 5-9 supplies cruise fuel flow. Calculated fuel usage is displayed rounded up to the next whole US gallon, while internal calculations retain full precision. PL/elevation are currently used as pressure-altitude proxies until QNH conversion is added.
+          <strong>Source/assumptions:</strong> the UiT OFP v4.2 fuel-requirements box states that Trip Fuel includes 1.7 US gal for startup, taxi and takeoff, the original default allowance is 1.7 gal. The school preset uses your updated allowance of 2 US gal. Figure 5-8 supplies climb fuel when a POH climb profile is selected. Figure 5-9 supplies cruise fuel flow. Calculated fuel usage is displayed rounded up to the next whole US gallon, while internal calculations retain full precision. PL/elevation are currently used as pressure-altitude proxies until QNH conversion is added.
         </div></details>
       </div>
     `);
@@ -162,7 +175,7 @@ export class PerformancePanel {
     if (value !== null && !Number.isFinite(value)) return;
     const next = {
       ...current,
-      [fuelField]: fuelField === 'startupTaxiTakeoffGal' && value === null
+      [fuelField]: (fuelField === 'startupTaxiTakeoffGal' || fuelField === 'reserveGal') && value === null
         ? current.startupTaxiTakeoffGal
         : value,
     } as FuelPlanningSettings;
@@ -172,9 +185,8 @@ export class PerformancePanel {
 
   private syncFuelSettings(): void {
     const settings = getFuelPlanningSettings();
-    const climbFuelInput = this.element.querySelector<HTMLInputElement>('[data-fuel-field="climbFuelFlowGph"]');
-    if (climbFuelInput && document.activeElement !== climbFuelInput) {
-      climbFuelInput.value = settings.climbFuelFlowGph === null ? '' : String(settings.climbFuelFlowGph);
+    for (const input of this.element.querySelectorAll<HTMLInputElement>('[data-fuel-field]')) {
+      if (document.activeElement !== input) input.value = String(settings[input.dataset.fuelField as keyof FuelPlanningSettings] ?? '');
     }
     this.refreshFuelResult();
   }
@@ -239,6 +251,10 @@ export class PerformancePanel {
         ${usageMetric('Pattern', plan.circuitFuelGal)}
         ${usageMetric('Start/taxi/takeoff', plan.startupTaxiTakeoffGal)}
         <div class="fuel-metric fuel-metric--total"><span>Trip fuel</span><strong>${plan.tripFuelGal === null ? 'NEEDS INPUT' : `${ceilFuelUsageGal(plan.tripFuelGal)} GAL`}</strong></div>
+        ${usageMetric('Reserve', plan.reserveGal ?? 12)}
+        ${usageMetric('Trip + reserve', plan.tripPlusReserveGal)}
+        ${usageMetric('Contingency', plan.contingencyGal ?? null)}
+        ${plan.contingencyGal !== null && plan.contingencyGal !== undefined ? usageMetric('Trip + reserve + contingency', plan.tripReserveContingencyGal) : '<p class="menu-note">Enter contingency, including zero if appropriate for this flight, to complete this subtotal.</p>'}
         ${landing}
         ${warningHtml}
       `;

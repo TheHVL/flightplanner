@@ -27,6 +27,8 @@ export interface FuelPlanningSettings {
   descentFuelFlowGph: number | null;
   circuitFuelFlowGph: number | null;
   totalFuelOnboardGal: number | null;
+  reserveGal?: number;
+  contingencyGal?: number | null;
 }
 
 export interface FuelLegPlan {
@@ -86,7 +88,11 @@ export interface RouteFuelPlan {
   enrouteFuelGal: number | null;
   tripFuelGal: number | null;
   totalFuelOnboardGal: number | null;
+  reserveGal?: number;
+  contingencyGal?: number | null;
   landingFuelGal: number | null;
+  tripPlusReserveGal: number | null;
+  tripReserveContingencyGal: number | null;
   warnings: string[];
   verticalProfile: RouteVerticalProfileResult | null;
 }
@@ -133,6 +139,8 @@ export const DEFAULT_FUEL_PLANNING_SETTINGS: FuelPlanningSettings = {
   descentFuelFlowGph: null,
   circuitFuelFlowGph: null,
   totalFuelOnboardGal: null,
+  reserveGal: 12,
+  contingencyGal: null,
 };
 
 export function getFuelPlanningSettings(): FuelPlanningSettings {
@@ -389,6 +397,14 @@ export function calculateRouteFuelPlan(input: RouteFuelPlanInput): RouteFuelPlan
     ? fuelSettings.totalFuelOnboardGal - tripFuelGal
     : null;
 
+  const reserveGal = fuelSettings.reserveGal ?? 12;
+  const contingencyGal = fuelSettings.contingencyGal ?? null;
+  const tripPlusReserveGal = tripFuelGal === null ? null : tripFuelGal + reserveGal;
+  const tripReserveContingencyGal = tripPlusReserveGal === null || contingencyGal === null ? null : tripPlusReserveGal + contingencyGal;
+  if (landingFuelGal !== null && landingFuelGal < reserveGal) warnings.unshift(`Estimated landing fuel is below the entered ${reserveGal} US gal reserve.`);
+  if (tripReserveContingencyGal !== null && fuelSettings.totalFuelOnboardGal !== null && fuelSettings.totalFuelOnboardGal < tripReserveContingencyGal) warnings.unshift('Fuel onboard is below the trip + reserve + contingency subtotal. Review fuel onboard and flight-specific allowances.');
+  if (contingencyGal === null) warnings.push('Contingency has not been entered. Trip plus reserve excludes contingency, alternate and extra fuel.');
+
   for (const [index, leg] of legPlans.entries()) {
     if (leg.performanceError) {
       const routeLeg = legs[index];
@@ -405,7 +421,7 @@ export function calculateRouteFuelPlan(input: RouteFuelPlanInput): RouteFuelPlan
     warnings.push('Figure 5-8 temperature correction uses route-weather OAT for the outbound leg where available, otherwise the Phase 4 OAT fallback, and increases time/fuel/distance only when above ISA.');
   }
   if (legPlans.some((leg) => leg.descentTimeMin > EPSILON)) {
-    warnings.push('Descent distance uses the entered descent TAS with active per-leg wind. Descent rate and fuel flow remain manual inputs.');
+    warnings.push('Descent uses the selected TAS mode with active per-leg wind. Descent rate and fuel flow are editable planning inputs.');
   }
   if (legPlans.some((leg) => leg.oatSource === 'manual')) {
     warnings.push('Where no route-weather temperature is available, the Phase 4 OAT field is used as the cruise-temperature fallback.');
@@ -423,6 +439,7 @@ export function calculateRouteFuelPlan(input: RouteFuelPlanInput): RouteFuelPlan
     tripFuelGal,
     totalFuelOnboardGal: fuelSettings.totalFuelOnboardGal,
     landingFuelGal,
+    reserveGal, contingencyGal, tripPlusReserveGal, tripReserveContingencyGal,
     warnings: unique(warnings),
     verticalProfile,
   };
@@ -547,6 +564,8 @@ function sanitizeSettings(settings: FuelPlanningSettings): FuelPlanningSettings 
     descentFuelFlowGph: nullableBoundedNumber(settings.descentFuelFlowGph, 0, 40),
     circuitFuelFlowGph: nullableBoundedNumber(settings.circuitFuelFlowGph, 0, 40),
     totalFuelOnboardGal: nullableBoundedNumber(settings.totalFuelOnboardGal, 0, 100),
+    reserveGal: boundedNumber(settings.reserveGal ?? 12, 0, 100, 12),
+    contingencyGal: nullableBoundedNumber(settings.contingencyGal ?? null, 0, 100),
   };
 }
 
