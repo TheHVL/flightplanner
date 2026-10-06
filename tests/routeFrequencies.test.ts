@@ -54,9 +54,15 @@ describe('frequency source validation and freshness', () => {
   const airports={effectiveDate:data.effectiveDate,checkedAt:data.checkedAt,nextEffectiveDate:null} as AipAerodromeCatalog;
   const status={state:'success' as const,attemptedAt:data.checkedAt,effectiveDate:data.effectiveDate};
   const now=new Date('2026-10-05T12:00:00Z');
-  it('allows verified same-edition data and rejects failures, aged source geometry and edition mismatches',()=>{
+  it('uses a recently verified snapshot after a failed refresh, but rejects stale geometry and edition mismatches',()=>{
     expect(radioFreshness(data,status,airports,now).usable).toBe(true);
-    expect(radioFreshness(data,{...status,state:'failed'},airports,now).usable).toBe(false);
+    const fallback = radioFreshness(data,{...status,state:'failed'},airports,now);
+    expect(fallback.usable).toBe(true);
+    expect(fallback.warning).toBe(true);
+    expect(fallback.message).toContain('last successful snapshot');
+    expect(radioFreshness({...data,checkedAt:'2026-10-01T10:00:00Z'},{...status,state:'failed'},airports,now).usable).toBe(false);
+    expect(radioFreshness(data,null,airports,now).usable).toBe(false);
+    expect(radioFreshness(data,{...status,state:'failed',effectiveDate:'2026-08-06'},airports,now).usable).toBe(false);
     expect(radioFreshness({...data,checkedAt:'2026-10-01T10:00:00Z'},status,airports,now).usable).toBe(false);
     expect(radioFreshness(data,status,{...airports,effectiveDate:'2026-10-29'},now).usable).toBe(false);
     expect(radioFreshness({...data,nextEffectiveDate:'2026-10-29'},status,airports,now,'2026-10-30T10:00').usable).toBe(false);

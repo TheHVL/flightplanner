@@ -21,7 +21,7 @@ export class RoutePanel {
         </div>
         <button class="ghost-button" data-action="clear" ${waypoints.length === 0 ? 'disabled' : ''}>Clear</button>
       </div>
-      <p class="hint">Add airports and reporting points below, or click an empty place on the map. Click a route leg to prepare it. Drag a waypoint to move it or drag a blue line to shape the flown path. Ctrl+Z / Cmd+Z undoes the latest planner action.</p>
+      <p class="hint">Click an airport or reporting point on the map to add it, or use the list below. Nearby clicks and waypoint drops snap while Snap to AIP points is on. Click a route leg to prepare it. Drag a waypoint to move it or a blue line to shape the flown path. Ctrl+Z / Cmd+Z undoes the latest action.</p>
       <div class="waypoint-list">
         ${waypoints.length === 0 ? '<div class="empty-state">No route yet</div>' : ''}
         ${waypoints.map((waypoint, index) => this.waypointRow(waypoint.id, waypoint.name, waypoint.lat, waypoint.lon, index, waypoints.length)).join('')}
@@ -47,7 +47,7 @@ export class RoutePanel {
             <input class="waypoint-name" data-field="name" value="${this.escape(name)}" aria-label="Waypoint name" />
           </div>
           <div class="coords">${lat.toFixed(5)}° / ${lon.toFixed(5)}°</div>
-          <div class="waypoint-planning-actions">${index < count - 1 ? `<button type="button" data-action="prepare">Prepare next leg</button>` : ''}<button type="button" data-action="visit" ${count < 2 ? 'disabled title="Add a destination first"' : ''}>Airport / pattern</button></div>
+          <div class="waypoint-planning-actions">${index < count - 1 ? `<button type="button" data-action="prepare">Prepare next leg</button>` : ''}<button type="button" data-action="visit" ${count < 2 ? 'disabled title="Add a destination first"' : ''}>${this.store.isAirportWaypoint(id) ? 'Airport / pattern' : 'Waypoint settings'}</button></div>
         </div>
         <div class="waypoint-actions">
           <button class="icon-button" data-action="up" title="Move up" ${index === 0 ? 'disabled' : ''}>↑</button>

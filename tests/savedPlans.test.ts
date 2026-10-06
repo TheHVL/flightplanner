@@ -18,6 +18,7 @@ function route() {
   const shapes = new RouteShapeController(store);
   const a = store.addWaypoint({ lat: 69, lon: 18 }, 'ENDU');
   const b = store.addWaypoint({ lat: 69.6, lon: 19 }, 'ENTC');
+  store.updateWaypoint(b.id, { aipId: 'ENTC', aipEffectiveDate: '2026-09-03' });
   store.updateWaypoint(a.id, { aipId: 'airport-ENDU', aipEffectiveDate: '2026-09-03' });
   shapes.setLegShape(0, { lat: 69.3, lon: 18.1 });
   store.setPlannedAltitudeFt(a.id, b.id, 4500);

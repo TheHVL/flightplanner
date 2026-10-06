@@ -1,6 +1,8 @@
 import { normalizeManualChannels } from '../frequencies/channels';
+import type { AipAerodromeCatalog } from '../aip/aerodromes';
+import type { PublishedMapPoint } from '../aip/mapPoints';
 import type { Coordinate, RouteLeg, Waypoint } from '../types';
-import { calculateRouteLegs } from '../navigation/geodesy';
+import { calculateRouteLegs, greatCircleDistanceNm } from '../navigation/geodesy';
 
 type Listener = () => void;
 
@@ -136,6 +138,7 @@ const MANUAL_LEG_WIND_SOURCE = 'Manual per-leg wind backup';
 
 export class FlightPlanStore {
   private waypoints: Waypoint[] = [];
+  private airportCatalog: AipAerodromeCatalog | null = null;
   private navigationSettings: NavigationSettings = { ...DEFAULT_NAVIGATION_SETTINGS };
   private performanceSettings: PerformanceSettings = { ...DEFAULT_PERFORMANCE_SETTINGS };
   private weatherSettings: WeatherSettings = { ...DEFAULT_WEATHER_SETTINGS };
@@ -247,7 +250,27 @@ export class FlightPlanStore {
 
   getWaypointVerticalConstraint(waypointId: string): WaypointVerticalConstraint {
     const constraint = this.verticalWaypointConstraints.get(waypointId);
+    // Old plans may contain patterns at generic points. Retain their saved data,
+    // but only calculate them when the waypoint can be identified as an airport.
+    if (constraint?.mode === 'circuits' && !this.isAirportWaypoint(waypointId)) return { ...constraint, mode: 'auto' };
     return constraint ? { ...constraint } : { ...DEFAULT_WAYPOINT_VERTICAL_CONSTRAINT };
+  }
+
+  setAipAerodromeCatalog(catalog: AipAerodromeCatalog): void {
+    this.airportCatalog = catalog;
+    this.emit();
+  }
+
+  isAirportWaypoint(waypointId: string): boolean {
+    const point = this.waypoints.find(p => p.id === waypointId);
+    if (!point) return false;
+    if (point.aipId) return /^EN[A-Z]{2}$/.test(point.aipId) && /^\d{4}-\d{2}-\d{2}$/.test(point.aipEffectiveDate ?? '');
+    // Support older saved airport visits, while rejecting a typed ICAO code at
+    // an unrelated position. Reporting-point provenance always takes priority.
+    const constraint = this.verticalWaypointConstraints.get(waypointId);
+    const code = constraint?.icaoCode || point.name.toUpperCase();
+    const airport = this.airportCatalog?.aerodromes.find(a => a.icao === code);
+    return !!airport && airport.lat !== null && airport.lon !== null && greatCircleDistanceNm(point, { lat: airport.lat, lon: airport.lon }) <= 0.05;
   }
 
   getVerticalWaypointConstraints(): Array<{ waypointId: string } & WaypointVerticalConstraint> {
@@ -377,6 +400,7 @@ export class FlightPlanStore {
     };
 
     if (!['auto', 'airport', 'circuits', 'none'].includes(next.mode)) return;
+    if (next.mode === 'circuits' && !this.isAirportWaypoint(waypointId)) return;
     if (next.elevationFt !== null && (!Number.isFinite(next.elevationFt) || next.elevationFt < 0 || next.elevationFt > 20000)) return;
     if (!Number.isFinite(next.circuitCount) || next.circuitCount < 1 || next.circuitCount > 20) return;
     if (!Number.isFinite(next.minutesPerCircuit) || next.minutesPerCircuit < 1 || next.minutesPerCircuit > 30) return;
@@ -579,24 +603,38 @@ export class FlightPlanStore {
     return inserted ? { ...inserted } : null;
   }
 
-  updateWaypoint(id: string, patch: Partial<Omit<Waypoint, 'id'>>): void {
+  updateWaypoint(id: string, patch: Partial<Omit<Waypoint, 'id'>>, publishedPoint?: PublishedMapPoint): void {
     const existing = this.waypoints.find((waypoint) => waypoint.id === id);
     if (!existing) return;
+    if (publishedPoint) patch = { ...patch, lat: publishedPoint.lat, lon: publishedPoint.lon, name: publishedPoint.name, aipId: publishedPoint.aipId, aipEffectiveDate: publishedPoint.aipEffectiveDate };
     const changesAutomaticStatus = patch.name !== undefined && this.automaticWaypointIds.has(id);
     if (!changesAutomaticStatus && !hasPatchDifference(existing, patch)) return;
 
     this.rememberUndo();
     if (patch.name !== undefined) this.automaticWaypointIds.delete(id);
-    if (
+    const moved = (
       (patch.lat !== undefined && patch.lat !== existing.lat) ||
       (patch.lon !== undefined && patch.lon !== existing.lon)
-    ) {
+    );
+    const previousConstraint = this.verticalWaypointConstraints.get(id);
+    if (moved) {
       this.clearManualLegSettingsForWaypoint(id);
-      patch = { ...patch, aipId: undefined, aipEffectiveDate: undefined };
+      if (!publishedPoint) patch = { ...patch, aipId: undefined, aipEffectiveDate: undefined };
+      if (previousConstraint?.mode === 'airport' || previousConstraint?.mode === 'circuits') this.verticalWaypointConstraints.delete(id);
     }
     this.waypoints = this.waypoints.map((waypoint) =>
       waypoint.id === id ? { ...waypoint, ...patch } : waypoint,
     );
+    if (publishedPoint?.kind === 'airport') {
+      this.verticalWaypointConstraints.set(id, { ...DEFAULT_WAYPOINT_VERTICAL_CONSTRAINT, ...previousConstraint,
+        mode: previousConstraint?.mode === 'circuits' ? 'circuits' : 'airport', elevationFt: publishedPoint.elevationFt!, icaoCode: publishedPoint.aerodromeIcao });
+    } else if (publishedPoint) this.verticalWaypointConstraints.delete(id);
+    if (moved || publishedPoint) {
+      const elevationFt = publishedPoint?.kind === 'airport' ? publishedPoint.elevationFt! : 0;
+      const icaoCode = publishedPoint?.kind === 'airport' ? publishedPoint.aerodromeIcao : '';
+      if (id === this.waypoints[0]?.id) this.verticalProfileSettings = { ...this.verticalProfileSettings, departureElevationFt: elevationFt, departureIcaoCode: icaoCode };
+      if (id === this.waypoints.at(-1)?.id) this.verticalProfileSettings = { ...this.verticalProfileSettings, destinationElevationFt: elevationFt, destinationIcaoCode: icaoCode };
+    }
     this.weatherForecasts.clear();
     this.emit();
   }

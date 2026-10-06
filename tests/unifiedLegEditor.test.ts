@@ -9,6 +9,7 @@ import { PlanningWorkflow, planningSidebarMarkup } from '../src/components/Plann
 import { OFPTable } from '../src/components/OFPTable';
 import { RoutePanel } from '../src/components/RoutePanel';
 import { openLegEditor } from '../src/components/legEditorEvents';
+import { identifyTestAirport } from './helpers/airports';
 
 let store: FlightPlanStore, root: HTMLElement, editor: SequentialLegPanel, ofp: HTMLElement;
 const change = (node: HTMLInputElement | HTMLSelectElement, value: string) => {
@@ -21,6 +22,7 @@ beforeEach(() => {
   store.addWaypoint({ lat: 69, lon: 18 }, 'ENDU');
   store.addWaypoint({ lat: 69.2, lon: 18.5 }, 'NORA');
   store.addWaypoint({ lat: 69.5, lon: 19 }, 'ENDU');
+  store.getWaypoints().filter(p => p.name === 'ENDU').forEach(p => identifyTestAirport(store, p.id));
   root = document.createElement('aside'); root.innerHTML = planningSidebarMarkup;
   ofp = document.createElement('section'); document.body.replaceChildren(root, ofp);
   const element = root.querySelector<HTMLElement>('#sequential-leg-panel')!;

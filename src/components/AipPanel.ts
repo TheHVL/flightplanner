@@ -9,7 +9,7 @@ export class AipPanel {
   private selectedIcao = '';
   private selectedPoints: string[] = [];
   private expandedAirports = new Set<string>();
-  constructor(private readonly element: HTMLElement, private readonly store: FlightPlanStore) {
+  constructor(private readonly element: HTMLElement, private readonly store: FlightPlanStore, private readonly onCatalogLoaded?: (catalog: AipAerodromeCatalog) => void, private readonly onCatalogError?: () => void) {
     this.element.innerHTML = `<h2>Airports &amp; reporting points</h2><div data-aip-status role="status">Loading Avinor catalog…</div>
       <button type="button" data-aip-reload>Check deployed data</button>
       <label>Search airports or reporting points<input type="search" data-aip-search placeholder="ENDU, Tromsø, point name…" /></label>
@@ -22,6 +22,8 @@ export class AipPanel {
   private async load(): Promise<void> {
     try {
       this.catalog = await loadAipAerodromeCatalog(true);
+      this.store.setAipAerodromeCatalog(this.catalog);
+      this.onCatalogLoaded?.(this.catalog);
       try {
         const response = await fetch(new URL('aip-status.json', document.baseURI), { cache: 'no-store' });
         if (!response.ok) throw new Error('Refresh status unavailable');
@@ -35,6 +37,7 @@ export class AipPanel {
       this.details();
       this.planStatus();
     } catch (error) {
+      this.onCatalogError?.();
       this.element.querySelector('[data-aip-status]')!.textContent = error instanceof Error ? error.message : 'Could not load AIP data.';
     }
   }

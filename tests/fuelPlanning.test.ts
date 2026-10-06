@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { FlightPlanStore } from '../src/flightplan/FlightPlanStore';
+import { identifyTestAirport } from './helpers/airports';
 import {
   calculateFuelPlanForStore,
   DEFAULT_FUEL_PLANNING_SETTINGS,
@@ -14,6 +15,8 @@ function twoPointRoute(distanceDegrees = 1): { store: FlightPlanStore; fromId: s
   const store = new FlightPlanStore();
   const from = store.addWaypoint({ lat: 60, lon: 10 }, 'A');
   const to = store.addWaypoint({ lat: 60 + distanceDegrees, lon: 10 }, 'B');
+  identifyTestAirport(store, from.id);
+  identifyTestAirport(store, to.id, 'ENTC');
   return { store, fromId: from.id, toId: to.id };
 }
 
@@ -85,6 +88,7 @@ describe('phase-aware fuel planning', () => {
     const store = new FlightPlanStore();
     const a = store.addWaypoint({ lat: 60, lon: 10 }, 'A');
     const b = store.addWaypoint({ lat: 60.5, lon: 10 }, 'B');
+    identifyTestAirport(store, b.id);
     const c = store.addWaypoint({ lat: 61, lon: 10 }, 'C');
     store.setPlannedAltitudeFt(a.id, b.id, 4000);
     store.setPlannedAltitudeFt(b.id, c.id, 4000);

@@ -30,13 +30,15 @@ export function validateRadioCatalog(value: unknown): asserts value is RadioCata
   }
   if (d.withheldAreas !== undefined && (!Array.isArray(d.withheldAreas) || d.withheldAreas.some(a => !a || typeof a.name !== 'string' || !sourceUrl(a.sourceUrl) || !Array.isArray(a.bounds) || a.bounds.length !== 4 || a.bounds.some(n => !Number.isFinite(n)) || a.bounds[0] >= a.bounds[2] || a.bounds[1] >= a.bounds[3]))) throw new Error('Invalid ATS review area.');
 }
-export function radioFreshness(data: RadioCatalog, status: AipRefreshStatus | null, airports: AipAerodromeCatalog, now = new Date(), flightDate = ''): { usable: boolean; message: string } {
+export function radioFreshness(data: RadioCatalog, status: AipRefreshStatus | null, airports: AipAerodromeCatalog, now = new Date(), flightDate = ''): { usable: boolean; message: string; warning?: boolean } {
   if (data.effectiveDate !== airports.effectiveDate) return { usable: false, message: 'ATS and airport data use different AIP editions. Automatic channels are withheld.' };
-  if (!status || status.state !== 'success' || status.effectiveDate !== data.effectiveDate) return { usable: false, message: 'The latest ATS data refresh was not successful. Automatic channels are withheld; check the official AIP.' };
-  if (now.getTime() - Date.parse(data.checkedAt) > 48 * 3600 * 1000 || Date.parse(data.checkedAt) > now.getTime() + 5 * 60 * 1000) return { usable: false, message: 'ATS source data have not been verified within 48 hours. Automatic channels are withheld.' };
-  const check = aipFreshness({ ...airports, checkedAt: data.checkedAt, nextEffectiveDate: data.nextEffectiveDate }, status, now);
+  if (!status || status.effectiveDate !== data.effectiveDate) return { usable: false, message: 'The latest ATS data refresh could not verify this AIP edition. Automatic channels are withheld; check the official AIP.' };
+  if (!Number.isFinite(Date.parse(data.checkedAt)) || now.getTime() - Date.parse(data.checkedAt) > 48 * 3600 * 1000 || Date.parse(data.checkedAt) > now.getTime() + 5 * 60 * 1000) return { usable: false, message: 'ATS source data have not been verified within 48 hours. Automatic channels are withheld.' };
+  // A failed newer attempt does not invalidate a successful, same-edition snapshot
+  // still inside the 48-hour limit. Its own check time remains authoritative.
+  const check = aipFreshness({ ...airports, checkedAt: data.checkedAt, nextEffectiveDate: data.nextEffectiveDate }, null, now);
   if (check.warning) return { usable: false, message: `${check.message} Automatic channels are withheld.` };
   const date = flightDate.slice(0, 10) || now.toISOString().slice(0, 10);
   if (date < data.effectiveDate || data.nextEffectiveDate && date >= data.nextEffectiveDate) return { usable: false, message: 'The planned flight date is outside this AIP edition. Automatic channels are withheld.' };
-  return { usable: true, message: `${check.message} Published suggestions require ATS confirmation.` };
+  return { usable: true, warning: status.state === 'failed', message: `${status.state === 'failed' ? 'Latest ATS refresh failed. Using the last successful snapshot. ' : ''}${check.message} Published suggestions require ATS confirmation.` };
 }

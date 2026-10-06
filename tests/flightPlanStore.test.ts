@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { FlightPlanStore } from '../src/flightplan/FlightPlanStore';
+import { identifyTestAirport } from './helpers/airports';
 
 beforeEach(() => {
   vi.stubGlobal('crypto', { randomUUID: vi.fn(() => Math.random().toString(36).slice(2)) });
@@ -90,6 +91,7 @@ describe('FlightPlanStore', () => {
     const store = new FlightPlanStore();
     store.addWaypoint({ lat: 69, lon: 18 }, 'A');
     const airport = store.addWaypoint({ lat: 69.5, lon: 19 }, 'ENDU');
+    identifyTestAirport(store, airport.id);
     store.addWaypoint({ lat: 70, lon: 20 }, 'C');
 
     store.setWaypointVerticalConstraint(airport.id, {

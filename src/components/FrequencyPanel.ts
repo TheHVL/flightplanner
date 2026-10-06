@@ -56,6 +56,7 @@ export class FrequencyPanel {
       </details>
       <details class="menu-subsection" data-menu-section="suggested-channels"><summary>Suggested services along this leg</summary>
       ${selected!.note ? `<p class="frequency-note">${e(selected!.note)}</p>` : ''}
+      ${selected!.notice ? `<p class="frequency-note">${e(selected!.notice)}</p>` : ''}
       <div class="frequency-segments">${selected!.segments.map(s => `<article class="frequency-segment"><strong>~${s.startNm.toFixed(1)}–${s.endNm.toFixed(1)} NM from ${e(selected!.leg.from.name)}</strong>
         ${s.primary.map(c => this.candidate(c)).join('') || '<p>Automatic channel requires review.</p>'}
         ${s.note ? `<p class="frequency-note">${e(s.note)}</p>` : ''}
