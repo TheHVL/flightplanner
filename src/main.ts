@@ -10,7 +10,7 @@ import './savedPlans.css';
 import './planningMenus.css';
 import './frequencies.css';
 import './planningWorkflow.css';
-import { publishedMapPoints } from './aip/mapPoints';
+import { publishedMapPoints, type PublishedMapPoint } from './aip/mapPoints';
 import { PlanningWorkflow, planningSidebarMarkup } from './components/PlanningWorkflow';
 import { LEG_SELECTED, openLegEditor } from './components/legEditorEvents';
 import { FrequencyPlanner } from './frequencies/FrequencyPlanner';
@@ -181,6 +181,7 @@ warningAck.addEventListener('click', () => {
 window.setTimeout(() => warningAck.focus(), 0);
 
 const store = new FlightPlanStore();
+const moveMapWaypoint = (id: string, lat: number, lon: number, point?: PublishedMapPoint) => store.updateWaypoint(id, { lat, lon }, point);
 const frequencyPlanner = new FrequencyPlanner(store);
 const routeShapeController = new RouteShapeController(store);
 restoreWorkingRoute(store, routeShapeController);
@@ -224,7 +225,7 @@ const mapManager = new MapManager(mapElement, {
       store.appendAipWaypoints([point]);
     } else store.addWaypoint({ lat, lon });
   },
-  onWaypointMoved: (id, lat, lon, point) => store.updateWaypoint(id, { lat, lon }, point),
+  onWaypointMoved: moveMapWaypoint,
   onRouteLegShape: (legIndex, lat, lon) => routeShapeController.setLegShape(legIndex, { lat, lon }),
   onLegSelected: index => { const leg = store.getLegs()[index]; if (leg) openLegEditor({ fromId: leg.from.id, toId: leg.to.id }); },
   onWaypointSelected: id => {
@@ -565,7 +566,7 @@ const render = () => {
   routePanel.render();
   ofpTable.render();
   mapManager.renderMsaCorridor(legs);
-  mapManager.renderRoute(waypoints, legs, (id, lat, lon) => store.updateWaypoint(id, { lat, lon }));
+  mapManager.renderRoute(waypoints, legs, moveMapWaypoint);
   mapManager.setSelectedLeg(legEditor.getSelectedLeg());
   renderVerticalProfileMarkers();
   void renderGlideEnvelope();
