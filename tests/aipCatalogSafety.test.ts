@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import catalog from '../public/aip-aerodromes.json';
+import { readFileSync } from 'node:fs';
 import { aipFreshness, validateAipCatalog, type AipAerodromeCatalog } from '../src/aip/aerodromes';
 import { FlightPlanStore } from '../src/flightplan/FlightPlanStore';
-const c: AipAerodromeCatalog = catalog;
+// The deployed catalog is external JSON, not a compile-time literal. Refreshed
+// segment directions are checked by the schema validator below.
+const c: AipAerodromeCatalog = JSON.parse(readFileSync('public/aip-aerodromes.json', 'utf8'));
 describe('AIP freshness and integration', () => {
   it('validates the complete bundled snapshot and every route reference', () => {
     expect(() => validateAipCatalog(c)).not.toThrow();
