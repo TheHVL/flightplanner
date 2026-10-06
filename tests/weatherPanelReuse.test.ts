@@ -161,3 +161,17 @@ it('shows model selection, full valid date, retrieval age and a live refresh war
     expect(status().classList.contains('weather-freshness-warning')).toBe(false);
   } finally { vi.useRealTimers(); }
 });
+
+it('updates the forecast status when the user enables or disables the fetched winds', () => {
+  const { store, root, a, b } = setup();
+  store.updateWeatherSettings({ useForecastWinds: false });
+  store.setRouteWeatherForecasts([{ ...sample, fromId:a.id, toId:b.id }]);
+  const status = () => root.querySelector('.weather-status')!.textContent;
+  expect(status()).toContain('Enable');
+  root.querySelector<HTMLInputElement>('[data-weather-use]')!.click();
+  expect(status()).toContain('Forecast winds are active');
+  expect(status()).not.toContain('Enable');
+  root.querySelector<HTMLInputElement>('[data-weather-use]')!.click();
+  expect(status()).toContain('Enable');
+  expect(status()).not.toContain('Forecast winds are active');
+});
