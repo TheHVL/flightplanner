@@ -91,13 +91,15 @@ export class SequentialLegPanel {
     if (disclosure) disclosure.open = true;
     if (this.fromId && !this.save()) return;
     this.select(index);
-    this.element.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });
+    let target: HTMLElement | null;
     if (request.focus === 'waypoint') {
       this.element.querySelector<HTMLDetailsElement>('[data-leg-visit]')!.open = true;
       window.dispatchEvent(new CustomEvent('flightplanner-select-waypoint-visit', { detail: { waypointId: request.waypointId ?? request.toId } }));
-      this.element.querySelector<HTMLSelectElement>('[data-vertical-waypoint-mode]')?.focus({ preventScroll: true });
-    } else if (request.focus === 'frequency') this.element.querySelector<HTMLSelectElement>('[data-frequency-choice]')?.focus({ preventScroll: true });
-    else this.fields[request.focus === 'msa' ? 1 : 0]?.focus({ preventScroll: true });
+      target = this.element.querySelector<HTMLElement>('[data-waypoint-visit] select, [data-waypoint-visit] input');
+    } else if (request.focus === 'frequency') target = this.element.querySelector('[data-frequency-choice]');
+    else target = this.fields[request.focus === 'msa' ? 1 : 0] ?? null;
+    (target ?? this.element).scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });
+    target?.focus({ preventScroll: true });
   }
   private status(message: string): void { this.element.querySelector('[data-leg-status]')!.textContent = message; }
   private focusField(index: number): void { this.fields[index].focus(); this.fields[index].select(); }

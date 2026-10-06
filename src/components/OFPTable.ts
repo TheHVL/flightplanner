@@ -145,7 +145,7 @@ export class OFPTable {
         <span><i class="dot pending-dot"></i> In-flight entries</span>
         <span>Leg DIST and total route distance round up to the next whole NM. Accumulated distance remains shown to nearest 0.5 NM · headings/WCA shown to whole degrees</span>
         <span>TAS shows cruise TAS when a cruise portion exists; an all-climb/descent row shows that phase TAS. GS is whole-leg effective GS from flown distance / flight time.</span>
-        <span>Select one OFP channel per leg in Route frequencies. The OFP shows only your selection; suggestions and alternatives remain in the sidebar.</span>
+        <span>Select one OFP channel per leg in Prepare legs. The OFP shows only your selection; suggestions and alternatives remain in the sidebar.</span>
         <span>MSA is entered manually. Use the ±1 NM map corridor to inspect terrain/obstacles.</span>
         <span class="msa-legend-warning">PL below entered MSA is highlighted.</span>
         <span>Fuel INT/ACC uses modeled cruise, climb and descent phases; pattern fuel appears on its own row where the required fuel-flow inputs are available.</span>
