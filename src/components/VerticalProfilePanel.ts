@@ -141,15 +141,17 @@ export class VerticalProfilePanel {
         <select data-climb-performance-mode aria-label="Climb performance model">
           <option value="poh-normal-90" ${fuelSettings.climbPerformanceMode === 'poh-normal-90' ? 'selected' : ''}>POH normal · 90 KIAS</option>
           <option value="poh-max-rate" ${fuelSettings.climbPerformanceMode === 'poh-max-rate' ? 'selected' : ''}>POH maximum rate</option>
-          <option value="manual" ${fuelSettings.climbPerformanceMode === 'manual' ? 'selected' : ''}>Manual rate / TAS</option>
+          <option value="manual" ${fuelSettings.climbPerformanceMode === 'manual' ? 'selected' : ''}>Manual rate / IAS or TAS</option>
         </select>
       </label>
       <div class="vertical-input-grid">
         ${manualClimb ? this.numberField('Climb rate', 'climb-rate', settings.climbRateFpm, 'ft/min', 100, 5000, 50) : ''}
         ${this.numberField('Descent rate', 'descent-rate', settings.descentRateFpm, 'ft/min', 100, 5000, 50)}
-        ${manualClimb ? this.numberField('Manual climb TAS', 'climb-gs', settings.climbGroundSpeedKt, 'kt', 20, 300, 1) : ''}
+        ${manualClimb ? `<label class="nav-field"><span>Climb speed type</span><select data-climb-speed-mode><option value="tas" ${settings.climbSpeedMode !== 'ias' ? 'selected' : ''}>TAS</option><option value="ias" ${settings.climbSpeedMode === 'ias' ? 'selected' : ''}>IAS (approximate TAS conversion)</option></select></label>` : ''}
+        ${manualClimb ? this.numberField(settings.climbSpeedMode === 'ias' ? 'Climb IAS' : 'Manual climb TAS', 'climb-gs', settings.climbGroundSpeedKt, 'kt', 20, 300, 1) : ''}
         ${manualClimb ? this.nullableNumberField('Manual climb FF', 'climb-ff', fuelSettings.climbFuelFlowGph, 'GPH', 0, 40, 0.1) : ''}
-        ${this.numberField('Descent TAS', 'descent-gs', settings.descentGroundSpeedKt, 'kt', 20, 300, 1)}
+        <label class="nav-field"><span>Descent speed</span><select data-descent-speed-mode><option value="manual" ${settings.descentSpeedMode !== 'cruise' ? 'selected' : ''}>Entered TAS</option><option value="cruise" ${settings.descentSpeedMode === 'cruise' ? 'selected' : ''}>Use cruise TAS</option></select></label>
+        ${settings.descentSpeedMode === 'cruise' ? '<p class="menu-note">Descent uses cruise TAS at the inbound leg level, power and temperature, with active wind.</p>' : this.numberField('Descent TAS', 'descent-gs', settings.descentGroundSpeedKt, 'kt', 20, 300, 1)}
       </div>
       <details class="menu-subsection" data-menu-section="airport-elevations" open><summary>Departure &amp; arrival elevations</summary>
       <div class="vertical-input-grid">
@@ -167,7 +169,7 @@ export class VerticalProfilePanel {
       ${resultHtml}
       <details class="menu-help" data-menu-section="profile-help"><summary>Performance source &amp; profile rules</summary>
       ${manualClimb
-        ? '<div class="vertical-poh-note"><strong>Manual climb:</strong> climb time uses the selected rate. The entered climb TAS is combined with the active leg wind to place TOC. Enter Manual climb FF below to include climb fuel. The same value is also available in Cruise performance &amp; fuel.</div>'
+        ? '<div class="vertical-poh-note"><strong>Manual climb:</strong> climb time uses the selected rate. IAS mode estimates TAS using density at the climb midpoint, treating IAS as EAS without instrument/position correction. Entered TAS mode uses the supplied TAS. Phase TAS is combined with the active leg wind to place TOC. Enter Manual climb FF below to include climb fuel. The same value is also available in Cruise performance &amp; fuel.</div>'
         : `<div class="vertical-poh-note"><strong>POH Figure 5-8:</strong> 3100 lb, flaps up, 2400 RPM, full throttle, mixture at Maximum Power Fuel Flow placard, cowl flaps OPEN. The POH table gives zero-wind air distance, time and fuel. Flightplanner derives average climb TAS from air distance/time, then applies the active per-leg wind to place TOC on the ground track. Time/fuel/distance are increased 10% for each 10°C above ISA, using route-weather OAT where available and manual OAT as fallback. ${fuelSettings.climbPerformanceMode === 'poh-normal-90' ? 'Normal climb is published through 10,000 ft.' : 'Maximum-rate climb is published through 14,000 ft.'}</div>`}
       <div class="nav-help vertical-help"><strong>How it works:</strong> Auto follows the PL before and after a waypoint. A higher outbound PL creates a TOC after the waypoint. If the previous climb is still in progress, it continues into this leg before the next altitude increment; the climb is never counted twice. A lower outbound PL creates a TOD before the waypoint, reaching the lower level before that leg begins. POH climb time/fuel stay tied to Figure 5-8 while wind changes the ground position of TOC. Descent time uses the selected rate, and descent TAS plus active wind sets the TOD ground distance. Airport/T&amp;G descends to field elevation and climbs again. Pattern does the same and adds a separate OFP row for the selected time and fuel. Off suppresses automatic vertical events at that waypoint. Until QNH conversion is added, entered elevations and PL are used as pressure-altitude proxies for POH climb calculations.</div></details>
     `);
@@ -367,6 +369,8 @@ export class VerticalProfilePanel {
       return;
     }
 
+    if (target.hasAttribute('data-climb-speed-mode')) { this.store.updateVerticalProfileSettings({ climbSpeedMode: target.value as 'ias' | 'tas' }); return; }
+    if (target.hasAttribute('data-descent-speed-mode')) { this.store.updateVerticalProfileSettings({ descentSpeedMode: target.value as 'manual' | 'cruise' }); return; }
     const field = target.dataset.verticalField;
     if (!field) return;
 

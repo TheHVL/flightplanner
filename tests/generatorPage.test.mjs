@@ -100,3 +100,27 @@ it('locates a warning on the map without changing the manual plan and blocks an 
   expect(root.textContent).toContain('Published restriction coverage unavailable');
   expect(root.querySelector('[data-generator-transfer]').disabled).toBe(true);
 });
+it('applies the school preset without changing manual settings and withholds fuel until climb FF is entered', async () => {
+  const root = page(); await waitReady(root);
+  const manual = new FlightPlanStore(), shapes = new RouteShapeController(manual);
+  manual.addWaypoint({lat: 69, lon: 18}, 'Manual'); saveWorkingRoute(manual, shapes);
+  const before = localStorage.getItem('flightplanner-working-route-v1');
+  root.querySelector('[data-generator-school-preset]').click();
+  expect(root.querySelector('[name="climbModel"]').value).toBe('school');
+  expect(root.querySelector('[name="climbRateFpm"]').value).toBe('500');
+  expect(root.querySelector('[name="descentRateFpm"]').value).toBe('700');
+  expect(root.querySelector('[name="climbFuelFlowGph"]').value).toBe('');
+  submit(root);
+  await vi.waitFor(() => expect(root.querySelector('[data-generator-status]').textContent).toContain('No draft meets'), {timeout:10000});
+  expect(root.textContent).toContain('Enter climb FF');
+  expect(root.querySelector('[data-generator-transfer]').disabled).toBe(true);
+  const draft = map.calls.at(-1).candidates[0];
+  expect(draft.draft.verticalProfileSettings).toMatchObject({climbRateFpm:500, descentRateFpm:700, climbSpeedMode:'ias', descentSpeedMode:'cruise'});
+  expect(draft.fuelGal).toBeNull();
+  const input = root.querySelector('[name="climbFuelFlowGph"]'); input.value = '14'; input.dispatchEvent(new Event('input',{bubbles:true}));
+  submit(root);
+  await vi.waitFor(() => expect(root.querySelector('[data-generator-run]').textContent).toBe('Generate route drafts'), {timeout:10000});
+  expect(map.calls.at(-1).candidates.some(c => c.fuelGal !== null)).toBe(true);
+  expect(localStorage.getItem('flightplanner-working-route-v1')).toBe(before);
+  expect(localStorage.getItem('flightplanner-fuel-settings-v1')).toBeNull();
+});

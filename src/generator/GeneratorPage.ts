@@ -1,6 +1,7 @@
 import { loadAipAerodromeCatalog, type AipAerodromeCatalog, type AipRefreshStatus } from '../aip/aerodromes';
 import { radioFreshness, validateRadioCatalog, type RadioCatalog } from '../frequencies/catalog';
-import { DEFAULT_FUEL_PLANNING_SETTINGS } from '../fuel/fuelPlanning';
+import { generatorFuelSettings } from './aircraft';
+import { SCHOOL_C182T, SCHOOL_PRESET_DESCRIPTION } from '../performance/schoolPreset';
 import { buildVfrRoutingInputs } from '../routing/vfrInputs';
 import { escapeHtml as e } from '../utils/html';
 import { generateRouteCandidates, INITIAL_GENERATOR_AIRPORTS, type AirportVisit, type GeneratorRequest, type RouteCandidate } from './candidates';
@@ -41,12 +42,17 @@ export class GeneratorPage {
           <label>Target duration (min)<input name="lessonMinutes" type="number" min="20" max="240" step="5" value="90" required></label>
           <label>Preferred altitude (ft)<input name="altitudeFt" type="number" min="1000" max="10000" step="100" value="3000" required></label></div>
         <p class="hint">Duration includes flying and your selected patterns. Ground time is excluded. It is a target; the generator does not add holding or extra patterns to fill time.</p>
-        <details class="menu-subsection" data-generator-aircraft><summary>C182T planning assumptions</summary><p class="hint">Still air, ISA at preferred altitude, POH normal climb at 90 KIAS and cruise Figure 5-9. These estimates need fresh weather and a final aircraft check.</p>
-          <div class="generator-fields"><label>Cruise RPM<input name="rpm" type="number" min="2000" max="2400" step="100" value="2200"></label>
+        <details class="menu-subsection" data-generator-aircraft><summary>C182T planning assumptions</summary><p class="hint">Still air, ISA at preferred altitude, the selected climb model and cruise Figure 5-9. These estimates need fresh weather and a final aircraft check.</p>
+          <p class="hint">${SCHOOL_PRESET_DESCRIPTION}</p><button type="button" class="ghost-button" data-generator-school-preset>Apply school C182T preset</button>
+          <div class="generator-fields"><label>Climb model<select name="climbModel"><option value="poh">POH full throttle · 90 KIAS</option><option value="school">School · 90 KIAS / 2400 RPM / 23 inHg</option></select></label>
+            <label>School climb rate (ft/min)<input name="climbRateFpm" type="number" min="100" max="5000" step="50" value="500"></label>
+            <label>School descent rate (ft/min)<input name="descentRateFpm" type="number" min="100" max="5000" step="50" value="700"></label>
+            <label>School climb fuel flow (US gal/h)<input name="climbFuelFlowGph" type="number" min="0.1" max="40" step="0.1" placeholder="Needs confirmation"></label>
+            <label>Cruise RPM<input name="rpm" type="number" min="2000" max="2400" step="100" value="2200"></label>
             <label>Manifold pressure (inHg)<input name="manifoldPressureInHg" type="number" min="15" max="27" step="1" value="20"></label>
             <label>Descent fuel flow (US gal/h)<input name="descentFuelFlowGph" type="number" min="0.1" max="30" step="0.1" value="10"></label>
             <label>Pattern fuel flow (US gal/h)<input name="patternFuelFlowGph" type="number" min="0.1" max="30" step="0.1" value="12"></label></div>
-          <p class="hint">Descent and pattern fuel flows are editable planning assumptions.</p></details>
+          <p class="hint">The school model uses cruise TAS in descent, 2 US gal ground allowance and 12 US gal reserve. Trip estimates exclude reserve, contingency, alternate and extra fuel. Enter school climb fuel flow to complete trip estimates and enable transfer when route checks pass. Rates and flows remain editable.</p></details>
         <button class="generator-primary" type="submit" data-generator-run>Generate route drafts</button>
       </form><p class="generator-status" data-generator-status role="status" aria-live="polite">Loading published airport data…</p><p class="hint" data-generator-edition></p></section>
       <section class="generator-preview"><div class="panel generator-map-heading"><h2>3. Compare drafts</h2><p class="hint">Select a draft below to preview it. Edit the chosen route in Manual Planner after transfer.</p></div>
@@ -97,10 +103,19 @@ export class GeneratorPage {
     const value = (name: string) => (this.form.elements.namedItem(name) as HTMLInputElement | HTMLSelectElement).value;
     return { departure: value('departure'), destination: value('destination'), visits: structuredClone(this.visits), flightDate: value('flightDate'),
       lessonMinutes: Number(value('lessonMinutes')), altitudeFt: Number(value('altitudeFt')), rpm: Number(value('rpm')),
-      manifoldPressureInHg: Number(value('manifoldPressureInHg')), descentFuelFlowGph: Number(value('descentFuelFlowGph')), patternFuelFlowGph: Number(value('patternFuelFlowGph')) };
+      manifoldPressureInHg: Number(value('manifoldPressureInHg')), descentFuelFlowGph: Number(value('descentFuelFlowGph')), patternFuelFlowGph: Number(value('patternFuelFlowGph')), schoolPreset: value('climbModel') === 'school',
+      climbRateFpm: Number(value('climbRateFpm')), descentRateFpm: Number(value('descentRateFpm')), climbFuelFlowGph: value('climbFuelFlowGph').trim() === '' ? null : Number(value('climbFuelFlowGph')) };
   }
   private click(event: Event): void {
     const button = (event.target as HTMLElement).closest<HTMLButtonElement>('button'); if (!button) return;
+    if (button.hasAttribute('data-generator-school-preset')) {
+      const values = { climbModel: 'school', rpm: SCHOOL_C182T.cruiseRpm, manifoldPressureInHg: SCHOOL_C182T.cruiseMp,
+        climbRateFpm: SCHOOL_C182T.climbRateFpm, descentRateFpm: SCHOOL_C182T.descentRateFpm,
+        descentFuelFlowGph: SCHOOL_C182T.descentFuelFlowGph, patternFuelFlowGph: SCHOOL_C182T.patternFuelFlowGph, climbFuelFlowGph: '' };
+      for (const [name, value] of Object.entries(values)) (this.form.elements.namedItem(name) as HTMLInputElement | HTMLSelectElement).value = String(value);
+      this.invalidate('School C182T preset applied. Enter the climb fuel flow in planning assumptions to complete trip fuel.');
+      return;
+    }
     if (button.hasAttribute('data-generator-add')) {
       this.readVisits(); if (this.visits.length >= 4) return;
       this.visits.push({ icao: this.visits.at(-1)?.icao === 'ENTC' ? 'ENSR' : 'ENTC', activity: 'touch-and-go', count: 1, minutesEach: 5 });
@@ -243,7 +258,7 @@ export class GeneratorPage {
     try {
       if (!this.catalog || !buildVfrRoutingInputs(this.catalog, this.refresh, this.request.flightDate).usable || Date.now() - Date.parse(review.terrain.fetchedAt) > 30 * 60000) throw new Error('These checks have expired. Generate fresh drafts before transferring.');
       if (!hasRestrictionCoverage(this.radioCatalog) || !radioFreshness(this.radioCatalog!, this.radioStatus, this.catalog, new Date(), this.request.flightDate).usable) throw new Error('Published airspace checks have expired. Generate fresh drafts before transferring.');
-      const token = stageGeneratedRoute(candidate.draft, sessionStorage, Date.now(), { ...DEFAULT_FUEL_PLANNING_SETTINGS, descentFuelFlowGph: this.request.descentFuelFlowGph, circuitFuelFlowGph: this.request.patternFuelFlowGph });
+      const token = stageGeneratedRoute(candidate.draft, sessionStorage, Date.now(), generatorFuelSettings(this.request));
       const target = new URL('./', document.baseURI); target.searchParams.set('generatedRoute', token); location.assign(target.href);
     } catch (error) { this.status(error instanceof Error ? error.message : 'Transfer failed. Your manual plan was kept.'); }
   }

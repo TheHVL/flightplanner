@@ -1,12 +1,14 @@
 import type { AipAerodrome, AipAerodromeCatalog, AipRefreshStatus } from '../aip/aerodromes';
 import { FlightPlanStore, type FlightPlanWorkingDraftState } from '../flightplan/FlightPlanStore';
-import { calculateFuelPlanForStore, DEFAULT_FUEL_PLANNING_SETTINGS } from '../fuel/fuelPlanning';
+import { calculateFuelPlanForStore } from '../fuel/fuelPlanning';
 import { calculateRouteLegs, greatCircleDistanceNm } from '../navigation/geodesy';
 import { buildVfrRoutingInputs, type VfrRoutingEdge } from '../routing/vfrInputs';
 import type { Coordinate, RouteLeg } from '../types';
 import { northernAirports } from '../routing/northernAirports';
 import { fetchRouteTerrainRaster, projectTerrainPoint, rasterCorridorMaximumM, type TerrainRaster } from '../routing/terrainRaster';
 import { TerrainRouter } from '../routing/terrainRouter';
+import { applySchoolAircraftSettings } from '../performance/schoolPreset';
+import { generatorFuelSettings } from './aircraft';
 import { candidateAltitudeModel } from './model';
 import { coordinateAtRouteDistance } from '../navigation/geodesy';
 import type { RadioCatalog } from '../frequencies/catalog';
@@ -18,6 +20,7 @@ export interface GeneratorRequest {
   departure: string; destination: string; visits: AirportVisit[];
   flightDate: string; lessonMinutes: number; altitudeFt: number;
   rpm: number; manifoldPressureInHg: number; descentFuelFlowGph: number; patternFuelFlowGph: number;
+  schoolPreset?: boolean; climbRateFpm?: number; descentRateFpm?: number; climbFuelFlowGph?: number | null;
 }
 export interface DraftPoint extends Coordinate { name: string; aipId: string; elevationFt?: number; }
 export interface RouteCandidate {
@@ -42,6 +45,7 @@ export function validateGeneratorRequest(request: GeneratorRequest, catalog?: Ai
   if (!/^\d{4}-\d{2}-\d{2}$/.test(request.flightDate) || !Number.isFinite(Date.parse(request.flightDate))) throw new Error('Choose a flight date.');
   const inRange = (value: number, min: number, max: number) => Number.isFinite(value) && value >= min && value <= max;
   if (!inRange(request.lessonMinutes, 20, 240) || !inRange(request.altitudeFt, 1000, 10000) || !Number.isInteger(request.altitudeFt) || request.altitudeFt % 100 !== 0) throw new Error('Use a 20–240 minute lesson and a preferred altitude of 1000–10000 ft in 100 ft steps.');
+  if (request.schoolPreset && (!inRange(request.climbRateFpm ?? NaN, 100, 5000) || !inRange(request.descentRateFpm ?? NaN, 100, 5000) || (request.climbFuelFlowGph != null && !inRange(request.climbFuelFlowGph, 0.1, 40)))) throw new Error('Check the school climb/descent rates and climb fuel flow.');
   if (!inRange(request.rpm, 2000, 2400) || request.rpm % 100 !== 0 || !inRange(request.manifoldPressureInHg, 15, 27) || !inRange(request.descentFuelFlowGph, 0.1, 30) || !inRange(request.patternFuelFlowGph, 0.1, 30)) throw new Error('Check the aircraft planning assumptions.');
   if (request.visits.some(v => !['touch-and-go', 'patterns', 'land'].includes(v.activity) || !Number.isInteger(v.count) || !inRange(v.count, 1, 20) || !inRange(v.minutesEach, 1, 30))) throw new Error('Check the airport activities and pattern duration.');
 }
@@ -175,6 +179,10 @@ function checkRasterProfile(candidate: RouteCandidate, request: GeneratorRequest
 
 function createCandidate(path: DraftPoint[], request: GeneratorRequest, catalog: AipAerodromeCatalog, edges: VfrRoutingEdge[], id: string, raster: TerrainRaster): RouteCandidate {
   const store = new FlightPlanStore();
+  if (request.schoolPreset) {
+    applySchoolAircraftSettings(store);
+    store.updateVerticalProfileSettings({ climbRateFpm: request.climbRateFpm, descentRateFpm: request.descentRateFpm });
+  }
   let turnNumber = 0;
   store.appendAipWaypoints(path.map(p => ({ ...p, name: p.aipId.startsWith('terrain:') ? `Terrain turn ${++turnNumber}` : p.name, aipEffectiveDate: catalog.effectiveDate })));
   // Geographic turns are editable custom waypoints, never published AIP points.
@@ -216,13 +224,16 @@ function createCandidate(path: DraftPoint[], request: GeneratorRequest, catalog:
   // until the airport. Fit successive approach levels to the descent distance
   // available on each leg. Still-air assumptions match the shared profile model.
   const vertical = store.getVerticalProfileSettings();
-  const descentFtPerNm = vertical.descentRateFpm * 60 / vertical.descentGroundSpeedKt;
+  const cruiseSpeeds = vertical.legCruiseTasKt;
   for (let end = 1; end < path.length; end++) {
     if (path[end].elevationFt === undefined) continue;
     let nextAltitude = path[end].elevationFt!;
     for (let index = end - 1; index >= 0; index--) {
       const leg = legs[index];
       const current = store.getPlannedAltitudeFt(leg.from.id, leg.to.id)!;
+      const descentTas = vertical.descentSpeedMode === 'cruise' ? cruiseSpeeds?.[index] : vertical.descentGroundSpeedKt;
+      if (!descentTas || !Number.isFinite(descentTas)) continue;
+      const descentFtPerNm = vertical.descentRateFpm * 60 / descentTas;
       const reachable = Math.floor((nextAltitude + leg.distanceNm * descentFtPerNm) / 100) * 100;
       const altitude = Math.min(current, Math.max(path[end].elevationFt!, reachable));
       store.setPlannedAltitudeFt(leg.from.id, leg.to.id, altitude);
@@ -230,8 +241,8 @@ function createCandidate(path: DraftPoint[], request: GeneratorRequest, catalog:
       if (path[index].elevationFt !== undefined) break;
     }
   }
-  notes.add('Approach draft levels may be lower than the preferred altitude to allow the modeled 500 ft/min descent at 120 KTAS. Check them against chart procedures and terrain.');
-  const fuel = calculateFuelPlanForStore(store, { ...DEFAULT_FUEL_PLANNING_SETTINGS, descentFuelFlowGph: request.descentFuelFlowGph, circuitFuelFlowGph: request.patternFuelFlowGph });
+  notes.add(`Approach draft levels may be lower than the preferred altitude to allow the modeled ${vertical.descentRateFpm} ft/min descent ${vertical.descentSpeedMode === 'cruise' ? 'at cruise TAS' : `at ${vertical.descentGroundSpeedKt} KTAS`}. Check them against chart procedures and terrain.`);
+  const fuel = calculateFuelPlanForStore(store, generatorFuelSettings(request));
   const issues: string[] = [];
   const profileWarnings = fuel.verticalProfile ? profileRouteIssues(fuel.verticalProfile, legs) : [];
   if (!fuel.verticalProfile || fuel.verticalProfile.profilesOverlap || fuel.verticalProfile.climbPerformanceIncomplete) issues.push('Climb/descent profile needs correction.');

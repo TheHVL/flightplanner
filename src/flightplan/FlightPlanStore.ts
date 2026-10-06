@@ -1,3 +1,4 @@
+import { calculateCruisePerformance } from '../performance/cruisePerformance';
 import { normalizeManualChannels } from '../frequencies/channels';
 import type { AipAerodromeCatalog } from '../aip/aerodromes';
 import type { PublishedMapPoint } from '../aip/mapPoints';
@@ -48,6 +49,10 @@ export interface VerticalProfileSettings {
   climbGroundSpeedKt: number;
   /** Legacy field name. The UI now treats this as descent TAS. */
   descentGroundSpeedKt: number;
+  climbSpeedMode?: 'tas' | 'ias';
+  descentSpeedMode?: 'manual' | 'cruise';
+  /** Derived cruise TAS for the selected power, each leg level and temperature. */
+  legCruiseTasKt?: Array<number | null>;
   /** Derived on read so all vertical-profile consumers use the same active per-leg winds. */
   legWinds?: VerticalLegWind[];
   /** Derived on read from route weather where available, otherwise the Phase 4 OAT fallback. */
@@ -188,7 +193,14 @@ export class FlightPlanStore {
     const legOatC = legs.map((leg) =>
       this.getLegWeatherForecast(leg.from.id, leg.to.id)?.temperatureC ?? this.performanceSettings.oatC,
     );
-    return { ...this.verticalProfileSettings, legWinds, legOatC };
+    const legCruiseTasKt = legs.map((leg, index) => {
+      if (!this.performanceSettings.usePohPerformance) return this.navigationSettings.tasKt;
+      try { return calculateCruisePerformance({ ...this.performanceSettings,
+        pressureAltitudeFt: this.getPlannedAltitudeFt(leg.from.id, leg.to.id) ?? this.performanceSettings.pressureAltitudeFt,
+        oatC: legOatC[index],
+      }).ktas; } catch { return null; }
+    });
+    return { ...this.verticalProfileSettings, legWinds, legOatC, legCruiseTasKt };
   }
 
   exportWorkingDraftState(): FlightPlanWorkingDraftState {
@@ -363,7 +375,7 @@ export class FlightPlanStore {
   }
 
   updateVerticalProfileSettings(patch: Partial<VerticalProfileSettings>): void {
-    const { legWinds: _legWinds, legOatC: _legOatC, ...editablePatch } = patch;
+    const { legWinds: _legWinds, legOatC: _legOatC, legCruiseTasKt: _legCruiseTasKt, ...editablePatch } = patch;
     const next: VerticalProfileSettings = {
       ...this.verticalProfileSettings,
       ...editablePatch,
@@ -384,6 +396,8 @@ export class FlightPlanStore {
     ) {
       return;
     }
+    if (next.climbSpeedMode !== undefined && !['tas', 'ias'].includes(next.climbSpeedMode)) return;
+    if (next.descentSpeedMode !== undefined && !['manual', 'cruise'].includes(next.descentSpeedMode)) return;
     if (shallowEqual(this.verticalProfileSettings, next)) return;
     this.rememberUndo();
     this.verticalProfileSettings = next;
@@ -944,7 +958,9 @@ function isVerticalProfileSettings(value: unknown): value is VerticalProfileSett
     finiteInRange(value.climbRateFpm, 1, 5000) &&
     finiteInRange(value.descentRateFpm, 1, 5000) &&
     finiteInRange(value.climbGroundSpeedKt, 1, 300) &&
-    finiteInRange(value.descentGroundSpeedKt, 1, 300);
+    finiteInRange(value.descentGroundSpeedKt, 1, 300) &&
+    (value.climbSpeedMode === undefined || value.climbSpeedMode === 'tas' || value.climbSpeedMode === 'ias') &&
+    (value.descentSpeedMode === undefined || value.descentSpeedMode === 'manual' || value.descentSpeedMode === 'cruise');
 }
 
 function validCoordinate(lat: unknown, lon: unknown): boolean {

@@ -8,6 +8,8 @@ Browser-based VFR flight planning for Norwegian flight training, with the Cessna
 
 ## Current capabilities
 
+- Apply the user-supplied school C182T preset from Aircraft & defaults or the separate Route Generator: 2200 RPM / 20 inHg cruise; manual 90 KIAS climb at 500 ft/min (2400 RPM / 23 inHg reference); descent at cruise TAS, 700 ft/min and 10 US gal/h (about 18 inHg reference); pattern 12 US gal/h; ground allowance 2 US gal; reserve 12 US gal. Climb fuel flow still needs confirmation and must be entered to complete fuel. Contingency is entered per flight, with no automatic policy assumed. Existing plans are unchanged until the preset is applied.
+
 - Click the map to append a waypoint and drag markers to move them.
 - Drag a route line between existing waypoints to shape the flown path without creating another OFP waypoint. The shaped path changes flown distance, time and fuel, while TT/MT/MH remain based on the direct waypoint-to-waypoint course.
 - Reorder, rename and delete route waypoints.
