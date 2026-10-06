@@ -59,5 +59,13 @@ it('mounts the complete workflow and connects map requests to the shared editor'
   map.callbacks!.onMapClick(airport.lat, airport.lon, airport);
   map.callbacks!.onMapClick(airport.lat, airport.lon, airport);
   expect(document.querySelector('[data-workflow-summary="route"]')!.textContent).toContain('4 waypoints');
+  await vi.waitFor(() => expect(document.querySelector('[data-frequency-refresh]')!.hasAttribute('disabled')).toBe(false));
+  const planName = document.querySelector<HTMLInputElement>('#plan-name')!;
+  planName.value = 'Workflow reuse';
+  document.querySelector<HTMLButtonElement>('[data-plan-action="save"]')!.click();
+  const callsBefore = vi.mocked(fetch).mock.calls.filter(([input])=>String(input).includes('aip-frequencies.json')).length;
+  document.querySelector<HTMLButtonElement>('[data-plan-action="load"]')!.click();
+  await vi.waitFor(() => expect(vi.mocked(fetch).mock.calls.filter(([input])=>String(input).includes('aip-frequencies.json')).length).toBe(callsBefore+1));
+  expect(document.querySelector('#weather-panel')!.textContent).toContain('Check the flight date above');
   vi.unstubAllGlobals();
 });

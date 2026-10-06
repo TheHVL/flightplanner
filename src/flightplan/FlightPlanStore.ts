@@ -355,6 +355,9 @@ export class FlightPlanStore {
   updateWeatherSettings(patch: Partial<WeatherSettings>): void {
     if (!hasPatchDifference(this.weatherSettings, patch)) return;
     this.rememberUndo();
+    if (patch.departureTimeUtc !== undefined && patch.departureTimeUtc !== this.weatherSettings.departureTimeUtc) {
+      this.weatherForecasts.clear();
+    }
     this.weatherSettings = { ...this.weatherSettings, ...patch };
     this.emit();
   }
@@ -447,7 +450,8 @@ export class FlightPlanStore {
       this.rememberUndo();
       this.plannedAltitudesFt.set(key, rounded);
     }
-    this.weatherForecasts.delete(key);
+    // A new level also changes the estimated arrival time on subsequent legs.
+    this.weatherForecasts.clear();
     this.emit();
   }
 

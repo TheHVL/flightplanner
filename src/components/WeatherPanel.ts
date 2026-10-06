@@ -10,6 +10,7 @@ import { fetchForecastSample } from '../weather/openMeteo';
 export class WeatherPanel {
   private loading = false;
   private requestVersion = 0;
+  private hadForecasts = false;
   private statusMessage = 'Set a UTC departure time, then fetch winds and temperature along the route.';
 
   constructor(
@@ -24,6 +25,10 @@ export class WeatherPanel {
   render(): void {
     const settings = this.store.getWeatherSettings();
     const forecasts = this.store.getWeatherForecasts();
+    if (!this.loading && this.hadForecasts && forecasts.length === 0) {
+      this.statusMessage = 'Route or flight settings changed. Fetch fresh winds. Manual leg wind backups were kept.';
+    }
+    this.hadForecasts = forecasts.length > 0;
     const manualWinds = this.store.getManualLegWinds();
     const legs = this.store.getLegs();
     const hasPerLegWindSource = forecasts.length > 0 || manualWinds.length > 0;
