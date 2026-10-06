@@ -69,7 +69,7 @@ const AVINOR_ICAO_EXPORT = `${AVINOR_ICAO_SERVICE}/export`;
 const AVINOR_ICAO_LAYERS = `${AVINOR_ICAO_SERVICE}/layers`;
 const VERTICAL_MARKER_HALF_WIDTH_NM = 0.22;
 
-class AvinorIcaoLayer extends L.GridLayer {
+export class AvinorIcaoLayer extends L.GridLayer {
   private detailMode: ChartDetailMode = 'auto';
 
   constructor(options?: GridLayerOptions) {

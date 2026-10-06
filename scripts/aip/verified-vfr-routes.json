@@ -176,5 +176,22 @@
         "chartAltitudeFt": 2000
       }
     ]
+  },
+  {
+    "id": "ENDU:10",
+    "aerodromeIcao": "ENDU",
+    "name": "Northern sector: Nora to Rossvoll",
+    "pointNames": [
+      "NORA",
+      "ROSSVOLL"
+    ],
+    "chartSha256": "f93dd046804a5e00cf2b8a5baa76d5e5a4083a077fa6ff2429e2e88930e9b966",
+    "remarks": "NORA–ROSSVOLL MAX 2500 ft. Unless otherwise cleared, VFR arrivals enter CTR inbound at 2000 ft; departures climb and maintain 2500 ft until leaving CTR. Reporting-point sequence only: chart bends, airport join, holding and pattern are not included. ATC clearance and published restrictions apply.",
+    "segments": [
+      {
+        "maxAltitudeFt": 2500,
+        "direction": "both"
+      }
+    ]
   }
 ]

@@ -250,3 +250,8 @@ td:first-child, td:nth-child(2) { text-align: left; }
 @media (max-width: 480px) {
   .nav-input-grid { grid-template-columns: 1fr; }
 }
+.planner-page-nav { display: flex; gap: 8px; flex-wrap: wrap; }
+.planner-page-nav a { color: #38536c; text-decoration: none; border-radius: 9px; padding: 9px 13px; font-size: 14px; font-weight: 600; }
+.planner-page-nav a[aria-current="page"] { color: #1d4ed8; background: #edf4ff; }
+.planner-page-nav a:hover { background: #e2ebf6; }
+.generator-import-status { margin: 12px 24px; padding: 13px 16px; background: #edf4ff; border: 1px solid #c7d5e3; border-radius: 10px; color: #17344e; line-height: 1.5; }
