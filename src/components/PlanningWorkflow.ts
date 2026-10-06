@@ -13,7 +13,7 @@ export const planningSidebarMarkup = `
   ${step('route', 1, 'Build route', `<section id="route-panel" class="route-panel panel"></section><details class="menu-subsection" data-menu-section="aip-browser"><summary>Add airports &amp; reporting points</summary><section id="aip-panel" class="panel"></section></details>`, true)}
   ${step('leg-entry', 2, 'Prepare legs', '<section id="sequential-leg-panel" class="panel"></section>')}
   ${step('conditions', 3, 'Weather & fuel', '<section id="weather-panel" class="weather-panel panel"></section><section id="performance-panel" class="performance-panel panel"></section>')}
-  ${step('vertical', 4, 'Review OFP', '<button type="button" class="workflow-ofp-button" data-view-ofp>View navigation log</button><section id="vertical-profile-panel" class="vertical-profile-panel panel"></section>')}
+  ${step('vertical', 4, 'Review OFP', '<button type="button" class="workflow-ofp-button" data-view-ofp>View navigation log</button><section id="vertical-profile-panel" class="vertical-profile-panel panel"></section><details class="menu-subsection" data-menu-section="terrain-airspace"><summary>Terrain &amp; airspace</summary><section id="route-review-panel" class="panel"></section></details>')}
   <details class="phase-disclosure" data-panel-key="saved-plans"><summary><span>PLANS</span><strong>Save &amp; load</strong></summary><section id="saved-plans-panel" class="panel"></section></details>
   <details class="phase-disclosure" data-panel-key="settings">
     <summary><span>SETTINGS</span><div class="workflow-title"><strong>Aircraft &amp; defaults</strong><small data-workflow-summary="settings"></small></div></summary>

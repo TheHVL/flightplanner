@@ -32,7 +32,7 @@ export class AipPanel {
       const freshness = aipFreshness(this.catalog, this.refresh);
       const status = this.element.querySelector<HTMLElement>('[data-aip-status]')!;
       status.className = freshness.warning ? 'aip-status aip-status--warning' : 'aip-status';
-      status.textContent = `${freshness.message} ${this.catalog.aerodromes.length} aerodromes · ${this.catalog.reportingPoints?.length ?? 0} reporting points · ${this.catalog.vfrRoutes?.length ?? 0} verified route sequences. Daily publication checks. NOTAM and AIP supplements must be checked separately.`;
+      status.textContent = `${freshness.message} ${this.catalog.aerodromes.length} aerodromes · ${this.catalog.reportingPoints?.length ?? 0} reporting points. Daily publication checks. NOTAM and AIP supplements must be checked separately.`;
       this.results();
       this.details();
       this.planStatus();
@@ -74,7 +74,6 @@ export class AipPanel {
     const ad = this.catalog?.aerodromes.find(ad => ad.icao === this.selectedIcao);
     if (!ad || !this.catalog) return;
     const points = (this.catalog.reportingPoints ?? []).filter(point => point.aerodromeIcao === ad.icao);
-    const routes = (this.catalog.vfrRoutes ?? []).filter(route => route.aerodromeIcao === ad.icao);
     setPanelMarkup(this.element.querySelector<HTMLElement>('[data-aip-details]')!, `<article class="aip-details">
       <button type="button" data-aip-close-details>Close airport details</button>
       <h3>${e(ad.icao)} · ${e(ad.name)}</h3>
@@ -87,10 +86,9 @@ export class AipPanel {
       ${(ad.frequencies ?? []).map(freq => `<p><strong>${e(freq.service)} ${e(freq.frequencyMHz)}</strong> · ${e(freq.callSign)} · ${e(freq.hours)}${freq.remarks && freq.remarks !== 'NIL' ? `<br>${e(freq.remarks)}` : ''}</p>`).join('') || '<p>Not imported. Open AD 2.18.</p>'}
       </details>
       ${this.notes('Local regulations (AD 2.20)', ad.localRegulations)}${this.notes('Noise / circuit notes (AD 2.21)', ad.circuitNotes)}${this.notes('Flight procedures (AD 2.22)', ad.flightProcedures)}
-      <details class="menu-subsection" data-menu-section="${e(ad.icao)}-charts" open><summary>VFR charts &amp; published routes</summary>
+      <details class="menu-subsection" data-menu-section="${e(ad.icao)}-charts" open><summary>Published charts</summary>
       ${(ad.charts ?? []).map(chart => `<p><a href="${e(chart.sourceUrl)}" target="_blank" rel="noopener noreferrer">${e(chart.title)}</a></p>`).join('') || '<p>No VFR chart imported.</p>'}
-      ${routes.map(route => `<p>${e(route.name)}: ${route.pointIds.map(id => e(this.catalog!.reportingPoints!.find(point => point.id === id)!.name)).join(' → ')}<br>${e(route.remarks)}<button type="button" data-aip-route="${e(route.id)}">Append published sequence</button></p>`).join('')}
-      <p class="hint">${routes.length ? 'Published sequences are tied to the source chart checksum.' : 'No verified ordered route sequence is available for this aerodrome.'} Read the chart for direction, altitude, clearance and aircraft restrictions.</p>
+      <p class="hint">Read the chart for direction, altitude, clearance and aircraft restrictions.</p>
       </details>
       ${points.length ? `<details class="menu-subsection" data-menu-section="${e(ad.icao)}-sequence"><summary>Build your own point sequence</summary><p class="hint">Select points in the order you want to fly after checking the chart. This is your own sequence.</p><div class="aip-point-buttons">${points.map(point => `<button type="button" title="${e(point.remarks ?? 'Published chart point')}" data-aip-choose-point="${e(point.id)}">${e(point.name)}</button>`).join('')}</div><p data-aip-sequence>${this.sequenceLabel()}</p><button type="button" data-aip-append-sequence>Append selected points</button><button type="button" data-aip-clear-sequence>Clear selection</button></details>` : '<p>No machine-readable reporting points imported for this aerodrome.</p>'}
       ${(this.catalog.coverageWarnings ?? []).filter(warning => warning.startsWith(ad.icao)).map(warning => `<p class="aip-status--warning">${e(warning)}</p>`).join('')}
@@ -123,7 +121,6 @@ export class AipPanel {
     if (button.dataset.aipAddAd) { const ad = this.catalog.aerodromes.find(ad => ad.icao === button.dataset.aipAddAd); if (ad) this.addAirport(ad); }
     if (button.dataset.aipAddPoint) this.appendPoints([button.dataset.aipAddPoint]);
     if (button.dataset.aipChoosePoint) { this.selectedPoints.push(button.dataset.aipChoosePoint); this.element.querySelector('[data-aip-sequence]')!.innerHTML = this.sequenceLabel(); }
-    if (button.dataset.aipRoute) { const route = this.catalog.vfrRoutes?.find(route => route.id === button.dataset.aipRoute); if (route) this.appendPoints(route.pointIds); }
     if (button.hasAttribute('data-aip-append-sequence')) { this.appendPoints(this.selectedPoints); this.selectedPoints = []; this.details(); }
     if (button.hasAttribute('data-aip-clear-sequence')) { this.selectedPoints = []; this.details(); }
   }

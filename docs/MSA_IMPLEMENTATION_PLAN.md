@@ -16,6 +16,7 @@ This is a project/training rule supplied for Flightplanner. The planner should d
 The current version is intentionally pilot-driven:
 
 - an optional map overlay shows a corridor 1 NM either side of each route leg;
+- an optional Review OFP terrain check samples a strip 1 NM either side, showing sampled surface heights and modeled altitude margins; it excludes obstacles and is not an automatic MSA calculation;
 - the corridor includes 1 NM end caps around waypoints so the visual area represents points within 1 NM of the route centerline;
 - MSA is entered manually for each OFP leg after the pilot inspects the relevant chart/data;
 - PL is compared with the entered MSA and a warning is shown when `PL < MSA`;

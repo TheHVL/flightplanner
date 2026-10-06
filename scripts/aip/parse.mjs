@@ -174,7 +174,16 @@ export function verifiedRoutes(definitions, charts, points) {
     if (!chart) return [];
     const pointIds = definition.pointNames.map(name => `${definition.aerodromeIcao}:${name.toUpperCase()}`);
     if (pointIds.length < 2 || pointIds.some(id => !points.some(point => point.id === id))) return [];
-    return [{ id: definition.id, name: definition.name, aerodromeIcao: definition.aerodromeIcao, pointIds, sourceUrl: chart.sourceUrl, remarks: definition.remarks ?? '' }];
+    const segments = definition.segments?.map((segment, index) => ({ fromPointId: pointIds[index], toPointId: pointIds[index + 1],
+      maxAltitudeFt: segment.maxAltitudeFt, direction: segment.direction,
+      ...(segment.reverseMaxAltitudeFt !== undefined ? { reverseMaxAltitudeFt: segment.reverseMaxAltitudeFt } : {}),
+      ...(segment.chartAltitudeFt !== undefined ? { chartAltitudeFt: segment.chartAltitudeFt } : {}) }));
+    const validLevel = value => value === null || Number.isFinite(value) && value >= 0 && value <= 20000;
+    if (segments && (segments.length !== pointIds.length - 1 || segments.some(s => !validLevel(s.maxAltitudeFt) ||
+      s.reverseMaxAltitudeFt !== undefined && !validLevel(s.reverseMaxAltitudeFt) || s.chartAltitudeFt !== undefined && (!validLevel(s.chartAltitudeFt) || s.chartAltitudeFt === null) ||
+      !['both', 'forward', 'reverse', 'review'].includes(s.direction)))) return [];
+    return [{ id: definition.id, name: definition.name, aerodromeIcao: definition.aerodromeIcao, pointIds, sourceUrl: chart.sourceUrl, remarks: definition.remarks ?? '',
+      ...(segments ? { segments, chartSha256: chart.sha256 } : {}) }];
   });
 }
 

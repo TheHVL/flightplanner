@@ -42,7 +42,7 @@ describe('AIP browser',()=>{
     find('no matching point');
     expect(element.querySelector('[data-aip-results]')!.textContent).toContain('No airports or reporting points');
   });
-  it('searches airports and points, shows details, appends a reviewed sequence and warns about older saved point data',async()=>{
+  it('keeps the manual planner focused on airports and individual points and warns about older saved point data',async()=>{
     vi.stubGlobal('fetch',vi.fn(async(input:RequestInfo | URL)=>({ok:true,json:async()=>String(input).includes('aip-status.json')?{state:'success',attemptedAt:new Date().toISOString(),effectiveDate:catalog.effectiveDate}:catalog})));
     const store=new FlightPlanStore();
     const element=document.createElement('section');document.body.replaceChildren(element);
@@ -54,7 +54,10 @@ describe('AIP browser',()=>{
     expect(element.querySelector('[data-aip-details]')!.textContent).toContain('TWR 118.105');
     expect(element.querySelector('[data-aip-details]')!.textContent).toContain('RWY 10');
     element.querySelector<HTMLButtonElement>('[data-aip-add-ad="ENDU"]')!.click();
-    element.querySelector<HTMLButtonElement>('[data-aip-route]')!.click();
+    expect(element.querySelector('[data-aip-route]')).toBeNull();
+    element.querySelector<HTMLButtonElement>('[data-aip-choose-point="ENDU:FINNSNES"]')!.click();
+    element.querySelector<HTMLButtonElement>('[data-aip-choose-point="ENDU:SØRREISA"]')!.click();
+    element.querySelector<HTMLButtonElement>('[data-aip-append-sequence]')!.click();
     expect(store.getWaypoints().map(point=>point.name)).toEqual(['ENDU','FINNSNES','SØRREISA']);
     expect(store.getVerticalProfileSettings().departureElevationFt).toBe(254);
     store.appendAipWaypoints([{name:'Old point',lat:69,lon:18,aipId:'OLD',aipEffectiveDate:'2026-06-11'}]);

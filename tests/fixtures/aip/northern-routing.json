@@ -1,0 +1,424 @@
+{
+  "source": "Avinor AIP Norway",
+  "effectiveDate": "2026-09-03",
+  "generatedAt": "2026-10-05T13:02:04.976Z",
+  "issueUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/html/index-en-GB.html",
+  "aerodromes": [
+    {
+      "icao": "ENDU",
+      "name": "BARDUFOSS",
+      "elevationFt": 254,
+      "lat": 69.05583333333333,
+      "lon": 18.540277777777778,
+      "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/html/eAIP/EN-AD-2.ENDU-en-GB.html",
+      "charts": [
+        {
+          "title": "Visual Approach Chart - ICAO",
+          "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623256.pdf",
+          "sha256": "f93dd046804a5e00cf2b8a5baa76d5e5a4083a077fa6ff2429e2e88930e9b966"
+        }
+      ]
+    },
+    {
+      "icao": "ENSR",
+      "name": "SØRKJOSEN",
+      "elevationFt": 16,
+      "lat": 69.78666666666666,
+      "lon": 20.959722222222222,
+      "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/html/eAIP/EN-AD-2.ENSR-en-GB.html",
+      "charts": [
+        {
+          "title": "Visual Approach Chart - ICAO",
+          "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/643749.pdf",
+          "sha256": "fa9c94b074a03a5b49465b2a86601067cde480460c5441ffe47a5061a54d4668"
+        }
+      ]
+    },
+    {
+      "icao": "ENTC",
+      "name": "TROMSØ / Langnes",
+      "elevationFt": 32,
+      "lat": 69.68138888888889,
+      "lon": 18.91777777777778,
+      "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/html/eAIP/EN-AD-2.ENTC-en-GB.html",
+      "charts": [
+        {
+          "title": "Visual Approach Chart - ICAO",
+          "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623173.pdf",
+          "sha256": "864c552dba14af7f1fefbef08344728a1b7f3f45ea1a84d6ad2275ca8a45be64"
+        }
+      ]
+    }
+  ],
+  "reportingPoints": [
+    {
+      "id": "ENDU:ELLA",
+      "name": "ELLA",
+      "aerodromeIcao": "ENDU",
+      "lat": 69.03333333333333,
+      "lon": 18.63888888888889,
+      "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623256.pdf",
+      "remarks": "Helicopter only, as stated on the published chart."
+    },
+    {
+      "id": "ENDU:ESPENES",
+      "name": "ESPENES",
+      "aerodromeIcao": "ENDU",
+      "lat": 69.11999999999999,
+      "lon": 17.71361111111111,
+      "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623256.pdf",
+      "remarks": ""
+    },
+    {
+      "id": "ENDU:FINNSNES",
+      "name": "FINNSNES",
+      "aerodromeIcao": "ENDU",
+      "lat": 69.24027777777778,
+      "lon": 17.965,
+      "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623256.pdf",
+      "remarks": ""
+    },
+    {
+      "id": "ENDU:GOMPEN",
+      "name": "GOMPEN",
+      "aerodromeIcao": "ENDU",
+      "lat": 69.05194444444444,
+      "lon": 17.941666666666666,
+      "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623256.pdf",
+      "remarks": ""
+    },
+    {
+      "id": "ENDU:NORA",
+      "name": "NORA",
+      "aerodromeIcao": "ENDU",
+      "lat": 69.10055555555554,
+      "lon": 18.611666666666668,
+      "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623256.pdf",
+      "remarks": ""
+    },
+    {
+      "id": "ENDU:REINELV",
+      "name": "REINELV",
+      "aerodromeIcao": "ENDU",
+      "lat": 69.2075,
+      "lon": 18.24361111111111,
+      "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623256.pdf",
+      "remarks": ""
+    },
+    {
+      "id": "ENDU:ROGNMO",
+      "name": "ROGNMO",
+      "aerodromeIcao": "ENDU",
+      "lat": 69.09666666666666,
+      "lon": 18.722499999999997,
+      "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623256.pdf",
+      "remarks": ""
+    },
+    {
+      "id": "ENDU:ROSSVOLL",
+      "name": "ROSSVOLL",
+      "aerodromeIcao": "ENDU",
+      "lat": 69.17833333333334,
+      "lon": 18.5,
+      "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623256.pdf",
+      "remarks": ""
+    },
+    {
+      "id": "ENDU:RUNDHAUG",
+      "name": "RUNDHAUG",
+      "aerodromeIcao": "ENDU",
+      "lat": 69.01944444444445,
+      "lon": 18.898611111111112,
+      "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623256.pdf",
+      "remarks": ""
+    },
+    {
+      "id": "ENDU:SARA",
+      "name": "SARA",
+      "aerodromeIcao": "ENDU",
+      "lat": 69.00694444444444,
+      "lon": 18.518055555555556,
+      "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623256.pdf",
+      "remarks": ""
+    },
+    {
+      "id": "ENDU:SODA",
+      "name": "SODA",
+      "aerodromeIcao": "ENDU",
+      "lat": 68.9325,
+      "lon": 18.95,
+      "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623256.pdf",
+      "remarks": ""
+    },
+    {
+      "id": "ENDU:STEINVANN",
+      "name": "STEINVANN",
+      "aerodromeIcao": "ENDU",
+      "lat": 69.11666666666666,
+      "lon": 18.416666666666668,
+      "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623256.pdf",
+      "remarks": ""
+    },
+    {
+      "id": "ENDU:SØRREISA",
+      "name": "SØRREISA",
+      "aerodromeIcao": "ENDU",
+      "lat": 69.12638888888888,
+      "lon": 18.195833333333333,
+      "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623256.pdf",
+      "remarks": ""
+    },
+    {
+      "id": "ENDU:TAKVATN",
+      "name": "TAKVATN",
+      "aerodromeIcao": "ENDU",
+      "lat": 69.10972222222222,
+      "lon": 19.03888888888889,
+      "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623256.pdf",
+      "remarks": ""
+    },
+    {
+      "id": "ENDU:TILLERMO",
+      "name": "TILLERMO",
+      "aerodromeIcao": "ENDU",
+      "lat": 68.99555555555555,
+      "lon": 19.161944444444444,
+      "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623256.pdf",
+      "remarks": ""
+    },
+    {
+      "id": "ENDU:TUNE",
+      "name": "TUNE",
+      "aerodromeIcao": "ENDU",
+      "lat": 68.93,
+      "lon": 18.47833333333333,
+      "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623256.pdf",
+      "remarks": ""
+    },
+    {
+      "id": "ENDU:WERA",
+      "name": "WERA",
+      "aerodromeIcao": "ENDU",
+      "lat": 69.0625,
+      "lon": 18.402777777777775,
+      "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623256.pdf",
+      "remarks": "Helicopter only, as stated on the published chart."
+    },
+    {
+      "id": "ENDU:ÅSEN",
+      "name": "ÅSEN",
+      "aerodromeIcao": "ENDU",
+      "lat": 69.03305555555555,
+      "lon": 18.53666666666667,
+      "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623256.pdf",
+      "remarks": ""
+    },
+    {
+      "id": "ENDU:SAFT",
+      "name": "SAFT",
+      "aerodromeIcao": "ENDU",
+      "lat": 68.96416666666667,
+      "lon": 18.68,
+      "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623256.pdf",
+      "remarks": ""
+    },
+    {
+      "id": "ENDU:FINNFJORD",
+      "name": "FINNFJORD",
+      "aerodromeIcao": "ENDU",
+      "lat": 69.22555555555556,
+      "lon": 18.083333333333332,
+      "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623256.pdf",
+      "remarks": ""
+    },
+    {
+      "id": "ENSR:MAURSUNDET",
+      "name": "MAURSUNDET",
+      "aerodromeIcao": "ENSR",
+      "lat": 69.91250000000001,
+      "lon": 20.833333333333332,
+      "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/643749.pdf",
+      "remarks": ""
+    },
+    {
+      "id": "ENSR:NORDKJOSEN",
+      "name": "NORDKJOSEN",
+      "aerodromeIcao": "ENSR",
+      "lat": 69.79416666666667,
+      "lon": 21.051944444444445,
+      "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/643749.pdf",
+      "remarks": ""
+    },
+    {
+      "id": "ENSR:OKSFJORDHAMN",
+      "name": "OKSFJORDHAMN",
+      "aerodromeIcao": "ENSR",
+      "lat": 69.91250000000001,
+      "lon": 21.183333333333334,
+      "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/643749.pdf",
+      "remarks": ""
+    },
+    {
+      "id": "ENSR:REISAFJORDEN",
+      "name": "REISAFJORDEN",
+      "aerodromeIcao": "ENSR",
+      "lat": 69.97083333333333,
+      "lon": 21.133333333333333,
+      "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/643749.pdf",
+      "remarks": ""
+    },
+    {
+      "id": "ENSR:ROTSUNDET",
+      "name": "ROTSUNDET",
+      "aerodromeIcao": "ENSR",
+      "lat": 69.825,
+      "lon": 20.766666666666666,
+      "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/643749.pdf",
+      "remarks": ""
+    },
+    {
+      "id": "ENSR:STORSLETT",
+      "name": "STORSLETT",
+      "aerodromeIcao": "ENSR",
+      "lat": 69.75833333333334,
+      "lon": 21.01,
+      "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/643749.pdf",
+      "remarks": ""
+    },
+    {
+      "id": "ENSR:STORTIND",
+      "name": "STORTIND",
+      "aerodromeIcao": "ENSR",
+      "lat": 69.8236111111111,
+      "lon": 20.884166666666665,
+      "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/643749.pdf",
+      "remarks": ""
+    },
+    {
+      "id": "ENSR:STRAUMFJORDEN",
+      "name": "STRAUMFJORDEN",
+      "aerodromeIcao": "ENSR",
+      "lat": 69.84583333333333,
+      "lon": 21.19,
+      "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/643749.pdf",
+      "remarks": ""
+    },
+    {
+      "id": "ENTC:ERSFJORD",
+      "name": "ERSFJORD",
+      "aerodromeIcao": "ENTC",
+      "lat": 69.70416666666667,
+      "lon": 18.421944444444446,
+      "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623173.pdf",
+      "remarks": ""
+    },
+    {
+      "id": "ENTC:HÅKØYA",
+      "name": "HÅKØYA",
+      "aerodromeIcao": "ENTC",
+      "lat": 69.66666666666667,
+      "lon": 18.82361111111111,
+      "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623173.pdf",
+      "remarks": ""
+    },
+    {
+      "id": "ENTC:MOVIKVANN",
+      "name": "MOVIKVANN",
+      "aerodromeIcao": "ENTC",
+      "lat": 69.71527777777779,
+      "lon": 19.1525,
+      "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623173.pdf",
+      "remarks": ""
+    },
+    {
+      "id": "ENTC:MUSVÆR",
+      "name": "MUSVÆR",
+      "aerodromeIcao": "ENTC",
+      "lat": 69.885,
+      "lon": 18.578333333333333,
+      "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623173.pdf",
+      "remarks": ""
+    },
+    {
+      "id": "ENTC:NIPØYA",
+      "name": "NIPØYA",
+      "aerodromeIcao": "ENTC",
+      "lat": 69.82222222222222,
+      "lon": 19.484166666666667,
+      "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623173.pdf",
+      "remarks": ""
+    },
+    {
+      "id": "ENTC:RAKNES",
+      "name": "RAKNES",
+      "aerodromeIcao": "ENTC",
+      "lat": 69.83055555555555,
+      "lon": 18.96222222222222,
+      "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623173.pdf",
+      "remarks": ""
+    },
+    {
+      "id": "ENTC:REMMAN",
+      "name": "REMMAN",
+      "aerodromeIcao": "ENTC",
+      "lat": 69.7675,
+      "lon": 19.050555555555555,
+      "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623173.pdf",
+      "remarks": ""
+    },
+    {
+      "id": "ENTC:RYA",
+      "name": "RYA",
+      "aerodromeIcao": "ENTC",
+      "lat": 69.55833333333334,
+      "lon": 18.71527777777778,
+      "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623173.pdf",
+      "remarks": ""
+    },
+    {
+      "id": "ENTC:SELNES",
+      "name": "SELNES",
+      "aerodromeIcao": "ENTC",
+      "lat": 69.44,
+      "lon": 18.998611111111114,
+      "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623173.pdf",
+      "remarks": ""
+    },
+    {
+      "id": "ENTC:TØNSNES",
+      "name": "TØNSNES",
+      "aerodromeIcao": "ENTC",
+      "lat": 69.73194444444445,
+      "lon": 19.093055555555555,
+      "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623173.pdf",
+      "remarks": ""
+    },
+    {
+      "id": "ENTC:BERG",
+      "name": "BERG",
+      "aerodromeIcao": "ENTC",
+      "lat": 69.57166666666666,
+      "lon": 18.9425,
+      "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623173.pdf",
+      "remarks": ""
+    },
+    {
+      "id": "ENTC:BREIVIKA",
+      "name": "BREIVIKA",
+      "aerodromeIcao": "ENTC",
+      "lat": 69.67500000000001,
+      "lon": 18.981944444444444,
+      "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623173.pdf",
+      "remarks": ""
+    },
+    {
+      "id": "ENTC:ANSNES",
+      "name": "ANSNES",
+      "aerodromeIcao": "ENTC",
+      "lat": 69.50166666666667,
+      "lon": 18.42777777777778,
+      "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623173.pdf",
+      "remarks": ""
+    }
+  ]
+}

@@ -52,6 +52,18 @@ export interface AipVfrRoute {
   pointIds: string[];
   sourceUrl: string;
   remarks: string;
+  /** Reviewed chart limits, checksum-gated by the importer. Generator input only. */
+  segments?: AipVfrSegment[];
+  chartSha256?: string;
+}
+
+export interface AipVfrSegment {
+  fromPointId: string;
+  toPointId: string;
+  maxAltitudeFt: number | null;
+  reverseMaxAltitudeFt?: number | null;
+  chartAltitudeFt?: number;
+  direction: 'both' | 'forward' | 'reverse' | 'review';
 }
 export interface AipRefreshStatus {
   state: 'success' | 'failed';
@@ -118,6 +130,14 @@ export function validateAipCatalog(data: AipAerodromeCatalog): void {
   const pointIds = new Set(points.map(point => point.id));
   if (pointIds.size !== points.length || points.some(point => !point.id || !point.name || point.lat === null || point.lon === null || !coordinates(point.lat, point.lon) || !safeUrl(point.sourceUrl))) throw new Error('AIP catalog contains invalid reporting points.');
   if ((data.vfrRoutes ?? []).some(route => route.pointIds.length < 2 || route.pointIds.some(id => !pointIds.has(id)) || !safeUrl(route.sourceUrl))) throw new Error('AIP catalog contains an unresolved VFR route.');
+  const level = (value: unknown) => value === null || typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 20000;
+  for (const route of data.vfrRoutes ?? []) {
+    if (route.segments === undefined) continue;
+    if (!/^[a-f0-9]{64}$/.test(route.chartSha256 ?? '') || !Array.isArray(route.segments) || route.segments.length !== route.pointIds.length - 1 ||
+      route.segments.some((s, i) => !s || s.fromPointId !== route.pointIds[i] || s.toPointId !== route.pointIds[i + 1] || !level(s.maxAltitudeFt) ||
+        s.reverseMaxAltitudeFt !== undefined && !level(s.reverseMaxAltitudeFt) || s.chartAltitudeFt !== undefined && (s.chartAltitudeFt === null || !level(s.chartAltitudeFt)) ||
+        !['both', 'forward', 'reverse', 'review'].includes(s.direction))) throw new Error('AIP catalog contains invalid reviewed route limits.');
+  }
 }
 
 export function aipFreshness(catalog: AipAerodromeCatalog, status: AipRefreshStatus | null, now = new Date()): { warning: boolean; message: string } {

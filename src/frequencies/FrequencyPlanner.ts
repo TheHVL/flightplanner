@@ -25,6 +25,12 @@ export class FrequencyPlanner {
   subscribe(listener: () => void): void { this.listeners.add(listener); }
   getStatus(): string { return this.checkedMessage; }
   getCatalog(): RadioCatalog | null { return this.data; }
+  getVerifiedCatalog(): RadioCatalog | null {
+    if (!this.data || !this.airports) return null;
+    const freshness = radioFreshness(this.data, this.refreshStatus, this.airports, new Date(), this.store.getWeatherSettings().departureTimeUtc);
+    this.checkedMessage = freshness.message;
+    return freshness.usable ? this.data : null;
+  }
   isLoading(): boolean { return this.loading; }
   async reload(): Promise<void> {
     if (this.loading) return;
