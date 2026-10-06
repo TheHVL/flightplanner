@@ -1,5 +1,6 @@
 {
-  "state": "success",
-  "attemptedAt": "2026-10-06T08:32:12.875Z",
-  "effectiveDate": "2026-09-03"
+  "state": "failed",
+  "attemptedAt": "2026-10-06T08:41:03.313Z",
+  "effectiveDate": "2026-09-03",
+  "error": "Command failed: curl --silent --show-error --location --fail --max-time 25 --retry 2 --output /tmp/flightplanner-source-XHYuxZ/source --write-out %{http_code} %{url_effective} https://nedlasting.geonorge.no/geonorge/Tjenestefeed.xml\ncurl: (28) Operation timed out after 25002 milliseconds with 0 bytes received\ncurl: (28) Operation timed out after 25002 milliseconds with 3080192 out of 4738335 bytes received\ncurl: (28) Operation timed out after 25002 milliseconds with 0 bytes received\n"
 }
