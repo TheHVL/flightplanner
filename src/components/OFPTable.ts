@@ -20,6 +20,7 @@ import {
   type PatternFuelPlan,
 } from '../fuel/fuelPlanning';
 import { isOfpTouchAndGoBoundary } from './ofpTouchAndGoBoundary';
+import { forecastFreshness } from '../weather/forecastFreshness';
 
 interface LegRowResult {
   html: string;
@@ -53,6 +54,8 @@ export class OFPTable {
     });
     if (typeof window !== 'undefined') {
       window.addEventListener(FUEL_SETTINGS_CHANGED_EVENT, () => this.render());
+      window.setInterval(() => { if (this.element.isConnected) this.refreshForecastWarning(); }, 60_000);
+      document.addEventListener('visibilitychange', () => this.refreshForecastWarning());
     }
   }
 
@@ -66,6 +69,7 @@ export class OFPTable {
     let accumulatedDistanceNm = 0;
     let accumulatedTimeMinutes = 0;
     let accumulatedFuelGal: number | null = 0;
+    let accumulatedDisplayedFuelGal: number | null = 0;
 
     const rows: string[] = [];
     const remainingFuel = () => fuelPlan.totalFuelOnboardGal !== null && accumulatedFuelGal !== null
@@ -75,7 +79,9 @@ export class OFPTable {
       if (!pattern) return;
       accumulatedTimeMinutes += pattern.timeMin;
       accumulatedFuelGal = accumulatedFuelGal !== null && pattern.fuelGal !== null ? accumulatedFuelGal + pattern.fuelGal : null;
-      rows.push(this.patternRow(waypoint.name, pattern, accumulatedTimeMinutes, accumulatedFuelGal, remainingFuel()));
+      accumulatedDisplayedFuelGal = accumulatedDisplayedFuelGal !== null && pattern.fuelGal !== null
+        ? accumulatedDisplayedFuelGal + ceilFuelUsageGal(pattern.fuelGal) : null;
+      rows.push(this.patternRow(waypoint.name, pattern, accumulatedTimeMinutes, accumulatedDisplayedFuelGal, remainingFuel()));
     };
     if (legs.length) appendPattern(legs[0].from);
     for (const [index, leg] of legs.entries()) {
@@ -84,12 +90,15 @@ export class OFPTable {
       accumulatedTimeMinutes += legPlan.flightTimeMin;
       accumulatedFuelGal = accumulatedFuelGal !== null && legPlan.legFuelGal !== null
         ? accumulatedFuelGal + legPlan.legFuelGal : null;
+      accumulatedDisplayedFuelGal = accumulatedDisplayedFuelGal !== null && legPlan.legFuelGal !== null
+        ? accumulatedDisplayedFuelGal + ceilFuelUsageGal(legPlan.legFuelGal) : null;
       rows.push(this.legRow(leg, legPlan, settings, accumulatedDistanceNm,
-        accumulatedTimeMinutes, accumulatedFuelGal, remainingFuel(), fuelPlan.startupTaxiTakeoffGal).html);
+        accumulatedTimeMinutes, accumulatedDisplayedFuelGal, remainingFuel(), fuelPlan.startupTaxiTakeoffGal).html);
       appendPattern(leg.to);
     }
 
     this.element.innerHTML = `
+      <div class="weather-status weather-freshness-warning" data-ofp-weather-warning role="status" aria-live="polite" hidden></div>
       <div class="ofp-heading">
         <div>
           <p class="eyebrow">OPERATIONAL FLIGHT PLAN</p>
@@ -149,11 +158,20 @@ export class OFPTable {
         <span>MSA is entered manually. Use the ±1 NM map corridor to inspect terrain/obstacles.</span>
         <span class="msa-legend-warning">PL below entered MSA is highlighted.</span>
         <span>Fuel INT/ACC uses modeled cruise, climb and descent phases; pattern fuel appears on its own row where the required fuel-flow inputs are available.</span>
-        <span>Displayed planning time is rounded up to the next whole minute. Displayed fuel used is rounded up to the next whole US gallon. Calculations retain full precision.</span>
+        <span>Displayed planning time rounds up to whole minutes. INT fuel rounds each row up to whole US gallons; ACC fuel sums those displayed INT entries, including pattern rows. Startup is separate. Trip and remaining fuel use unrounded consumption.</span>
         <span class="ofp-touch-and-go-legend"><i></i> Solid line = airport boundary after any pattern row and start of the next OFP sector.</span>
         ${totalCircuitMinutes > 0 ? `<span>Pattern time: +${this.formatActivityMinutes(totalCircuitMinutes)} in ACC TIME${fuelPlan.circuitFuelGal === null ? '; enter Pattern FF to include its fuel' : `; ${ceilFuelUsageGal(fuelPlan.circuitFuelGal)} gal included` }.</span>` : ''}
       </div>
     `;
+    this.refreshForecastWarning();
+  }
+
+  private refreshForecastWarning(): void {
+    const node = this.element.querySelector<HTMLElement>('[data-ofp-weather-warning]');
+    if (!node) return;
+    const freshness = forecastFreshness(this.store.getWeatherForecasts());
+    node.hidden = !this.store.getWeatherSettings().useForecastWinds || !freshness.stale;
+    node.textContent = `Forecast winds need review. ${freshness.message}`;
   }
 
   private legRow(
@@ -186,7 +204,7 @@ export class OFPTable {
       const belowMsa = plannedAltitudeFt !== null && manualMsaFt !== null && plannedAltitudeFt < manualMsaFt;
       const forecast = this.store.getLegWeatherForecast(leg.from.id, leg.to.id);
       const windTitle = legPlan.forecastWindActive && forecast
-        ? `${forecast.source}; ${Math.round(forecast.altitudeFt)} ft; ${new Date(forecast.validTimeUtc).toISOString().slice(11, 16)}Z; OAT ${forecast.temperatureC.toFixed(1)}°C`
+        ? `${forecast.source}; ${Math.round(forecast.altitudeFt)} ft; valid ${forecast.validTimeUtc}; OAT ${forecast.temperatureC.toFixed(1)}°C; ${forecast.modelSelection ? forecastFreshness([forecast]).message : ''}`
         : 'Manual wind input';
       const altitudeWarning = belowMsa
         ? `Warning: planned level ${plannedAltitudeFt} ft is below entered MSA ${manualMsaFt} ft.`
@@ -201,7 +219,7 @@ export class OFPTable {
       const fuelTitle = this.phaseFuelTitle(legPlan);
       const accumulatedFuelTitle = accumulatedFuelGal === null
         ? 'Accumulated fuel is incomplete because one or more required phase fuel-flow inputs are missing.'
-        : `Accumulated enroute fuel ${accumulatedFuelGal.toFixed(2)} gal. Startup/taxi/takeoff allowance of ${startupTaxiTakeoffGal.toFixed(1)} gal is tracked separately.`;
+        : `Sum of displayed rounded INT fuel entries: ${accumulatedFuelGal} gal. Startup/taxi/takeoff allowance of ${startupTaxiTakeoffGal.toFixed(1)} gal is tracked separately. Trip and remaining fuel use unrounded consumption.`;
       const remainingTitle = estimatedRemainingGal === null
         ? 'Enter Fuel onboard and all required phase fuel flows to calculate estimated fuel remaining.'
         : `Estimated fuel remaining after this leg, including subtraction of ${startupTaxiTakeoffGal.toFixed(1)} gal startup/taxi/takeoff allowance.`;
@@ -215,7 +233,7 @@ export class OFPTable {
           <td class="calculated">${this.headingLabel(leg.trueTrackDeg)}</td>
           <td class="calculated" title="${settings.automaticVariation ? `WMM2025 at leg midpoint: ${rawVariationDegEast.toFixed(2)}°, rounded for OFP` : 'Manual variation override'}">${variationLabel}</td>
           <td class="calculated">${this.headingLabel(magneticTrack)}</td>
-          <td class="calculated" title="${windTitle}">${this.headingLabel(legPlan.windFromDeg)}/${Math.round(legPlan.windSpeedKt)}</td>
+          <td class="calculated" title="${escapeHtml(windTitle)}">${this.headingLabel(legPlan.windFromDeg)}/${Math.round(legPlan.windSpeedKt)}</td>
           <td class="calculated" title="Exact WCA for displayed ${legPlan.displayPhase} TAS: ${legPlan.wcaDeg.toFixed(2)}°">${this.signedDegrees(legPlan.wcaDeg)}</td>
           <td class="calculated" title="Exact accumulated distance: ${accumulatedDistanceNm.toFixed(2)} NM">${this.distanceLabel(accumulatedDistanceNm)}</td>
           <td class="calculated" title="Accumulated route time including modeled phase time">${this.formatMinutes(accumulatedTimeMinutes)}</td>
@@ -299,7 +317,7 @@ export class OFPTable {
     cells[8] = `<td class="calculated" title="Accumulated flight and pattern time">${this.formatMinutes(totalMinutes)}</td>`;
     cells[9] = pattern.fuelFlowGph === null ? '<td class="pending" title="Enter Pattern FF in Cruise performance &amp; fuel">—</td>' : `<td class="calculated" title="Pattern fuel flow in US gallons per hour">${pattern.fuelFlowGph.toFixed(1)}</td>`;
     cells[10] = fuelCell(pattern.fuelGal, pattern.fuelGal === null ? 'Enter Pattern FF to include pattern fuel.' : `Pattern fuel ${pattern.fuelGal.toFixed(2)} gal = ${pattern.patternCount} × ${pattern.minutesPerPattern} min × ${pattern.fuelFlowGph} GPH / 60.`);
-    cells[11] = fuelCell(accumulatedFuel, 'Accumulated flight and pattern fuel, excluding startup/taxi/takeoff.');
+    cells[11] = fuelCell(accumulatedFuel, 'Sum of displayed rounded INT fuel entries, including patterns; excluding startup/taxi/takeoff. Trip and remaining fuel use unrounded consumption.');
     cells[18] = `<td class="calculated" title="${pattern.patternCount} × ${pattern.minutesPerPattern} minutes">${this.formatMinutes(pattern.timeMin)}</td>`;
     cells[22] = remaining === null ? '<td class="pending">—</td>' : `<td class="calculated ${remaining < 0 ? 'fuel-negative' : ''}" title="Estimated fuel remaining after pattern">${remaining.toFixed(1)}</td>`;
     return `<tr class="ofp-pattern-row ofp-touch-and-go-boundary" data-pattern-waypoint="${escapeHtml(pattern.waypointId)}">${cells.join('')}</tr>`;

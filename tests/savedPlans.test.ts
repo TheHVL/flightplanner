@@ -7,9 +7,9 @@ import { DEFAULT_FUEL_PLANNING_SETTINGS, getFuelPlanningSettings, saveFuelPlanni
 import { PlanLibraryPanel } from '../src/components/PlanLibraryPanel';
 import { WeatherPanel } from '../src/components/WeatherPanel';
 import { OFPTable } from '../src/components/OFPTable';
-import { fetchForecastSample } from '../src/weather/openMeteo';
+import { fetchForecastBatch } from '../src/weather/openMeteo';
 
-vi.mock('../src/weather/openMeteo', () => ({ fetchForecastSample: vi.fn() }));
+vi.mock('../src/weather/openMeteo', () => ({ fetchForecastBatch: vi.fn(), sampleForecastSeries: vi.fn() }));
 
 beforeEach(() => { window.localStorage.clear(); document.body.innerHTML = ''; vi.restoreAllMocks(); });
 
@@ -156,16 +156,17 @@ describe('saved plan controls', () => {
 
   it('discards a pending forecast when another plan is loaded', async () => {
     const { store } = route();
-    let resolve!: (sample: Awaited<ReturnType<typeof fetchForecastSample>>) => void;
-    vi.mocked(fetchForecastSample).mockImplementationOnce(() => new Promise((done) => { resolve = done; }));
+    let resolve!: (sample: Awaited<ReturnType<typeof fetchForecastBatch>>) => void;
+    vi.mocked(fetchForecastBatch).mockImplementationOnce(() => new Promise((done) => { resolve = done; }));
     const root = document.createElement('section');
     document.body.append(root);
     const weather = new WeatherPanel(root, store);
     weather.render();
     root.querySelector<HTMLButtonElement>('[data-weather-fetch]')!.click();
-    expect(fetchForecastSample).toHaveBeenCalled();
+    expect(fetchForecastBatch).toHaveBeenCalled();
     weather.onPlanLoaded();
-    resolve({ validTimeUtc: '2026-10-05T10:00:00Z', altitudeFt: 4500, altitudeClamped: false, windFromDeg: 210, windSpeedKt: 15, temperatureC: 5, source: 'Test' });
+    expect(vi.mocked(fetchForecastBatch).mock.calls[0][2]?.aborted).toBe(true);
+    resolve([{ hourly: { time: [] } }]);
     await new Promise((done) => setTimeout(done, 0));
     expect(store.getWeatherForecasts()).toEqual([]);
     expect(root.textContent).toContain('Check the flight date above, then fetch fresh winds');

@@ -2,6 +2,13 @@
 
 This file records significant Flightplanner updates, formulas, source assumptions, limitations and implementation decisions. New updates are added at the top.
 
+## 2026-10-07, OFP accumulated fuel and forecast freshness
+
+- ACC fuel now sums the displayed whole-gallon INT entries, including separate pattern rows. Two exact 1.5-gallon legs display INT 2 + 2 and ACC 4. Startup is separate; physical trip and remaining-fuel calculations retain unrounded consumption. Missing required fuel keeps subsequent ACC unknown.
+- Route weather requests midpoint coordinates in batches of at most 50, with a 45-second timeout per batch. Ten legs use one HTTP request. The eight pressure levels and 32 variables remain for altitude/time interpolation. Wind-adjusted leg timing is sampled locally in flight order; incorrect location counts, missing data and out-of-window times fail without partially applying forecasts.
+- Forecasts retain retrieval time, Best Match automatic model selection and explicitly unknown underlying model/run timestamps. The UI shows full valid dates and retrieval age, which is not model-run age. A live reminder after two hours or unknown retrieval time appears in Route weather and above the OFP when forecast winds are enabled. Refreshing clears that reminder; aging does not silently alter winds. Loading a plan or changing its flight time cancels a pending request.
+- Rewrote README around the current four-step manual workflow, separate generator, school preset, rounding formulas, daily AIP refresh, source coverage, development and current limitations. Removed obsolete phase-status claims and outdated vertical-profile descriptions.
+
 ## 2026-10-07, school C182T preset
 
 - Added explicit Apply school C182T preset actions in Aircraft & defaults and the separate Route Generator. User-provided settings: cruise 2200 RPM / 20 inHg; climb 90 KIAS, 2400 RPM / 23 inHg with 500 ft/min planning rate; descent at cruise TAS, about 18 inHg with 700 ft/min and 10 US gal/h; pattern 12 US gal/h; start/taxi/takeoff 2 US gal; reserve 12 US gal.
