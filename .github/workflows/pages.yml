@@ -14,7 +14,9 @@ permissions:
 
 concurrency:
   group: pages
-  cancel-in-progress: false
+  # Publish the newest main revision instead of leaving later releases
+  # behind a stalled deployment. Environment checks still apply to each run.
+  cancel-in-progress: true
 
 jobs:
   build:

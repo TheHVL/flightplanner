@@ -30,6 +30,7 @@ import { SequentialLegPanel } from './components/SequentialLegPanel';
 import { SidebarResize } from './components/SidebarResize';
 import { PlanLibraryPanel } from './components/PlanLibraryPanel';
 import { RouteReviewPanel } from './components/RouteReviewPanel';
+import { importGeneratedRoute } from './generator/transfer';
 import { FUEL_SETTINGS_CHANGED_EVENT, getFuelPlanningSettings } from './fuel/fuelPlanning';
 import { buildC182TGlideEnvelopeSamples } from './navigation/glideEnvelope';
 import { analyzeGlideCoastline, loadNordicLandMask } from './navigation/glideCoastline';
@@ -66,9 +67,11 @@ root.innerHTML = `
           <div class="brand-subtitle">VFR · NORWAY · TRAINING</div>
         </div>
       </div>
+      <nav class="planner-page-nav" aria-label="Planner pages"><a href="./" aria-current="page">Manual planner</a><a href="generator.html">Route Generator</a></nav>
       <div class="phase-chip"><span></span> VFR FLIGHT PLANNING</div>
     </header>
 
+    <p id="generator-import-status" class="generator-import-status" role="status" hidden></p>
     <main class="workspace">
       <aside id="planning-sidebar" class="left-column">
         ${planningSidebarMarkup}
@@ -187,6 +190,18 @@ const frequencyPlanner = new FrequencyPlanner(store);
 new RouteReviewPanel(document.querySelector<HTMLElement>('#route-review-panel')!, store, frequencyPlanner);
 const routeShapeController = new RouteShapeController(store);
 restoreWorkingRoute(store, routeShapeController);
+const transferToken = new URL(location.href).searchParams.get('generatedRoute');
+if (transferToken) {
+  const message = document.querySelector<HTMLElement>('#generator-import-status')!;
+  try {
+    if (importGeneratedRoute(transferToken, sessionStorage, localStorage, store, routeShapeController)) {
+      message.textContent = 'Generated draft imported. Review chart joins, MSA and frequencies, then set the forecast date/time and fetch fresh winds. Your previous manual plan is available under Save & load → Restore previous work.';
+      saveWorkingRoute(store, routeShapeController);
+    }
+  } catch (error) { message.textContent = error instanceof Error ? error.message : 'Generated draft could not be imported. Your manual plan was kept.'; }
+  message.hidden = false;
+  const cleanUrl = new URL(location.href); cleanUrl.searchParams.delete('generatedRoute'); history.replaceState(null, '', cleanUrl);
+}
 const routePanel = new RoutePanel(routeElement, store);
 const legEditor = new SequentialLegPanel(document.querySelector<HTMLElement>('#sequential-leg-panel')!, store);
 const embeddedFrequency = new FrequencyPanel(document.querySelector<HTMLElement>('[data-leg-frequency]')!, store, frequencyPlanner, true);

@@ -381,6 +381,8 @@ No private API keys belong in this repository.
 
 ## Sequential leg preparation and AIP catalog
 
-Use the Prepare legs and AIP panels for keyboard-first PL/MSA/wind entry, searchable aerodromes/reporting points and aerodrome details. Published VFR sequences are reserved for the automatic planner's data foundation. Daily Avinor publication checks include explicit effective dates and failure warnings. See [AIP data lifecycle and coverage](docs/AIP_DATA.md).
+Use the Prepare legs and AIP panels for keyboard-first PL/MSA/wind entry, searchable aerodromes/reporting points and aerodrome details. Published VFR sequences are reserved for the separate **Route Generator** page. Daily Avinor publication checks include explicit effective dates and failure warnings. See [AIP data lifecycle and coverage](docs/AIP_DATA.md).
+
+**Route Generator** (`generator.html`) offers a separate map and airport-visit workflow for ENDU, ENTC and ENSR. Choose lesson duration, altitude, touch-and-goes and patterns, then compare up to three C182T route drafts with fresh sampled terrain and terminal-airspace checks. Explicit transfer opens the draft in Manual Planner and preserves previous manual work for recovery. Generation leaves working and named saved plans untouched. Chart geometry, unresolved ENSR procedures and full obstacle/restricted-airspace coverage remain incomplete; these are drafts for review, not operationally validated routes. See [Route Generator and data coverage](docs/AUTOMATIC_PLANNER_DATA.md).
 
 Under **Review OFP → Terrain & airspace**, an optional check samples fresh Kartverket surface heights along the plotted route and compares the modeled vertical profile with imported AIP terminal volumes. It keeps manual MSA entries intact. Coverage gaps, FL/AGL references and peaks between samples require review. This does not include obstacles, complete restricted airspace or NOTAM. See [automatic planner data foundation](docs/AUTOMATIC_PLANNER_DATA.md).
