@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { FlightPlanStore } from '../src/flightplan/FlightPlanStore';
 import { RouteShapeController } from '../src/flightplan/RouteShapeController';
 import { OFPTable } from '../src/components/OFPTable';
@@ -46,7 +46,7 @@ describe('OFP pattern accounting and layout', () => {
     expect(pattern.classList.contains('ofp-touch-and-go-boundary')).toBe(true);
     expect(pattern.cells[9].textContent).toBe('12.0');
     expect(pattern.cells[10].textContent).toBe('2');
-    expect(pattern.cells[11].textContent).toBe(String(ceilFuelUsageGal(plan.legs[0].legFuelGal! + 2)));
+    expect(pattern.cells[11].textContent).toBe(String(ceilFuelUsageGal(plan.legs[0].legFuelGal!) + 2));
     expect(pattern.cells[18].textContent).toBe('0:10');
     expect(pattern.cells[8].textContent).toBe(formatPlanningTime(plan.legs[0].flightTimeMin + 10));
     expect(pattern.cells[22].textContent).toBe((50 - 1.7 - plan.legs[0].legFuelGal! - 2).toFixed(1));
@@ -55,7 +55,7 @@ describe('OFP pattern accounting and layout', () => {
     }
     expect(outbound.cells[18].textContent).toBe(formatPlanningTime(plan.legs[1].flightTimeMin));
     expect(outbound.cells[8].textContent).toBe(formatPlanningTime(plan.legs.reduce((sum, leg) => sum + leg.flightTimeMin, 10)));
-    expect(outbound.cells[11].textContent).toBe(String(ceilFuelUsageGal(plan.enrouteFuelGal!)));
+    expect(outbound.cells[11].textContent).toBe(String(plan.legs.reduce((sum, leg) => sum + ceilFuelUsageGal(leg.legFuelGal!), 2)));
     expect(outbound.cells[22].textContent).toBe(plan.landingFuelGal!.toFixed(1));
   });
 
@@ -108,4 +108,57 @@ describe('OFP pattern accounting and layout', () => {
     expect(store.getWaypointActivityMinutes(destination.id)).toBe(10);
     expect(render(store).at(-1)?.cells[18].textContent).toBe('0:10');
   });
+});
+
+it('adds displayed INT entries for two 1.5-gallon legs, retaining exact remaining fuel', () => {
+  const store = new FlightPlanStore();
+  store.addWaypoint({lat:60,lon:10}, 'A');
+  store.addWaypoint({lat:60.1,lon:10}, 'B');
+  store.addWaypoint({lat:60.2,lon:10}, 'C');
+  store.updatePerformanceSettings({usePohPerformance:false});
+  store.updateNavigationSettings({tasKt:100,windSpeedKt:0});
+  store.updateVerticalProfileSettings({departureElevationFt:3000,destinationElevationFt:3000});
+  for (const leg of store.getLegs()) store.setPlannedAltitudeFt(leg.from.id,leg.to.id,3000);
+  const fuelFlow = 1.5 * 100 / store.getLegs()[0].distanceNm;
+  saveFuelPlanningSettings({...DEFAULT_FUEL_PLANNING_SETTINGS,manualCruiseFuelFlowGph:fuelFlow,totalFuelOnboardGal:50});
+  const plan = calculateFuelPlanForStore(store);
+  expect(plan.legs[0].legFuelGal).toBeCloseTo(1.5);
+  expect(plan.legs[1].legFuelGal).toBeCloseTo(1.5);
+  const [first,second] = render(store);
+  expect([first.cells[10].textContent,second.cells[10].textContent]).toEqual(['2','2']);
+  expect([first.cells[11].textContent,second.cells[11].textContent]).toEqual(['2','4']);
+  expect(second.cells[22].textContent).toBe('45.3');
+  expect(plan.tripFuelGal).toBeCloseTo(4.7);
+});
+
+it('includes individually rounded pattern consumption in ACC', () => {
+  const { store, b } = trainingRoute();
+  store.setWaypointVerticalConstraint(b.id, { circuitCount: 1, minutesPerCircuit: 7.5 });
+  const plan = calculateFuelPlanForStore(store);
+  expect(plan.patterns[0].fuelGal).toBeCloseTo(1.5);
+  const [first,pattern,last] = render(store);
+  expect(pattern.cells[10].textContent).toBe('2');
+  expect(Number(pattern.cells[11].textContent)).toBe(Number(first.cells[11].textContent) + 2);
+  expect(Number(last.cells[11].textContent)).toBe(Number(pattern.cells[11].textContent) + Number(last.cells[10].textContent));
+  expect(last.cells[22].textContent).toBe(plan.landingFuelGal!.toFixed(1));
+});
+
+it('keeps stale active forecasts visible above the OFP even when the sidebar is closed', () => {
+  vi.useFakeTimers();
+  try {
+    vi.setSystemTime(new Date('2026-10-06T11:00:00Z'));
+    const { store, a, b } = trainingRoute();
+    store.updateWeatherSettings({ useForecastWinds: true });
+    store.setRouteWeatherForecasts([{ fromId:a.id,toId:b.id,altitudeFt:3000,validTimeUtc:'2026-10-06T11:30:00Z',
+      windFromDeg:0,windSpeedKt:0,temperatureC:0,source:'Open-Meteo',modelSelection:'best_match',fetchedAtUtc:new Date().toISOString() }]);
+    const element = document.createElement('section'); document.body.append(element);
+    const table = new OFPTable(element,store); table.render();
+    const banner = () => element.querySelector<HTMLElement>('[data-ofp-weather-warning]')!;
+    expect(banner().hidden).toBe(true);
+    vi.advanceTimersByTime(2*3600000);
+    expect(banner().hidden).toBe(false);
+    expect(banner().textContent).toContain('Refresh route forecast');
+    store.updateWeatherSettings({ useForecastWinds: false }); table.render();
+    expect(banner().hidden).toBe(true);
+  } finally { vi.useRealTimers(); }
 });

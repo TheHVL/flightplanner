@@ -61,6 +61,13 @@
   color: #4f627c;
 }
 .weather-priority-note strong { color: #294d78; }
+.weather-freshness-warning {
+  border-color: #dbad54;
+  background: #fff5d9;
+  color: #704a06;
+  font-weight: 750;
+  overflow-wrap: anywhere;
+}
 
 .weather-section-heading {
   display: grid;

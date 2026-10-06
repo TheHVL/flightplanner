@@ -5,12 +5,14 @@ import type { FlightPlanStore, LegWeatherForecast } from '../flightplan/FlightPl
 import { routeLegMidpoint } from '../navigation/magneticVariation';
 import { solveWindTriangle } from '../navigation/wind';
 import { calculateCruisePerformance } from '../performance/cruisePerformance';
-import { fetchForecastSample } from '../weather/openMeteo';
+import { fetchForecastBatch, sampleForecastSeries } from '../weather/openMeteo';
+import { forecastFreshness } from '../weather/forecastFreshness';
 
 export class WeatherPanel {
   private loading = false;
   private requestVersion = 0;
   private hadForecasts = false;
+  private requestController: AbortController | null = null;
   private statusMessage = 'Set a UTC departure time, then fetch winds and temperature along the route.';
 
   constructor(
@@ -20,6 +22,8 @@ export class WeatherPanel {
     this.element.addEventListener('change', (event) => this.handleChange(event));
     this.element.addEventListener('click', (event) => void this.handleClick(event));
     this.store.subscribe(() => this.render());
+    window.setInterval(() => { if (this.element.isConnected) this.refreshFreshness(); }, 60_000);
+    document.addEventListener('visibilitychange', () => this.refreshFreshness());
   }
 
   render(): void {
@@ -56,16 +60,28 @@ export class WeatherPanel {
         <span>Use per-leg route winds in calculations</span>
       </label>
       <div class="weather-status" role="status" aria-live="polite">${escapeHtml(this.statusMessage)}</div>
+      <div class="weather-status" data-weather-freshness role="status" aria-live="polite" hidden></div>
       ${forecasts.length > 0 ? this.forecastList(forecasts) : ''}
       ${legs.length > 0 ? `<details class="menu-subsection" data-menu-section="manual-winds"><summary>Review wind sources by leg</summary>${this.manualWindList()}</details>` : ''}
       <details class="menu-help" data-menu-section="weather-help"><summary>Wind priority &amp; forecast source</summary>      <div class="weather-priority-note">
         <strong>Wind priority:</strong> fetched forecast for the leg → manual leg backup → global default manual wind. Manual leg winds remain stored if a forecast is fetched later.
       </div>
-<div class="nav-help weather-source"><strong>Forecast source:</strong> Open-Meteo pressure-level forecast. Altitude interpolation uses geopotential height; time is interpolated between hourly forecast steps. Manual leg wind direction is FROM true north.</div></details>
+<div class="nav-help weather-source"><strong>Forecast source:</strong> Open-Meteo Best Match pressure-level forecast, with automatic model selection. Underlying model names and run times are not reported by this response. Retrieval age measures time since fetching, not age of the model run. A reminder appears after two hours; refresh before flight. Coordinates are requested in batches, then interpolated locally by altitude and estimated time. Manual leg wind direction is FROM true north.</div></details>
     `);
+    this.refreshFreshness();
+  }
+
+  private refreshFreshness(): void {
+    const node = this.element.querySelector<HTMLElement>('[data-weather-freshness]');
+    if (!node) return;
+    const freshness = forecastFreshness(this.store.getWeatherForecasts());
+    node.hidden = !freshness.message;
+    node.classList.toggle('weather-freshness-warning', freshness.stale);
+    node.textContent = freshness.message;
   }
 
   onPlanLoaded(): void {
+    this.requestController?.abort();
     this.requestVersion += 1;
     this.loading = false;
     this.statusMessage = 'Plan loaded. Check the flight date above, then fetch fresh winds. Manual leg wind backups were kept.';
@@ -128,6 +144,7 @@ export class WeatherPanel {
   private handleChange(event: Event): void {
     const input = event.target as HTMLInputElement;
     if (input.matches('[data-weather-time]')) {
+      this.requestController?.abort();
       this.requestVersion += 1;
       this.loading = false;
       this.store.updateWeatherSettings({ departureTimeUtc: input.value });
@@ -209,6 +226,9 @@ export class WeatherPanel {
     }
 
     const requestInputs = this.forecastInputs();
+    this.requestController?.abort();
+    const controller = new AbortController();
+    this.requestController = controller;
     this.loading = true;
     const requestVersion = ++this.requestVersion;
     this.statusMessage = `Fetching forecast for ${legs.length} leg${legs.length === 1 ? '' : 's'}…`;
@@ -216,19 +236,18 @@ export class WeatherPanel {
 
     try {
       const forecasts: LegWeatherForecast[] = [];
+      const series = await fetchForecastBatch(legs.map(routeLegMidpoint), departureTime, controller.signal);
+      if (requestVersion !== this.requestVersion) return;
+      if (requestInputs !== this.forecastInputs()) throw new Error('Route or forecast settings changed. Fetch fresh winds again.');
       let legStartMs = departureTime.getTime();
 
       for (let index = 0; index < legs.length; index += 1) {
         const leg = legs[index];
-        this.statusMessage = `Fetching leg ${index + 1} of ${legs.length}: ${leg.from.name} → ${leg.to.name}…`;
-        this.render();
-
         const altitudeFt = this.store.getPlannedAltitudeFt(leg.from.id, leg.to.id)
           ?? performanceSettings.pressureAltitudeFt;
         const stillAirHours = leg.distanceNm / Math.max(tasKt, 1);
         const estimatedMidpointTime = new Date(legStartMs + stillAirHours * 0.5 * 60 * 60 * 1000);
-        const midpoint = routeLegMidpoint(leg);
-        const sample = await fetchForecastSample(midpoint.lat, midpoint.lon, altitudeFt, estimatedMidpointTime);
+        const sample = sampleForecastSeries(series[index], altitudeFt, estimatedMidpointTime);
         if (requestVersion !== this.requestVersion) return;
         if (requestInputs !== this.forecastInputs()) throw new Error('Route or forecast settings changed. Fetch fresh winds again.');
         const windSolution = solveWindTriangle({
@@ -248,6 +267,10 @@ export class WeatherPanel {
           windSpeedKt: sample.windSpeedKt,
           temperatureC: sample.temperatureC,
           source: sample.source,
+          fetchedAtUtc: sample.fetchedAtUtc,
+          modelSelection: sample.modelSelection,
+          modelName: sample.modelName,
+          modelRunTimeUtc: sample.modelRunTimeUtc,
         });
         legStartMs += legHours * 60 * 60 * 1000;
       }
@@ -261,6 +284,7 @@ export class WeatherPanel {
       this.statusMessage = `${message} Manual leg wind backups were kept.`;
     } finally {
       if (requestVersion === this.requestVersion) {
+        this.requestController = null;
         this.loading = false;
         this.render();
       }
@@ -285,6 +309,6 @@ export class WeatherPanel {
 
   private formatUtc(value: string): string {
     const date = new Date(value);
-    return Number.isFinite(date.getTime()) ? `${date.toISOString().slice(11, 16)}Z` : '—';
+    return Number.isFinite(date.getTime()) ? `${date.toISOString().slice(0, 16).replace('T', ' ')} UTC` : '—';
   }
 }

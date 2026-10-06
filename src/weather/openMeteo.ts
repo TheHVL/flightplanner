@@ -1,6 +1,19 @@
 export const PRESSURE_LEVELS_HPA = [1000, 925, 850, 700, 600, 500, 400, 300] as const;
+export const FORECAST_BATCH_SIZE = 50;
+type HourlyForecast = Record<string, Array<string | number | null>>;
 
-export interface ForecastSample {
+export interface ForecastMetadata {
+  fetchedAtUtc?: string;
+  modelSelection?: 'best_match';
+  modelName?: string | null;
+  modelRunTimeUtc?: string | null;
+}
+
+export interface ForecastSeries extends ForecastMetadata {
+  hourly: HourlyForecast;
+}
+
+export interface ForecastSample extends ForecastMetadata {
   windFromDeg: number;
   windSpeedKt: number;
   temperatureC: number;
@@ -27,18 +40,44 @@ export async function fetchForecastSample(
   altitudeFt: number,
   when: Date,
 ): Promise<ForecastSample> {
-  const url = buildForecastUrl(lat, lon, when);
-  const response = await fetch(url, { cache: 'no-store' });
-  if (!response.ok) {
-    throw new Error(`Weather service returned HTTP ${response.status}.`);
-  }
+  const [series] = await fetchForecastBatch([{ lat, lon }], when);
+  return sampleForecastSeries(series, altitudeFt, when);
+}
 
-  const payload = (await response.json()) as OpenMeteoResponse;
-  if (!payload.hourly) {
-    throw new Error('Weather service returned no hourly forecast data.');
+/** Fetch raw series once, then sample legs locally in wind-adjusted flight order. */
+export async function fetchForecastBatch(
+  locations: ReadonlyArray<{ lat: number; lon: number }>,
+  departure: Date,
+  signal?: AbortSignal,
+): Promise<ForecastSeries[]> {
+  const series: ForecastSeries[] = [];
+  for (let offset = 0; offset < locations.length; offset += FORECAST_BATCH_SIZE) {
+    signal?.throwIfAborted();
+    const batch = locations.slice(offset, offset + FORECAST_BATCH_SIZE);
+    const timeout = AbortSignal.timeout(45_000);
+    const requestSignal = signal ? AbortSignal.any([signal, timeout]) : timeout;
+    const response = await fetch(buildForecastUrl(batch, departure), { cache: 'no-store', signal: requestSignal });
+    if (!response.ok) throw new Error(`Weather service returned HTTP ${response.status}.`);
+    const payload: unknown = await response.json();
+    const results = Array.isArray(payload) ? payload : [payload];
+    if (results.length !== batch.length) {
+      throw new Error('Weather service returned an unexpected number of route locations. Fetch fresh winds again.');
+    }
+    const fetchedAtUtc = new Date().toISOString();
+    for (const result of results) {
+      const hourly = (result as OpenMeteoResponse | null)?.hourly;
+      if (!hourly || !Array.isArray(hourly.time)) {
+        throw new Error('Weather service returned no hourly forecast data.');
+      }
+      series.push({ hourly, fetchedAtUtc, modelSelection: 'best_match', modelName: null, modelRunTimeUtc: null });
+    }
   }
+  return series;
+}
 
-  return sampleHourlyForecast(payload.hourly, altitudeFt, when);
+export function sampleForecastSeries(series: ForecastSeries, altitudeFt: number, when: Date): ForecastSample {
+  const { hourly, ...metadata } = series;
+  return { ...sampleHourlyForecast(hourly, altitudeFt, when), ...metadata };
 }
 
 export function sampleHourlyForecast(
@@ -83,7 +122,7 @@ export function sampleHourlyForecast(
   };
 }
 
-function buildForecastUrl(lat: number, lon: number, when: Date): string {
+function buildForecastUrl(locations: ReadonlyArray<{ lat: number; lon: number }>, when: Date): string {
   const variables = PRESSURE_LEVELS_HPA.flatMap((level) => [
     `temperature_${level}hPa`,
     `wind_speed_${level}hPa`,
@@ -94,12 +133,13 @@ function buildForecastUrl(lat: number, lon: number, when: Date): string {
   const nextDay = new Date(when.getTime() + 24 * 60 * 60 * 1000);
   const endDate = utcDate(nextDay);
   const params = new URLSearchParams({
-    latitude: lat.toFixed(5),
-    longitude: lon.toFixed(5),
+    latitude: locations.map(({ lat }) => lat.toFixed(5)).join(','),
+    longitude: locations.map(({ lon }) => lon.toFixed(5)).join(','),
     hourly: variables.join(','),
     wind_speed_unit: 'kn',
     timezone: 'GMT',
     cell_selection: 'nearest',
+    models: 'best_match',
     start_date: startDate,
     end_date: endDate,
   });

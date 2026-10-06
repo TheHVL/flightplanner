@@ -78,6 +78,10 @@ export interface LegWeatherForecast {
   windSpeedKt: number;
   temperatureC: number;
   source: string;
+  fetchedAtUtc?: string;
+  modelSelection?: 'best_match';
+  modelName?: string | null;
+  modelRunTimeUtc?: string | null;
 }
 
 export interface FlightPlanWorkingDraftState {
