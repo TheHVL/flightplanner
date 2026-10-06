@@ -7,6 +7,7 @@ import { VerticalProfilePanel } from '../src/components/VerticalProfilePanel';
 import { calculateFuelPlanForStore, DEFAULT_FUEL_PLANNING_SETTINGS, saveFuelPlanningSettings } from '../src/fuel/fuelPlanning';
 import { capturePlan, createPlan, parsePlanFile, SavedPlanRepository } from '../src/flightplan/savedPlans';
 import { formatPlanningTime, ceilFuelUsageGal } from '../src/presentation/planningRounding';
+import { identifyTestAirport } from './helpers/airports';
 
 beforeEach(() => { localStorage.clear(); document.body.innerHTML = ''; });
 function trainingRoute() {
@@ -14,6 +15,8 @@ function trainingRoute() {
   const a = store.addWaypoint({ lat: 60, lon: 10 }, 'A');
   const b = store.addWaypoint({ lat: 60.5, lon: 10 }, 'B');
   const c = store.addWaypoint({ lat: 61, lon: 10 }, 'C');
+  identifyTestAirport(store, b.id);
+  identifyTestAirport(store, c.id, 'ENTC');
   store.updateNavigationSettings({ tasKt: 120, windSpeedKt: 0 });
   store.updatePerformanceSettings({ usePohPerformance: false });
   store.setPlannedAltitudeFt(a.id, b.id, 3000);
@@ -91,6 +94,7 @@ describe('OFP pattern accounting and layout', () => {
     const store = new FlightPlanStore();
     store.addWaypoint({ lat: 60, lon: 10 }, 'A');
     const destination = store.addWaypoint({ lat: 61, lon: 10 }, 'B');
+    identifyTestAirport(store, destination.id);
     const element = document.createElement('section');
     const panel = new VerticalProfilePanel(element, store); panel.render();
     const select = element.querySelector<HTMLSelectElement>('[aria-label="Arrival pattern"]')!;

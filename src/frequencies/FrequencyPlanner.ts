@@ -8,7 +8,7 @@ import type { RouteLeg, Waypoint } from '../types';
 import { radioFreshness, validateRadioCatalog, type RadioCatalog } from './catalog';
 import { planLegFrequencies, type FrequencySegment } from './routeFrequencies';
 export interface AirportRadioContext { airport: AipAerodrome; position: 'Departure' | 'Arrival'; }
-export interface LegFrequencyPlan { leg: RouteLeg; segments: FrequencySegment[]; airports: AirportRadioContext[]; manual: string | null; note?: string; }
+export interface LegFrequencyPlan { leg: RouteLeg; segments: FrequencySegment[]; airports: AirportRadioContext[]; manual: string | null; note?: string; notice?: string; }
 export class FrequencyPlanner {
   private data: RadioCatalog | null = null;
   private airports: AipAerodromeCatalog | null = null;
@@ -74,7 +74,7 @@ export class FrequencyPlanner {
         const airport = this.airportForWaypoint(point);
         if (airport) airports.push({ airport, position });
       }
-      return { leg, segments, airports, manual: this.store.getManualFrequency(leg.from.id, leg.to.id), note };
+      return { leg, segments, airports, manual: this.store.getManualFrequency(leg.from.id, leg.to.id), note, notice: freshness?.warning ? freshness.message : undefined };
     });
     return this.cache;
   }

@@ -1,4 +1,5 @@
 import { escapeHtml } from '../utils/html';
+import { nearestPublishedPoint, type PublishedMapPoint } from '../aip/mapPoints';
 import L, {
   type Coords,
   type DoneCallback,
@@ -27,8 +28,8 @@ import {
 export interface MapManagerCallbacks {
   onLegSelected?(index: number): void;
   onWaypointSelected?(id: string): void;
-  onMapClick(lat: number, lon: number): void;
-  onWaypointMoved(id: string, lat: number, lon: number): void;
+  onMapClick(lat: number, lon: number, publishedPoint?: PublishedMapPoint): void;
+  onWaypointMoved(id: string, lat: number, lon: number, publishedPoint?: PublishedMapPoint): void;
   onRouteLegShape(legIndex: number, lat: number, lon: number): void;
 }
 
@@ -143,6 +144,10 @@ interface ArcGisLayerMetadata {
 export class MapManager {
   private readonly map: LeafletMap;
   private readonly markers = new Map<string, Marker>();
+  private readonly publishedPointLayer: LayerGroup;
+  private publishedPoints: PublishedMapPoint[] = [];
+  private snapEnabled = true;
+  private readonly publishedPointSelected: (point: PublishedMapPoint) => void;
   private readonly resizeObserver?: ResizeObserver;
   private readonly icaoLayer: AvinorIcaoLayer;
   private readonly routeLine: Polyline;
@@ -164,6 +169,7 @@ export class MapManager {
   private readonly waypointSelected: (id: string) => void;
   constructor(element: HTMLElement, callbacks: MapManagerCallbacks) {
     this.waypointSelected = id => callbacks.onWaypointSelected?.(id);
+    this.publishedPointSelected = point => callbacks.onMapClick(point.lat, point.lon, point);
     this.map = L.map(element, {
       zoomControl: true,
       attributionControl: true,
@@ -171,6 +177,8 @@ export class MapManager {
       maxBoundsViscosity: 1,
       worldCopyJump: false,
     }).setView([69.6492, 18.9553], 7);
+    this.publishedPointLayer = L.layerGroup().addTo(this.map);
+    this.map.on('moveend zoomend', () => this.renderPublishedPoints());
 
     const glidePane = this.map.createPane('glide-envelope-pane');
     glidePane.style.zIndex = '385';
@@ -263,7 +271,8 @@ export class MapManager {
         this.suppressNextMapClick = false;
         return;
       }
-      callbacks.onMapClick(event.latlng.lat, event.latlng.lng);
+      const point = this.snapPoint(event.latlng, event.originalEvent.altKey);
+      callbacks.onMapClick(point?.lat ?? event.latlng.lat, point?.lon ?? event.latlng.lng, point);
     });
 
     if (typeof ResizeObserver !== 'undefined') {
@@ -282,6 +291,41 @@ export class MapManager {
   setSelectedLeg(selection: {fromId: string; toId: string}): void {
     const leg = this.renderedLegs.find(l => l.from.id === selection.fromId && l.to.id === selection.toId);
     this.selectedLegLine.setLatLngs(leg ? routeLegPath(leg).map(p => [p.lat, p.lon] as [number, number]) : []);
+  }
+
+  setPublishedPoints(points: PublishedMapPoint[]): void {
+    this.publishedPoints = points;
+    this.renderPublishedPoints();
+  }
+
+  setSnapEnabled(enabled: boolean): void {
+    this.snapEnabled = enabled;
+    this.renderPublishedPoints();
+  }
+
+  private snapPoint(latlng: L.LatLng, bypass = false): PublishedMapPoint | undefined {
+    if (!this.snapEnabled || bypass) return undefined;
+    return nearestPublishedPoint({ lat: latlng.lat, lon: latlng.lng }, this.publishedPoints,
+      p => this.map.latLngToContainerPoint([p.lat, p.lon]));
+  }
+
+  private renderPublishedPoints(): void {
+    this.publishedPointLayer.clearLayers();
+    if (!this.snapEnabled) return;
+    const zoom = this.map.getZoom(), bounds = this.map.getBounds();
+    for (const point of this.publishedPoints) {
+      if (zoom < (point.kind === 'airport' ? 7 : 9) || !bounds.contains([point.lat, point.lon])) continue;
+      const airport = point.kind === 'airport';
+      const label = airport ? `${point.name} airport` : `${point.name} reporting point (${point.aerodromeIcao})`;
+      const marker = L.marker([point.lat, point.lon], {
+        keyboard: true, title: label, alt: label,
+        icon: L.divIcon({ className: `aip-map-point aip-map-point--${point.kind}`, html: airport ? '<span>A</span>' : '<span>◆</span>', iconSize: [18,18], iconAnchor: [9,9] }),
+        zIndexOffset: -500,
+      }).addTo(this.publishedPointLayer);
+      marker.getElement()?.setAttribute('aria-label', label);
+      marker.bindTooltip(escapeHtml(point.name), { permanent: zoom >= 9, direction: 'right', offset: [9,0], className: 'aip-map-label' });
+      marker.on('click', event => { L.DomEvent.stop(event.originalEvent); this.publishedPointSelected(point); });
+    }
   }
 
   invalidateSize(): void {
@@ -418,7 +462,10 @@ export class MapManager {
         marker.on('click', event => { L.DomEvent.stop(event.originalEvent); this.waypointSelected(waypoint.id); });
         marker.on('dragend', () => {
           const position = marker?.getLatLng();
-          if (position) onMoved(waypoint.id, position.lat, position.lng);
+          if (position) {
+            const point = this.snapPoint(position);
+            onMoved(waypoint.id, point?.lat ?? position.lat, point?.lon ?? position.lng, point);
+          }
         });
 
         this.markers.set(waypoint.id, marker);

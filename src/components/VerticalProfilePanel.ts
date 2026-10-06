@@ -58,7 +58,7 @@ export class VerticalProfilePanel {
       const point = waypoints.find(p => p.id === this.selectedWaypointId);
       if (!point) { setPanelMarkup(this.element, '<p class="hint">Choose a waypoint in the route to prepare an airport visit.</p>'); return; }
       const title = this.element.closest('details[data-leg-visit]')?.querySelector('[data-leg-visit-title]');
-      if (title) title.textContent = `Airport / pattern · ${point.name}`;
+      if (title) title.textContent = `${this.store.isAirportWaypoint(point.id) ? 'Airport / pattern' : 'Waypoint'} · ${point.name}`;
       const index = waypoints.indexOf(point);
       if (index === 0 || index === waypoints.length - 1) {
         const endpoint = index === 0 ? 'departure' : 'destination';
@@ -183,6 +183,7 @@ export class VerticalProfilePanel {
   private arrivalPatternControls(waypoints: ReturnType<FlightPlanStore['getWaypoints']>): string {
     if (waypoints.length < 2) return '';
     const point = waypoints[waypoints.length - 1];
+    if (!this.store.isAirportWaypoint(point.id)) return '<p class="menu-note">Patterns are available at airport waypoints. Click an airport on the map or add it from the airport list.</p>';
     const constraint = this.store.getWaypointVerticalConstraint(point.id);
     return `<details class="menu-subsection" data-menu-section="arrival-pattern"><summary>Arrival pattern · ${this.escape(point.name)}</summary>
       <label class="vertical-climb-model"><span>After arrival</span><select data-vertical-waypoint-mode="${point.id}" aria-label="Arrival pattern">
@@ -245,6 +246,7 @@ export class VerticalProfilePanel {
             const inboundPl = plannedAltitudesFt[waypointIndex - 1];
             const outboundPl = plannedAltitudesFt[waypointIndex];
             const constraint = this.store.getWaypointVerticalConstraint(waypoint.id);
+            const airport = this.store.isAirportWaypoint(waypoint.id);
             const isAirportMode = constraint.mode === 'airport' || constraint.mode === 'circuits';
             const suggestedIcao = constraint.icaoCode || this.icaoSuggestion(waypoint.name);
             const statusKey = `waypoint:${waypoint.id}`;
@@ -259,11 +261,11 @@ export class VerticalProfilePanel {
                 </div>
                 <select data-vertical-waypoint-mode="${waypoint.id}" aria-label="Vertical behavior at ${this.escape(waypoint.name)}">
                   <option value="auto" ${constraint.mode === 'auto' ? 'selected' : ''}>Auto from PL</option>
-                  <option value="airport" ${constraint.mode === 'airport' ? 'selected' : ''}>Airport / T&amp;G</option>
-                  <option value="circuits" ${constraint.mode === 'circuits' ? 'selected' : ''}>Airport + pattern</option>
+                  ${airport ? `<option value="airport" ${constraint.mode === 'airport' ? 'selected' : ''}>Airport / T&amp;G</option>
+                  <option value="circuits" ${constraint.mode === 'circuits' ? 'selected' : ''}>Airport + pattern</option>` : ''}
                   <option value="none" ${constraint.mode === 'none' ? 'selected' : ''}>Off</option>
                 </select>
-                ${isAirportMode ? `
+                ${isAirportMode && airport ? `
                   <div class="vertical-airport-tools">
                     <input class="vertical-aip-code" type="text" maxlength="4" placeholder="ICAO" value="${this.escape(suggestedIcao)}" data-vertical-waypoint-icao="${waypoint.id}" aria-label="ICAO code for ${this.escape(waypoint.name)}" />
                     <button class="vertical-aip-button" type="button" data-aip-waypoint-lookup="${waypoint.id}" ${loading ? 'disabled' : ''}>${loading ? 'Loading…' : 'Use AIP'}</button>

@@ -10,6 +10,7 @@ import './savedPlans.css';
 import './planningMenus.css';
 import './frequencies.css';
 import './planningWorkflow.css';
+import { publishedMapPoints } from './aip/mapPoints';
 import { PlanningWorkflow, planningSidebarMarkup } from './components/PlanningWorkflow';
 import { LEG_SELECTED, openLegEditor } from './components/legEditorEvents';
 import { FrequencyPlanner } from './frequencies/FrequencyPlanner';
@@ -98,6 +99,10 @@ root.innerHTML = `
                 <option value="fast">Fast</option>
               </select>
             </label>
+            <label class="msa-corridor-control" title="Click a published point, or click/drag within 14 pixels and 0.5 NM to snap. Zoom in for reporting points. Turn off for free placement.">
+              <input id="aip-snap-toggle" type="checkbox" checked />
+              <span>Snap to AIP points</span>
+            </label>
             <button id="map-delete-route" class="map-delete-route-button" type="button" disabled>Delete route</button>
             <button id="map-expand" class="map-expand-button" type="button" aria-pressed="false">⛶ Expand map</button>
           </div>
@@ -108,6 +113,7 @@ root.innerHTML = `
           <span id="glide-status" class="glide-status"></span>
         </div>
         <div id="map" class="map"></div>
+        <p class="aip-map-help" id="aip-map-status">Loading AIP map points…</p>
         <div
           id="map-resize-handle"
           class="map-resize-handle"
@@ -186,7 +192,12 @@ legEditor.onSelection((fromId, toId) => embeddedFrequency.selectLeg(fromId, toId
 window.dispatchEvent(new CustomEvent('flightplanner-select-waypoint-visit', { detail: { waypointId: legEditor.getSelectedLeg().toId } }));
 visitPanel.render();
 new PlanningWorkflow(document.querySelector<HTMLElement>('#planning-sidebar')!, store);
-new AipPanel(document.querySelector<HTMLElement>('#aip-panel')!, store);
+new AipPanel(document.querySelector<HTMLElement>('#aip-panel')!, store, catalog => {
+  mapManager.setPublishedPoints(publishedMapPoints(catalog));
+  document.querySelector('#aip-map-status')!.textContent = 'Click AIP points to add them. Zoom in for reporting points. Nearby clicks and waypoint drops snap to published coordinates.';
+}, () => {
+  document.querySelector('#aip-map-status')!.textContent = 'AIP map points could not be loaded. Check deployed data in Build route; free placement remains available.';
+});
 const navigationPanel = new NavigationPanel(navigationElement, store);
 const performancePanel = new PerformancePanel(performanceElement, store, 'fuel');
 const aircraftSettingsPanel = new PerformancePanel(document.querySelector<HTMLElement>('#aircraft-settings-panel')!, store, 'settings');
@@ -206,14 +217,23 @@ const ofpTable = new OFPTable(tableElement, store);
 frequencyPlanner.subscribe(() => ofpTable.render());
 void frequencyPlanner.reload();
 const mapManager = new MapManager(mapElement, {
-  onMapClick: (lat, lon) => store.addWaypoint({ lat, lon }),
-  onWaypointMoved: (id, lat, lon) => store.updateWaypoint(id, { lat, lon }),
+  onMapClick: (lat, lon, point) => {
+    if (point) {
+      const last = store.getWaypoints().at(-1);
+      if (last?.aipId === point.aipId && last.lat === point.lat && last.lon === point.lon) return;
+      store.appendAipWaypoints([point]);
+    } else store.addWaypoint({ lat, lon });
+  },
+  onWaypointMoved: (id, lat, lon, point) => store.updateWaypoint(id, { lat, lon }, point),
   onRouteLegShape: (legIndex, lat, lon) => routeShapeController.setLegShape(legIndex, { lat, lon }),
   onLegSelected: index => { const leg = store.getLegs()[index]; if (leg) openLegEditor({ fromId: leg.from.id, toId: leg.to.id }); },
   onWaypointSelected: id => {
     const leg = store.getLegs().find(l => l.to.id === id) ?? store.getLegs().find(l => l.from.id === id);
     if (leg) openLegEditor({ fromId: leg.from.id, toId: leg.to.id, focus: 'waypoint', waypointId: id });
   },
+});
+document.querySelector<HTMLInputElement>('#aip-snap-toggle')!.addEventListener('change', event => {
+  mapManager.setSnapEnabled((event.target as HTMLInputElement).checked);
 });
 
 window.addEventListener(LEG_SELECTED, () => mapManager.setSelectedLeg(legEditor.getSelectedLeg()));

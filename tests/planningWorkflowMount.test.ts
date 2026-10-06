@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { readFileSync } from 'node:fs';
+import { publishedMapPoints } from '../src/aip/mapPoints';
 import { expect, it, vi } from 'vitest';
 import type { MapManagerCallbacks } from '../src/map/MapManager';
 import type { RouteLeg } from '../src/types';
@@ -10,6 +11,7 @@ vi.mock('../src/map/MapManager', () => ({ MapManager: class {
   invalidateSize() {} setChartDetail() {} setMsaCorridorVisible() {} setGlideEnvelopeVisible() {}
   renderMsaCorridor() {} renderVerticalProfileConflicts() {} renderVerticalProfileMarkers() {}
   renderGlideEnvelope() {} renderGlideCoastlineSegments() {} setSelectedLeg() {}
+  setPublishedPoints() {} setSnapEnabled() {}
   renderRoute(_points: unknown, legs: RouteLeg[]) { map.legs = legs; }
 } }));
 
@@ -42,5 +44,19 @@ it('mounts the complete workflow and connects map requests to the shared editor'
   expect(document.querySelector('[data-aip-endpoint-code="destination"]')).not.toBeNull();
   expect(document.querySelector('[data-frequency-leg]')).toBeNull();
   expect(document.querySelector('#weather-panel')!.querySelector('[data-manual-wind-field]')).toBeNull();
+  const points = publishedMapPoints(JSON.parse(readFileSync('public/aip-aerodromes.json', 'utf8')));
+  const airport = points.find(p => p.aipId === 'ENTC')!;
+  const reporting = points.find(p => p.aipId === 'ENDU:ROSSVOLL')!;
+  expect(document.querySelector<HTMLInputElement>('#aip-snap-toggle')!.checked).toBe(true);
+  map.callbacks!.onWaypointMoved(second.to.id, airport.lat, airport.lon, airport);
+  map.callbacks!.onWaypointSelected!(second.to.id);
+  expect(document.querySelector('[aria-label="Arrival pattern"]')).not.toBeNull();
+  map.callbacks!.onWaypointMoved(second.to.id, reporting.lat, reporting.lon, reporting);
+  map.callbacks!.onWaypointSelected!(second.to.id);
+  expect(document.querySelector('[aria-label="Arrival pattern"]')).toBeNull();
+  expect(document.querySelector('[data-leg-visit-title]')!.textContent).toBe('Waypoint · ROSSVOLL');
+  map.callbacks!.onMapClick(airport.lat, airport.lon, airport);
+  map.callbacks!.onMapClick(airport.lat, airport.lon, airport);
+  expect(document.querySelector('[data-workflow-summary="route"]')!.textContent).toContain('4 waypoints');
   vi.unstubAllGlobals();
 });

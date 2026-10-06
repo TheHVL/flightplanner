@@ -19,9 +19,9 @@ export class SequentialLegPanel {
       <label>Leg<select data-leg-selector aria-label="Leg to prepare"></select></label>
       <p data-leg-name class="leg-selection-name"></p>
       <p class="leg-field-guide">PL is the planned level; MSA is your assessed minimum safe altitude. Both are in feet. Wind direction is FROM true north.</p>
-      <form class="leg-entry-form">
-        <label>PL (ft)<input data-leg-field="pl" type="number" min="0" max="30000" step="1" placeholder="ft" /></label>
-        <label>MSA (ft)<input data-leg-field="msa" type="number" min="0" max="30000" step="1" placeholder="ft" /></label>
+      <form class="leg-entry-form" novalidate>
+        <label>PL (ft)<input data-leg-field="pl" type="number" min="0" max="30000" step="100" placeholder="ft" /></label>
+        <label>MSA (ft)<input data-leg-field="msa" type="number" min="0" max="30000" step="100" placeholder="ft" /></label>
         <label>Wind FROM (°T)<input data-leg-field="direction" type="number" min="0" max="360" step="1" placeholder="000" /></label>
         <label>Wind (kt)<input data-leg-field="speed" type="number" min="0" max="150" step="1" placeholder="kt" /></label>
         <div class="leg-entry-actions"><button type="button" data-leg-prev>Previous</button><button type="submit">Save &amp; next leg</button></div>
@@ -134,7 +134,7 @@ export class SequentialLegPanel {
     const values = [this.store.getPlannedAltitudeFt(this.fromId, this.toId), this.store.getManualMsaFt(this.fromId, this.toId), wind?.windFromDeg, wind?.windSpeedKt];
     this.fields.forEach((field, i) => field.value = values[i]?.toString() ?? '');
     this.status(this.windStatus());
-    this.element.querySelector('[data-leg-visit-title]')!.textContent = `Airport / pattern · ${leg.to.name}`;
+    this.element.querySelector('[data-leg-visit-title]')!.textContent = `${this.store.isAirportWaypoint(leg.to.id) ? 'Airport / pattern' : 'Waypoint'} · ${leg.to.name}`;
     if (changed) {
       this.selectionListener?.(this.fromId, this.toId);
       window.dispatchEvent(new CustomEvent(LEG_SELECTED, { detail: this.getSelectedLeg() }));
@@ -152,7 +152,13 @@ export class SequentialLegPanel {
     if (!this.fromId || !this.toId) return false;
     this.hasDraft = true;
     const [pl, msa, direction, speed] = this.fields;
-    for (const field of this.fields) if (!field.checkValidity()) { field.reportValidity(); return false; }
+    for (const field of this.fields) {
+      // Spinner steps are 100 ft; manually entered whole-foot levels remain supported.
+      const altitude = field === pl || field === msa;
+      const entered = Number(field.value);
+      const validAltitude = altitude && field.value !== '' && Number.isInteger(entered) && entered >= 0 && entered <= 30000;
+      if (!field.checkValidity() && !validAltitude) { field.reportValidity(); return false; }
+    }
     const incompleteWind = (direction.value === '') !== (speed.value === '');
     if (incompleteWind && !allowIncompleteWind) {
       this.status('Enter both wind direction and speed, or leave both blank.');

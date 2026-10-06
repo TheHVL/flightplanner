@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { FlightPlanStore } from '../src/flightplan/FlightPlanStore';
+import { identifyTestAirport } from './helpers/airports';
 import { RouteShapeController } from '../src/flightplan/RouteShapeController';
 import {
   restoreWorkingRoute,
@@ -40,6 +41,7 @@ describe('local working-route persistence', () => {
     const sourceShapes = new RouteShapeController(source);
     const a = source.addWaypoint({ lat: 69, lon: 18 }, 'A');
     const b = source.addWaypoint({ lat: 69.4, lon: 19 }, 'B');
+    identifyTestAirport(source, b.id);
     const c = source.addWaypoint({ lat: 69.8, lon: 20 }, 'C');
 
     source.setPlannedAltitudeFt(a.id, b.id, 4500);

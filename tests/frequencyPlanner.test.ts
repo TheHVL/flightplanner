@@ -9,19 +9,42 @@ import { FrequencyPanel } from '../src/components/FrequencyPanel';
 import { validateRadioCatalog, type RadioCatalog } from '../src/frequencies/catalog';
 const read=(name:string)=>JSON.parse(readFileSync(`${process.cwd()}/public/${name}`,'utf8'));
 let data:RadioCatalog;
+let refreshFailed = false;
 beforeEach(()=>{
   localStorage.clear();vi.useFakeTimers();vi.setSystemTime(new Date('2026-10-05T22:00:00Z'));
+  refreshFailed = false;
   data=JSON.parse(readFileSync(`${process.cwd()}/tests/fixtures/aip/northern-radio-areas.json`,'utf8'));data.effectiveDate='2026-09-03';data.nextEffectiveDate=null;data.checkedAt=new Date().toISOString();
   vi.stubGlobal('fetch',vi.fn(async(input:RequestInfo|URL)=>{
     const url=String(input);let result;
     if(url.includes('aip-frequencies.json'))result=data;
-    else if(url.includes('aip-frequency-status.json'))result={state:'success',effectiveDate:data.effectiveDate,attemptedAt:data.checkedAt};
+    else if(url.includes('aip-frequency-status.json'))result={state:refreshFailed ? 'failed' : 'success',effectiveDate:data.effectiveDate,attemptedAt:data.checkedAt};
     else result={...read('aip-aerodromes.json'),effectiveDate:data.effectiveDate};
     return new Response(JSON.stringify(result),{status:200});
   }));
 });
 afterEach(()=>{vi.useRealTimers();vi.unstubAllGlobals();});
 describe('frequency planning integration',()=>{
+  it('suggests services on ROSSVOLL to SELNES after a recent refresh failure, and expires that fallback', async () => {
+    refreshFailed = true;
+    const store = new FlightPlanStore(), planner = new FrequencyPlanner(store);
+    const a = store.addWaypoint({ lat: 69.17833333333334, lon: 18.5 }, 'ROSSVOLL');
+    const b = store.addWaypoint({ lat: 69.44, lon: 18.998611111111114 }, 'SELNES');
+    store.setPlannedAltitudeFt(a.id, b.id, 2500);
+    await planner.reload();
+    const plan = planner.getPlans()[0];
+    expect(plan.note).toBeUndefined();
+    expect(plan.notice).toContain('Latest ATS refresh failed');
+    const channels = plan.segments.flatMap(s => [...s.primary, ...s.alternatives].map(c => c.channel));
+    expect(channels).toContain('118.805');
+    expect(channels).toContain('123.755');
+    expect(channels).toContain('126.455');
+    const element = document.createElement('section');
+    new FrequencyPanel(element, store, planner, true);
+    expect(element.querySelector('[data-menu-section="suggested-channels"]')!.textContent).toContain('last successful snapshot');
+    vi.setSystemTime(new Date('2026-10-08T22:00:00Z'));
+    expect(planner.getPlans()[0].segments).toEqual([]);
+    expect(planner.getPlans()[0].note).toContain('48 hours');
+  });
   it('validates the shipped snapshot and connects current airport channels to route suggestions',async()=>{
     expect(()=>validateRadioCatalog(read('aip-frequencies.json'))).not.toThrow();
     expect(()=>validateRadioCatalog(data)).not.toThrow();

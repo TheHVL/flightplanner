@@ -20,6 +20,16 @@ beforeEach(() => {
   new SequentialLegPanel(element, store);
 });
 describe('sequential leg preparation', () => {
+  it('steps altitude spinners by 100 ft and still saves manually entered whole-foot levels', () => {
+    const [pl, msa] = fields();
+    pl.value = '2000'; pl.stepUp(); pl.dispatchEvent(new Event('change', { bubbles: true }));
+    msa.value = '1500'; msa.stepDown(); msa.dispatchEvent(new Event('change', { bubbles: true }));
+    const leg = store.getLegs()[0];
+    expect(store.getPlannedAltitudeFt(leg.from.id, leg.to.id)).toBe(2100);
+    expect(store.getManualMsaFt(leg.from.id, leg.to.id)).toBe(1400);
+    enter(pl, '2350');
+    expect(store.getPlannedAltitudeFt(leg.from.id, leg.to.id)).toBe(2350);
+  });
   it('saves a row through Enter, including a partial direction, then advances and keeps focus', () => {
     const inputs = fields();
     enter(inputs[0], '3500'); expect(document.activeElement).toBe(inputs[1]);
