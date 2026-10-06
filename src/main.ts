@@ -212,6 +212,7 @@ new PlanLibraryPanel(document.querySelector<HTMLElement>('#saved-plans-panel')!,
   aircraftSettingsPanel.render();
   profileSettingsPanel.render();
   weatherPanel.onPlanLoaded();
+  void frequencyPlanner.reload();
   verticalProfilePanel.render();
 });
 const ofpTable = new OFPTable(tableElement, store);

@@ -6,9 +6,14 @@
 .frequency-segments { display:grid; gap:10px; }
 .frequency-segment { padding:12px; border:1px solid #dbe5e8; background:#f7fafb; border-radius:8px; min-width:0; }
 .frequency-segment > strong { font-size:12px; color:#526572; }
-.frequency-candidate { display:flex; gap:10px; align-items:baseline; margin:10px 0 4px; font-size:13px; }
+.frequency-candidate { display:grid; grid-template-columns:minmax(0,1fr); gap:5px; margin:10px 0 4px; font-size:13px; }
 .frequency-candidate > strong { font-size:16px; color:#195d70; font-variant-numeric:tabular-nums; }
 .frequency-candidate > span { flex:1; min-width:0; overflow-wrap:anywhere; }
+.frequency-channels { overflow-wrap:anywhere; }
+.frequency-service-details { margin-top:6px; font-size:11px; }
+.frequency-service-details summary { cursor:pointer; color:#426d7b; }
+.frequency-service-details a { font-size:11px; color:var(--accent, #2a6777); }
+.frequency-segment .frequency-note { padding:6px 8px; margin:8px 0 0; font-size:11px; }
 .frequency-candidate small,.frequency-airport small { display:block; font-size:11px; color:#667984; line-height:1.5; margin-top:3px; }
 .frequency-remarks { font-size:11px; line-height:1.5; color:#667984; overflow-wrap:anywhere; margin:4px 0 9px; }
 .frequency-alternatives { font-size:12px; margin-top:10px; }

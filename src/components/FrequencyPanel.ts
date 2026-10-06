@@ -57,10 +57,10 @@ export class FrequencyPanel {
       <details class="menu-subsection" data-menu-section="suggested-channels"><summary>Suggested services along this leg</summary>
       ${selected!.note ? `<p class="frequency-note">${e(selected!.note)}</p>` : ''}
       ${selected!.notice ? `<p class="frequency-note">${e(selected!.notice)}</p>` : ''}
-      <div class="frequency-segments">${selected!.segments.map(s => `<article class="frequency-segment"><strong>~${s.startNm.toFixed(1)}–${s.endNm.toFixed(1)} NM from ${e(selected!.leg.from.name)}</strong>
-        ${s.primary.map(c => this.candidate(c)).join('') || '<p>Automatic channel requires review.</p>'}
+      <div class="frequency-segments">${selected!.segments.map((s, index) => `<article class="frequency-segment"><strong>${s.endNm - s.startNm < 0.1 ? `Near ${s.startNm.toFixed(1)}` : `~${s.startNm.toFixed(1)}–${s.endNm.toFixed(1)}`} NM from ${e(selected!.leg.from.name)}</strong>
+        ${this.candidates(s.primary, `primary-${index}`) || '<p>Automatic channel requires review.</p>'}
         ${s.note ? `<p class="frequency-note">${e(s.note)}</p>` : ''}
-        ${s.alternatives.length ? `<details class="frequency-alternatives" data-menu-section="alternatives-${e(this.selectedKey)}-${s.startNm.toFixed(2)}"><summary>Other published services / channels</summary>${s.alternatives.map(c => this.candidate(c)).join('')}</details>` : ''}</article>`).join('')}</div>
+        ${s.alternatives.length ? `<details class="frequency-alternatives" data-menu-section="alternatives-${e(this.selectedKey)}-${s.startNm.toFixed(2)}"><summary>Other published services / channels</summary>${this.candidates(s.alternatives, `alternatives-${index}`)}</details>` : ''}</article>`).join('')}</div>
       </details>
       ${selected!.airports.length ? `<details class="menu-subsection" data-menu-section="airport-channels"><summary>Departure &amp; arrival radio references</summary>${selected!.airports.map(({airport, position}) => `<article class="frequency-airport"><strong>${position} · ${e(airport.icao)} ${e(airport.name)}</strong>${(airport.frequencies ?? []).filter(f => f.frequencyMHz !== '121.500').map(f => `<p><strong>${e(f.service)} ${e(f.frequencyMHz)}</strong> · ${e(f.callSign)}<small>${e(f.hours)}${f.remarks && f.remarks !== 'NIL' ? ` · ${e(f.remarks)}` : ''}</small></p>`).join('')}<a href="${e(airport.sourceUrl)}" target="_blank" rel="noopener noreferrer">AD 2 source</a></article>`).join('')}</details>` : ''}` : '<p class="menu-note">Add at least two waypoints to plan route frequencies.</p>'}
       <p class="frequency-message" role="status">${e(this.message)}</p>
@@ -81,8 +81,29 @@ export class FrequencyPanel {
     const choice = this.element.querySelector<HTMLSelectElement>('[data-frequency-choice]');
     if (choice) choice.value = selected?.manual ?? '';
   }
-  private candidate(c: ChannelSuggestion): string {
-    return `<div class="frequency-candidate"><strong>${e(c.channel)}</strong><span>${e(c.callSign)}<small>${e(c.area.name)} · ${c.role === 'overlying' ? 'Overlying ATS, below this area' : c.role === 'sector' ? 'Published radio sector' : 'Within published radio area'}</small></span><a href="${e(c.area.sourceUrl)}" target="_blank" rel="noopener noreferrer" title="Open the published source">AIP</a></div>${c.remarks && c.remarks !== 'NIL' ? `<p class="frequency-remarks">${e(c.remarks)}</p>` : ''}`;
+  private candidates(candidates: ChannelSuggestion[], section: string): string {
+    const groups = new Map<string, ChannelSuggestion[]>();
+    for (const candidate of candidates) {
+      const key = JSON.stringify([candidate.area.id, candidate.callSign, candidate.role]);
+      const group = groups.get(key) ?? [];
+      group.push(candidate);
+      groups.set(key, group);
+    }
+    return [...groups.values()].map(group => {
+      const c = group[0];
+      const channels = [...new Set(group.map(item => item.channel))];
+      const remarks = [...new Set(group.map(item => item.remarks).filter(value => value && value !== 'NIL'))];
+      const role = c.role === 'overlying' ? 'Overlying ATS' : c.role === 'sector' ? 'Radio sector' : 'Local ATS';
+      return `<div class="frequency-service"><div class="frequency-candidate"><span><strong>${e(c.callSign)}</strong><small>${e(role)}</small></span><strong class="frequency-channels">${channels.map(e).join(' / ')}</strong></div>
+        <details class="frequency-service-details" data-menu-section="service-${e(this.selectedKey)}-${e(section)}-${e(c.area.id)}-${e(c.callSign)}-${e(c.role)}"><summary>Remarks &amp; source</summary>
+          <p class="frequency-remarks">${e(c.area.name)} · ${c.role === 'overlying' ? 'Below this area' : c.role === 'sector' ? 'Published radio sector' : 'Within published radio area'}</p>
+          ${remarks.map(remark => {
+            const appliesTo = [...new Set(group.filter(item => item.remarks === remark).map(item => item.channel))];
+            return `<p class="frequency-remarks">${appliesTo.length < channels.length ? `<strong>${appliesTo.map(e).join(' / ')}:</strong> ` : ''}${e(remark)}</p>`;
+          }).join('')}
+          <a href="${e(c.area.sourceUrl)}" target="_blank" rel="noopener noreferrer" title="Open the published source">AIP source</a>
+        </details></div>`;
+    }).join('');
   }
   private key(p: LegFrequencyPlan): string { return `${p.leg.from.id}->${p.leg.to.id}`; }
   private change(event: Event): void {

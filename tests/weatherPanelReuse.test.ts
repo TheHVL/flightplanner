@@ -5,6 +5,7 @@ import { FlightPlanStore } from '../src/flightplan/FlightPlanStore';
 import { RouteShapeController } from '../src/flightplan/RouteShapeController';
 import { SavedPlanRepository, capturePlan } from '../src/flightplan/savedPlans';
 import { fetchForecastSample } from '../src/weather/openMeteo';
+import { calculateFuelPlanForStore, DEFAULT_FUEL_PLANNING_SETTINGS } from '../src/fuel/fuelPlanning';
 vi.mock('../src/weather/openMeteo', () => ({ fetchForecastSample: vi.fn() }));
 const sample = { validTimeUtc: '2026-10-06T11:00:00Z', altitudeFt: 5500, altitudeClamped: false, windFromDeg: 280, windSpeedKt: 23, temperatureC: 3, source: 'Test' };
 const settle = () => new Promise((done) => setTimeout(done, 0));
@@ -63,4 +64,56 @@ it('rejects a forecast result when its planned level changed while fetching', as
   resolve(sample); await settle();
   expect(store.getWeatherForecasts()).toEqual([]);
   expect(root.textContent).toContain('Route or forecast settings changed');
+});
+it('recalculates headings, groundspeed, time and fuel when a saved plan receives corrected winds', async () => {
+  const { store, root, panel, a, b } = setup();
+  store.updatePerformanceSettings({usePohPerformance:false});
+  store.updateVerticalProfileSettings({departureElevationFt:4500,destinationElevationFt:4500});
+  const fuel = {...DEFAULT_FUEL_PLANNING_SETTINGS,manualCruiseFuelFlowGph:12};
+  const shapes = new RouteShapeController(store), repository = new SavedPlanRepository(localStorage);
+  const saved = repository.save('Reuse',capturePlan(store,shapes));
+  vi.mocked(fetchForecastSample).mockResolvedValueOnce({...sample,windFromDeg:210,windSpeedKt:5});
+  root.querySelector<HTMLButtonElement>('[data-weather-fetch]')!.click(); await settle();
+  const before = calculateFuelPlanForStore(store,fuel).legs[0];
+  repository.load(saved,store,shapes); panel.onPlanLoaded();
+  const date = root.querySelector<HTMLInputElement>('[data-weather-time]')!;
+  date.value = '2026-10-06T11:00'; date.dispatchEvent(new Event('change',{bubbles:true}));
+  vi.mocked(fetchForecastSample).mockResolvedValueOnce(sample);
+  root.querySelector<HTMLButtonElement>('[data-weather-fetch]')!.click(); await settle();
+  const after = calculateFuelPlanForStore(store,fuel).legs[0];
+  for (const key of ['trueHeadingDeg','groundSpeedKt','flightTimeMin','legFuelGal'] as const) {
+    expect(after[key]).not.toBeNull(); expect(after[key]).not.toBeCloseTo(before[key]!,5);
+  }
+  expect(store.getManualLegWind(a.id,b.id)).toEqual({windFromDeg:210,windSpeedKt:10});
+  expect(JSON.stringify(repository.list()[0])).toBe(JSON.stringify(saved));
+});
+it('invalidates forecasts atomically when the stored departure date changes, and supports undo', () => {
+  const { store, a, b } = setup();
+  store.setRouteWeatherForecasts([{...sample,fromId:a.id,toId:b.id}]);
+  const seen: number[] = []; store.subscribe(()=>seen.push(store.getWeatherForecasts().length));
+  store.updateWeatherSettings({departureTimeUtc:'2026-10-07T11:00'});
+  expect(seen).toEqual([0]); expect(store.getManualLegWind(a.id,b.id)).not.toBeNull();
+  store.undoLastAction();
+  expect(store.getWeatherSettings().departureTimeUtc).toBe('2026-10-05T10:00');
+  expect(store.getWeatherForecasts()).toHaveLength(1);
+});
+it('clears downstream forecasts and updates the weather message when a level changes', () => {
+  const { store, root, a, b } = setup();
+  const c = store.addWaypoint({lat:69.9,lon:20},'ENSR');
+  store.setRouteWeatherForecasts([{...sample,fromId:a.id,toId:b.id},{...sample,fromId:b.id,toId:c.id}]);
+  store.setPlannedAltitudeFt(a.id,b.id,5500);
+  expect(store.getWeatherForecasts()).toEqual([]);
+  expect(root.querySelector('.weather-status')!.textContent).toContain('Fetch fresh winds');
+  expect(store.getManualLegWind(a.id,b.id)).not.toBeNull();
+});
+it('uses the saved manual backup when refreshing winds fails, without retaining the previous forecast', async () => {
+  const { store, root, a, b } = setup();
+  store.setRouteWeatherForecasts([{...sample,fromId:a.id,toId:b.id}]);
+  vi.mocked(fetchForecastSample).mockRejectedValueOnce(new Error('Forecast temporarily unavailable'));
+  root.querySelector<HTMLButtonElement>('[data-weather-fetch]')!.click(); await settle();
+  expect(store.getWeatherForecasts()).toEqual([]);
+  expect(store.getLegWeatherForecast(a.id,b.id)).toMatchObject({windFromDeg:210,windSpeedKt:10,source:'Manual per-leg wind backup'});
+  expect(root.textContent).toContain('Forecast temporarily unavailable');
+  expect(root.textContent).toContain('Manual leg wind backups were kept');
+  expect(root.querySelector<HTMLButtonElement>('[data-weather-fetch]')!.disabled).toBe(false);
 });

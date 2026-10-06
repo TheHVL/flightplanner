@@ -6,6 +6,7 @@ import { RouteShapeController } from '../src/flightplan/RouteShapeController';
 import { FrequencyPlanner } from '../src/frequencies/FrequencyPlanner';
 import { OFPTable } from '../src/components/OFPTable';
 import { FrequencyPanel } from '../src/components/FrequencyPanel';
+import { SavedPlanRepository, capturePlan } from '../src/flightplan/savedPlans';
 import { validateRadioCatalog, type RadioCatalog } from '../src/frequencies/catalog';
 const read=(name:string)=>JSON.parse(readFileSync(`${process.cwd()}/public/${name}`,'utf8'));
 let data:RadioCatalog;
@@ -24,6 +25,43 @@ beforeEach(()=>{
 });
 afterEach(()=>{vi.useRealTimers();vi.unstubAllGlobals();});
 describe('frequency planning integration',()=>{
+  it('groups channels for the same service and keeps remarks behind a persistent disclosure', async () => {
+    const store = new FlightPlanStore(), planner = new FrequencyPlanner(store);
+    const a = store.addWaypoint({lat:69.17833333333334,lon:18.5}, 'ROSSVOLL');
+    const b = store.addWaypoint({lat:69.44,lon:18.998611111111114}, 'SELNES');
+    store.setPlannedAltitudeFt(a.id,b.id,2500); await planner.reload();
+    const root = document.createElement('section'); new FrequencyPanel(root,store,planner,true);
+    const first = root.querySelector('.frequency-segment')!;
+    expect(first.querySelectorAll(':scope > .frequency-service')).toHaveLength(1);
+    expect(first.querySelector('.frequency-candidate')!.textContent).toContain('118.805 / 125.855');
+    expect(first.querySelector('.frequency-candidate')!.textContent).not.toContain('For ATS outside opening hours');
+    const details = first.querySelector<HTMLDetailsElement>('.frequency-service-details')!;
+    expect(details.open).toBe(false);
+    expect(details.textContent).toContain('For ATS outside opening hours');
+    expect(details.querySelector('a')!.href).toContain('ENR-2.1');
+    details.open = true; const key = details.dataset.menuSection;
+    store.setManualFrequency(a.id,b.id,'118.805');
+    expect(root.querySelector<HTMLDetailsElement>(`[data-menu-section="${key}"]`)!.open).toBe(true);
+    expect(root.querySelectorAll('[data-frequency-choice] option[value="118.805"]')).toHaveLength(1);
+    expect(root.querySelectorAll('[data-frequency-choice] option[value="125.855"]')).toHaveLength(1);
+  });
+  it('recomputes a loaded route against refreshed ATS data while retaining the selected OFP channel', async () => {
+    const store = new FlightPlanStore(), shapes = new RouteShapeController(store), planner = new FrequencyPlanner(store);
+    const a = store.addWaypoint({lat:69.17833333333334,lon:18.5}, 'ROSSVOLL');
+    const b = store.addWaypoint({lat:69.44,lon:18.998611111111114}, 'SELNES');
+    store.setPlannedAltitudeFt(a.id,b.id,2500); store.setManualFrequency(a.id,b.id,'118.805');
+    const repository = new SavedPlanRepository(localStorage), saved = repository.save('Training',capturePlan(store,shapes));
+    await planner.reload(); expect(planner.getPlans()[0].segments[0].primary.map(c=>c.channel)).toContain('118.805');
+    data.airspaces.find(a=>a.id==='bardufoss-tma')!.channels[0].channel = '119.805';
+    repository.load(saved,store,shapes); await planner.reload();
+    const plan = planner.getPlans()[0];
+    expect(plan.segments[0].primary.map(c=>c.channel)).toContain('119.805');
+    expect(plan.segments[0].primary.map(c=>c.channel)).not.toContain('118.805');
+    expect(plan.manual).toBe('118.805');
+    const root = document.createElement('section'); new FrequencyPanel(root,store,planner,true);
+    expect(root.querySelector('[data-frequency-choice] option[value="118.805"]')!.textContent).toContain('Saved selection');
+    expect(root.textContent).toContain('Confirm it for this flight');
+  });
   it('suggests services on ROSSVOLL to SELNES after a recent refresh failure, and expires that fallback', async () => {
     refreshFailed = true;
     const store = new FlightPlanStore(), planner = new FrequencyPlanner(store);
