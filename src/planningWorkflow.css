@@ -28,5 +28,7 @@
 @container (max-width: 340px) {
   .workflow-step > summary { padding: 11px; gap: 9px; }
   .workflow-title small { font-size: 10px; }
+}
+@container (max-width: 280px) {
   .leg-entry-form { grid-template-columns: minmax(0, 1fr); }
 }
