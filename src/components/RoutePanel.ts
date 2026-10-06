@@ -1,3 +1,4 @@
+import { openLegEditor } from './legEditorEvents';
 import type { FlightPlanStore } from '../flightplan/FlightPlanStore';
 
 export class RoutePanel {
@@ -20,7 +21,7 @@ export class RoutePanel {
         </div>
         <button class="ghost-button" data-action="clear" ${waypoints.length === 0 ? 'disabled' : ''}>Clear</button>
       </div>
-      <p class="hint">Click the map to add a waypoint at the end, drag a marker to move it, or drag the blue line between waypoints to shape the flown path without creating a new OFP waypoint. A shaped leg uses the longer plotted distance for time/fuel while TT/MT/MH remain based on the direct waypoint-to-waypoint course. Ctrl+Z / Cmd+Z immediately undoes the latest line-shape drag or planner action.</p>
+      <p class="hint">Add airports and reporting points below, or click an empty place on the map. Click a route leg to prepare it. Drag a waypoint to move it or drag a blue line to shape the flown path. Ctrl+Z / Cmd+Z undoes the latest planner action.</p>
       <div class="waypoint-list">
         ${waypoints.length === 0 ? '<div class="empty-state">No route yet</div>' : ''}
         ${waypoints.map((waypoint, index) => this.waypointRow(waypoint.id, waypoint.name, waypoint.lat, waypoint.lon, index, waypoints.length)).join('')}
@@ -46,6 +47,7 @@ export class RoutePanel {
             <input class="waypoint-name" data-field="name" value="${this.escape(name)}" aria-label="Waypoint name" />
           </div>
           <div class="coords">${lat.toFixed(5)}° / ${lon.toFixed(5)}°</div>
+          <div class="waypoint-planning-actions">${index < count - 1 ? `<button type="button" data-action="prepare">Prepare next leg</button>` : ''}<button type="button" data-action="visit" ${count < 2 ? 'disabled title="Add a destination first"' : ''}>Airport / pattern</button></div>
         </div>
         <div class="waypoint-actions">
           <button class="icon-button" data-action="up" title="Move up" ${index === 0 ? 'disabled' : ''}>↑</button>
@@ -71,6 +73,12 @@ export class RoutePanel {
     const id = card?.dataset.id;
     if (!id) return;
 
+    if (action === 'prepare' || action === 'visit') {
+      const legs = this.store.getLegs();
+      const leg = action === 'prepare' ? legs.find(l => l.from.id === id) : legs.find(l => l.to.id === id) ?? legs.find(l => l.from.id === id);
+      if (leg) openLegEditor({ fromId: leg.from.id, toId: leg.to.id, focus: action === 'visit' ? 'waypoint' : 'pl', waypointId: id });
+      return;
+    }
     if (action === 'up') this.store.moveWaypoint(id, -1);
     if (action === 'down') this.store.moveWaypoint(id, 1);
     if (action === 'remove') this.store.removeWaypoint(id);

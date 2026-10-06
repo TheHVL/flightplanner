@@ -25,6 +25,8 @@ import {
 } from './icaoQuality';
 
 export interface MapManagerCallbacks {
+  onLegSelected?(index: number): void;
+  onWaypointSelected?(id: string): void;
   onMapClick(lat: number, lon: number): void;
   onWaypointMoved(id: string, lat: number, lon: number): void;
   onRouteLegShape(legIndex: number, lat: number, lon: number): void;
@@ -145,6 +147,7 @@ export class MapManager {
   private readonly icaoLayer: AvinorIcaoLayer;
   private readonly routeLine: Polyline;
   private readonly routeHitLine: Polyline;
+  private readonly selectedLegLine: Polyline;
   private readonly verticalProfileLayer: LayerGroup;
   private readonly verticalConflictLayer: LayerGroup;
   private readonly msaCorridorLayer: LayerGroup;
@@ -158,7 +161,9 @@ export class MapManager {
   private msaCorridorVisible = false;
   private glideEnvelopeVisible = false;
 
+  private readonly waypointSelected: (id: string) => void;
   constructor(element: HTMLElement, callbacks: MapManagerCallbacks) {
+    this.waypointSelected = id => callbacks.onWaypointSelected?.(id);
     this.map = L.map(element, {
       zoomControl: true,
       attributionControl: true,
@@ -233,6 +238,7 @@ export class MapManager {
       interactive: false,
     }).addTo(this.map);
 
+    this.selectedLegLine = L.polyline([], { color: '#e6a325', weight: 7, opacity: 0.85, interactive: false }).addTo(this.map);
     this.routeHitLine = L.polyline([], {
       color: '#2563eb',
       weight: 18,
@@ -240,6 +246,12 @@ export class MapManager {
       interactive: true,
     }).addTo(this.map);
 
+    this.routeHitLine.on('click', (event: LeafletMouseEvent) => {
+      L.DomEvent.stop(event.originalEvent);
+      if (this.suppressNextMapClick) return;
+      const index = this.closestLegIndex(event.latlng);
+      if (index >= 0) callbacks.onLegSelected?.(index);
+    });
     this.routeHitLine.on('mousedown', (event: LeafletMouseEvent) => {
       this.startRouteShapeDrag(event);
     });
@@ -265,6 +277,11 @@ export class MapManager {
     this.requestChartEdition();
 
     window.setTimeout(() => this.invalidateSize(), 0);
+  }
+
+  setSelectedLeg(selection: {fromId: string; toId: string}): void {
+    const leg = this.renderedLegs.find(l => l.from.id === selection.fromId && l.to.id === selection.toId);
+    this.selectedLegLine.setLatLngs(leg ? routeLegPath(leg).map(p => [p.lat, p.lon] as [number, number]) : []);
   }
 
   invalidateSize(): void {
@@ -398,6 +415,7 @@ export class MapManager {
           icon: this.waypointIcon(index + 1, role),
         }).addTo(this.map);
 
+        marker.on('click', event => { L.DomEvent.stop(event.originalEvent); this.waypointSelected(waypoint.id); });
         marker.on('dragend', () => {
           const position = marker?.getLatLng();
           if (position) onMoved(waypoint.id, position.lat, position.lng);
@@ -421,7 +439,7 @@ export class MapManager {
     this.routeHitLine.setLatLngs(routeLatLngs);
     this.routeHitLine.unbindTooltip();
     if (waypoints.length > 1) {
-      this.routeHitLine.bindTooltip('Drag the route line to shape the flown path without adding an OFP waypoint', {
+      this.routeHitLine.bindTooltip('Click to prepare this leg. Drag to shape the flown path.', {
         sticky: true,
         direction: 'top',
       });
@@ -518,7 +536,7 @@ export class MapManager {
     const element = this.routeHitLine.getElement();
     if (element) (element as SVGElement).style.cursor = 'grab';
 
-    this.suppressNextMapClick = true;
+    this.suppressNextMapClick = drag.moved;
     window.setTimeout(() => {
       this.suppressNextMapClick = false;
     }, 0);
@@ -527,6 +545,8 @@ export class MapManager {
       callbacks.onRouteLegShape(drag.legIndex, event.latlng.lat, event.latlng.lng);
     } else {
       this.routeLine.setLatLngs(this.routePathLatLngs());
+      callbacks.onLegSelected?.(drag.legIndex);
+      this.suppressNextMapClick = true;
     }
     L.DomEvent.stop(event.originalEvent);
   }

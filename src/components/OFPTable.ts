@@ -1,3 +1,4 @@
+import { LEG_SELECTED, openLegEditor } from './legEditorEvents';
 import { escapeHtml } from '../utils/html';
 import type { FlightPlanStore } from '../flightplan/FlightPlanStore';
 import { totalRouteDistanceNm } from '../navigation/geodesy';
@@ -25,14 +26,30 @@ interface LegRowResult {
 }
 
 export class OFPTable {
+  private selectedLeg = '';
   constructor(
     private readonly element: HTMLElement,
     private readonly store: FlightPlanStore,
   ) {
     this.element.addEventListener('change', (event) => this.handleChange(event));
     this.element.addEventListener('click', event => {
-      const button = (event.target as HTMLElement).closest<HTMLElement>('[data-frequency-open-from]');
-      if (button) window.dispatchEvent(new CustomEvent('flightplanner-select-frequency-leg', { detail: { fromId: button.dataset.frequencyOpenFrom, toId: button.dataset.frequencyOpenTo } }));
+      const target = event.target as HTMLElement;
+      const frequency = target.closest<HTMLElement>('[data-frequency-open-from]');
+      const row = target.closest<HTMLElement>('tr[data-leg-from]');
+      if (!row) return;
+      const detail = { fromId: row.dataset.legFrom!, toId: row.dataset.legTo! };
+      if (frequency) {
+        window.dispatchEvent(new CustomEvent('flightplanner-select-frequency-leg', { detail }));
+        openLegEditor({ ...detail, focus: 'frequency' });
+      } else {
+        const field = target.closest<HTMLElement>('[data-editor-field]')?.dataset.editorField;
+        openLegEditor({ ...detail, focus: field === 'msa' ? 'msa' : 'pl' });
+      }
+    });
+    window.addEventListener(LEG_SELECTED, event => {
+      const { fromId, toId } = (event as CustomEvent<{fromId:string;toId:string}>).detail;
+      this.selectedLeg = `${fromId}->${toId}`;
+      for (const row of this.element.querySelectorAll<HTMLElement>('tr[data-leg-from]')) row.classList.toggle('ofp-row-selected', `${row.dataset.legFrom}->${row.dataset.legTo}` === this.selectedLeg);
     });
     if (typeof window !== 'undefined') {
       window.addEventListener(FUEL_SETTINGS_CHANGED_EVENT, () => this.render());
@@ -83,6 +100,7 @@ export class OFPTable {
           <strong title="Exact calculated distance: ${totalDistance.toFixed(2)} NM; total display rounds up to the next whole NM">${ceilLegDistanceNm(totalDistance)} NM</strong>
         </div>
       </div>
+      <p class="ofp-editor-hint">Click a flight row, level or frequency to open that leg in Prepare legs.</p>
       <div class="table-scroll">
         <table class="ofp-table">
           <thead>
@@ -191,8 +209,8 @@ export class OFPTable {
 
       return {
         html: `
-        <tr class="${[belowMsa ? 'ofp-row-warning' : '', boundaryClass].filter(Boolean).join(' ')}">
-          <td><strong>${escapeHtml(leg.from.name)}</strong></td>
+        <tr class="${[belowMsa ? 'ofp-row-warning' : '', boundaryClass, this.selectedLeg === `${leg.from.id}->${leg.to.id}` ? 'ofp-row-selected' : ''].filter(Boolean).join(' ')}" data-leg-from="${leg.from.id}" data-leg-to="${leg.to.id}">
+          <td><button type="button" class="ofp-leg-link" aria-label="Prepare leg ${escapeHtml(leg.from.name)} to ${escapeHtml(leg.to.name)}">${escapeHtml(leg.from.name)}</button></td>
           <td class="calculated" title="${tasTitle}">${legPlan.tasKt.toFixed(0)}</td>
           <td class="calculated">${this.headingLabel(leg.trueTrackDeg)}</td>
           <td class="calculated" title="${settings.automaticVariation ? `WMM2025 at leg midpoint: ${rawVariationDegEast.toFixed(2)}°, rounded for OFP` : 'Manual variation override'}">${variationLabel}</td>
@@ -212,36 +230,10 @@ export class OFPTable {
             : `<td class="calculated" title="${accumulatedFuelTitle}">${ceilFuelUsageGal(accumulatedFuelGal)}</td>`}
           <td><strong>${escapeHtml(leg.to.name)}</strong></td>
           <td class="editable-cell ${belowMsa ? 'msa-warning-cell' : ''}">
-            <input
-              class="ofp-altitude-input ofp-msa-input"
-              type="number"
-              inputmode="numeric"
-              min="0"
-              max="30000"
-              step="100"
-              placeholder="ft"
-              aria-label="Manual MSA ${escapeHtml(leg.from.name)} to ${escapeHtml(leg.to.name)}"
-              title="Manual MSA. UTSA daylight VFR rule supplied for this project: highest terrain/obstacle within 1 NM of route plus 500 ft."
-              data-msa-from="${leg.from.id}"
-              data-msa-to="${leg.to.id}"
-              value="${manualMsaFt ?? ''}"
-            />
+            <button type="button" class="ofp-altitude-input ofp-edit-link" data-editor-field="msa" aria-label="Edit MSA ${escapeHtml(leg.from.name)} to ${escapeHtml(leg.to.name)}" title="Open this leg in Prepare legs">${manualMsaFt ?? 'Add'}</button>
           </td>
           <td class="editable-cell ${belowMsa ? 'pl-warning-cell' : ''}">
-            <input
-              class="ofp-altitude-input"
-              type="number"
-              inputmode="numeric"
-              min="0"
-              max="30000"
-              step="100"
-              placeholder="ft"
-              aria-label="Planned altitude ${escapeHtml(leg.from.name)} to ${escapeHtml(leg.to.name)}"
-              title="${altitudeWarning}"
-              data-alt-from="${leg.from.id}"
-              data-alt-to="${leg.to.id}"
-              value="${plannedAltitudeFt ?? ''}"
-            />
+            <button type="button" class="ofp-altitude-input ofp-edit-link" data-editor-field="pl" aria-label="Edit planned altitude ${escapeHtml(leg.from.name)} to ${escapeHtml(leg.to.name)}" title="${altitudeWarning}">${plannedAltitudeFt ?? 'Add'}</button>
           </td>
           <td class="calculated">${this.headingLabel(magneticHeading)}</td>
           <td class="calculated" title="${gsTitle}">${legPlan.groundSpeedKt.toFixed(0)}</td>
@@ -260,7 +252,7 @@ export class OFPTable {
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Navigation calculation failed.';
       return {
-        html: `<tr class="${boundaryClass}"><td><strong>${escapeHtml(leg.from.name)}</strong></td><td colspan="23" class="calculation-error">${escapeHtml(message)}</td>${this.frequencyCell(leg)}</tr>`,
+        html: `<tr class="${boundaryClass}" data-leg-from="${leg.from.id}" data-leg-to="${leg.to.id}"><td><strong>${escapeHtml(leg.from.name)}</strong></td><td colspan="23" class="calculation-error">${escapeHtml(message)}</td>${this.frequencyCell(leg)}</tr>`,
       };
     }
   }

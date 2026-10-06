@@ -1,0 +1,32 @@
+/* Four planning stages, one reusable editor. */
+.workflow-intro { margin: 0; padding: 3px 5px 9px; font-size: 11px; line-height: 1.5; color: #61718a; }
+.leg-field-guide, .ofp-editor-hint { font-size: 11px; line-height: 1.5; color: #61718a; margin: 9px 0; }
+.ofp-editor-hint { padding: 0 16px; }
+.workflow-title { display: grid; min-width: 0; gap: 5px; }
+.workflow-title small { font-size: 10px; font-weight: 400; line-height: 1.5; color: #60738b; white-space: normal; overflow-wrap: anywhere; }
+.workflow-step > summary { align-items: flex-start; }
+.workflow-step > summary .workflow-number { display: grid; place-items: center; width: 24px; height: 24px; flex: 0 0 24px; padding: 0; border-radius: 50%; background: #e9f1fb; font-size: 12px; color: #1d5faa; }
+.workflow-step[open] > summary .workflow-number { background: #1f67d8; color: white; }
+.workflow-step > .menu-subsection { margin: 0 12px 12px; }
+.workflow-ofp-button { display: block; width: calc(100% - 28px); margin: 14px; padding: 10px; color: #fff; background: #1f67d8; border: 0; border-radius: 6px; font: inherit; font-size: 12px; cursor: pointer; }
+.waypoint-planning-actions { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; }
+.waypoint-planning-actions button { padding: 5px 6px; font-size: 10px; color: #285885; background: #f4f8fc; border: 1px solid #d4e1ee; border-radius: 4px; cursor: pointer; }
+#sequential-leg-panel [data-leg-frequency] { border-top: 1px solid #d9e2ed; margin-top: 12px; padding-top: 14px; }
+#sequential-leg-panel [data-leg-frequency] .menu-subsection, #sequential-leg-panel [data-leg-frequency] .menu-help { margin-left: 0; margin-right: 0; }
+#sequential-leg-panel [data-leg-visit] { margin: 15px 0 0; }
+#sequential-leg-panel [data-leg-visit] .vertical-waypoint-section { padding: 12px; }
+#sequential-leg-panel [data-leg-visit] .vertical-waypoint-row { grid-template-columns: minmax(0, 1fr); }
+#sequential-leg-panel [data-leg-visit] .vertical-airport-tools { grid-template-columns: minmax(0, 1fr) auto; }
+#sequential-leg-panel [data-leg-visit] .vertical-airport-elevation { grid-column: 1 / -1; }
+.ofp-leg-link { border: 0; padding: 0; background: transparent; font: inherit; font-weight: 700; color: #245a91; text-align: left; cursor: pointer; }
+.ofp-edit-link { cursor: pointer; color: #245a91; background: #f6faff; }
+.ofp-row-selected > td:first-child { box-shadow: inset 4px 0 #e6a325; background: #fff8e8; }
+.ofp-table tr[data-leg-from] { cursor: pointer; }
+.ofp-table :is(.ofp-leg-link,.ofp-edit-link):focus-visible { outline: 2px solid #1f67d8; outline-offset: 2px; }
+#weather-panel .manual-wind-row { grid-template-columns: minmax(0, 1fr) auto; }
+#weather-panel .manual-wind-row button { padding: 7px; border: 1px solid #d4e1ee; border-radius: 5px; background: #f5f9fe; color: #285885; cursor: pointer; }
+@container (max-width: 340px) {
+  .workflow-step > summary { padding: 11px; gap: 9px; }
+  .workflow-title small { font-size: 10px; }
+  .leg-entry-form { grid-template-columns: minmax(0, 1fr); }
+}

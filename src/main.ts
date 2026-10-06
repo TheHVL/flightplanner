@@ -9,6 +9,9 @@ import './sidebarLayout.css';
 import './savedPlans.css';
 import './planningMenus.css';
 import './frequencies.css';
+import './planningWorkflow.css';
+import { PlanningWorkflow, planningSidebarMarkup } from './components/PlanningWorkflow';
+import { LEG_SELECTED, openLegEditor } from './components/legEditorEvents';
 import { FrequencyPlanner } from './frequencies/FrequencyPlanner';
 import { FrequencyPanel } from './components/FrequencyPanel';
 import { FlightPlanStore } from './flightplan/FlightPlanStore';
@@ -66,43 +69,7 @@ root.innerHTML = `
 
     <main class="workspace">
       <aside id="planning-sidebar" class="left-column">
-        <div class="sidebar-menu-heading"><strong>Flight preparation</strong><button type="button" id="collapse-planning-menus" class="ghost-button">Collapse all</button></div>
-        <details class="phase-disclosure" data-panel-key="saved-plans">
-          <summary><span>PLANS</span><strong>Save &amp; load</strong></summary>
-          <section id="saved-plans-panel" class="panel"></section>
-        </details>
-        <details class="phase-disclosure" data-panel-key="route" open>
-          <summary><span>ROUTE</span><strong>Waypoints</strong></summary>
-          <section id="route-panel" class="route-panel panel"></section>
-        </details>
-        <details class="phase-disclosure" data-panel-key="aip">
-          <summary><span>ROUTE</span><strong>Airports &amp; reporting points</strong></summary>
-          <section id="aip-panel" class="panel"></section>
-        </details>
-        <details class="phase-disclosure" data-panel-key="leg-entry">
-          <summary><span>LEGS</span><strong>Levels, MSA &amp; manual winds</strong></summary>
-          <section id="sequential-leg-panel" class="panel"></section>
-        </details>
-        <details class="phase-disclosure" data-panel-key="weather">
-          <summary><span>WEATHER</span><strong>Forecast winds &amp; temperature</strong></summary>
-          <section id="weather-panel" class="weather-panel panel"></section>
-        </details>
-        <details class="phase-disclosure" data-panel-key="frequencies">
-          <summary><span>COMMS</span><strong>Route frequencies</strong></summary>
-          <section id="frequency-panel" class="panel"></section>
-        </details>
-        <details class="phase-disclosure" data-panel-key="performance">
-          <summary><span>AIRCRAFT</span><strong>Cruise performance &amp; fuel</strong></summary>
-          <section id="performance-panel" class="performance-panel panel"></section>
-        </details>
-        <details class="phase-disclosure" data-panel-key="vertical">
-          <summary><span>AIRCRAFT</span><strong>Climb, descent &amp; airport visits</strong></summary>
-          <section id="vertical-profile-panel" class="vertical-profile-panel panel"></section>
-        </details>
-        <details class="phase-disclosure" data-panel-key="navigation">
-          <summary><span>DEFAULTS</span><strong>Manual TAS, wind &amp; variation</strong></summary>
-          <section id="navigation-panel" class="navigation-panel panel"></section>
-        </details>
+        ${planningSidebarMarkup}
       </aside>
       <div id="sidebar-resize-handle" class="sidebar-resize-handle" role="separator" tabindex="0"
         aria-orientation="vertical" aria-label="Resize planning sidebar" aria-controls="planning-sidebar"
@@ -212,26 +179,47 @@ const frequencyPlanner = new FrequencyPlanner(store);
 const routeShapeController = new RouteShapeController(store);
 restoreWorkingRoute(store, routeShapeController);
 const routePanel = new RoutePanel(routeElement, store);
-new SequentialLegPanel(document.querySelector<HTMLElement>('#sequential-leg-panel')!, store);
+const legEditor = new SequentialLegPanel(document.querySelector<HTMLElement>('#sequential-leg-panel')!, store);
+const embeddedFrequency = new FrequencyPanel(document.querySelector<HTMLElement>('[data-leg-frequency]')!, store, frequencyPlanner, true);
+const visitPanel = new VerticalProfilePanel(document.querySelector<HTMLElement>('[data-waypoint-visit]')!, store, 'waypoint');
+legEditor.onSelection((fromId, toId) => embeddedFrequency.selectLeg(fromId, toId));
+window.dispatchEvent(new CustomEvent('flightplanner-select-waypoint-visit', { detail: { waypointId: legEditor.getSelectedLeg().toId } }));
+visitPanel.render();
+new PlanningWorkflow(document.querySelector<HTMLElement>('#planning-sidebar')!, store);
 new AipPanel(document.querySelector<HTMLElement>('#aip-panel')!, store);
 const navigationPanel = new NavigationPanel(navigationElement, store);
-const performancePanel = new PerformancePanel(performanceElement, store);
+const performancePanel = new PerformancePanel(performanceElement, store, 'fuel');
+const aircraftSettingsPanel = new PerformancePanel(document.querySelector<HTMLElement>('#aircraft-settings-panel')!, store, 'settings');
+const profileSettingsPanel = new VerticalProfilePanel(document.querySelector<HTMLElement>('#profile-settings-panel')!, store, 'settings');
 const weatherPanel = new WeatherPanel(weatherElement, store);
-const verticalProfilePanel = new VerticalProfilePanel(verticalProfileElement, store);
+const verticalProfilePanel = new VerticalProfilePanel(verticalProfileElement, store, 'profile');
 new PlanLibraryPanel(document.querySelector<HTMLElement>('#saved-plans-panel')!, store, routeShapeController, () => {
+  legEditor.onPlanLoaded();
   navigationPanel.render();
   performancePanel.render();
+  aircraftSettingsPanel.render();
+  profileSettingsPanel.render();
   weatherPanel.onPlanLoaded();
   verticalProfilePanel.render();
 });
 const ofpTable = new OFPTable(tableElement, store);
-new FrequencyPanel(document.querySelector<HTMLElement>('#frequency-panel')!, store, frequencyPlanner);
 frequencyPlanner.subscribe(() => ofpTable.render());
 void frequencyPlanner.reload();
 const mapManager = new MapManager(mapElement, {
   onMapClick: (lat, lon) => store.addWaypoint({ lat, lon }),
   onWaypointMoved: (id, lat, lon) => store.updateWaypoint(id, { lat, lon }),
   onRouteLegShape: (legIndex, lat, lon) => routeShapeController.setLegShape(legIndex, { lat, lon }),
+  onLegSelected: index => { const leg = store.getLegs()[index]; if (leg) openLegEditor({ fromId: leg.from.id, toId: leg.to.id }); },
+  onWaypointSelected: id => {
+    const leg = store.getLegs().find(l => l.to.id === id) ?? store.getLegs().find(l => l.from.id === id);
+    if (leg) openLegEditor({ fromId: leg.from.id, toId: leg.to.id, focus: 'waypoint', waypointId: id });
+  },
+});
+
+window.addEventListener(LEG_SELECTED, () => mapManager.setSelectedLeg(legEditor.getSelectedLeg()));
+document.querySelector('[data-view-ofp]')!.addEventListener('click', () => {
+  tableElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  tableElement.querySelector<HTMLButtonElement>('button')?.focus({ preventScroll: true });
 });
 
 for (const disclosure of document.querySelectorAll<HTMLDetailsElement>('.phase-disclosure[data-panel-key]')) {
@@ -392,6 +380,8 @@ document.addEventListener('keydown', (event) => {
 
 navigationPanel.render();
 performancePanel.render();
+aircraftSettingsPanel.render();
+profileSettingsPanel.render();
 weatherPanel.render();
 verticalProfilePanel.render();
 
@@ -556,6 +546,7 @@ const render = () => {
   ofpTable.render();
   mapManager.renderMsaCorridor(legs);
   mapManager.renderRoute(waypoints, legs, (id, lat, lon) => store.updateWaypoint(id, { lat, lon }));
+  mapManager.setSelectedLeg(legEditor.getSelectedLeg());
   renderVerticalProfileMarkers();
   void renderGlideEnvelope();
 };
