@@ -1,9 +1,9 @@
 import { expect, it, vi } from 'vitest';
 import { generateRouteCandidates } from '../src/generator/candidates';
-import { reviewCandidates } from '../src/generator/review';
+import { candidateReviewBlocksTransfer, reviewCandidates } from '../src/generator/review';
 import { calculateRouteLegs } from '../src/navigation/geodesy';
 import { fetchTerrainReview } from '../src/routing/terrain';
-import { generatorFixture, generatorNow, generatorRequest, generatorRaster } from './helpers/generatorFixture.mjs';
+import { generatorFixture, generatorNow, generatorRequest, generatorRaster, generatorRadioFixture } from './helpers/generatorFixture.mjs';
 const mode = vi.hoisted(() => ({ value: 'conflict' }));
 vi.mock('../src/routing/terrain', async importOriginal => {
   const original = await importOriginal();
@@ -49,4 +49,17 @@ it('retains missing coverage and withholds modeled altitudes for conflicting pro
   expect(unknown.minimumTransitMarginFt).toBeNull();
   const aborted = new AbortController(); aborted.abort();
   await expect(reviewCandidates(drafts, generatorRequest, null, aborted.signal)).rejects.toThrow();
+});
+it('blocks missing restriction coverage and a terminal restriction encounter without claiming activation', async () => {
+  mode.value = 'normal'; const drafts = await candidates();
+  const oldRadio = generatorRadioFixture(); delete oldRadio.restrictions; delete oldRadio.restrictionCoverage;
+  const missing = await reviewCandidates(drafts, generatorRequest, oldRadio, new AbortController().signal);
+  expect(missing.every(candidateReviewBlocksTransfer)).toBe(true);
+  expect(missing[0].issues.some(i => i.title === 'Published restriction coverage unavailable')).toBe(true);
+  const radio = generatorRadioFixture(), point = drafts[0].draft.waypoints[0];
+  radio.restrictions[0].volumes[0].polygon = [[point.lon - 0.01, point.lat - 0.01], [point.lon + 0.01, point.lat - 0.01], [point.lon + 0.01, point.lat + 0.01], [point.lon - 0.01, point.lat + 0.01], [point.lon - 0.01, point.lat - 0.01]];
+  const result = await reviewCandidates(drafts, generatorRequest, radio, new AbortController().signal);
+  expect(result.every(candidateReviewBlocksTransfer)).toBe(true);
+  const issue = result[0].issues.find(i => i.category === 'airspace' && i.blocksTransfer);
+  expect(issue.legIndex).toBe(0); expect(issue.detail).toContain('Activation is unknown');
 });

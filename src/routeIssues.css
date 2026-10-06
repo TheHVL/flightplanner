@@ -1,0 +1,12 @@
+.route-issues { display: grid; gap: 10px; margin: 12px 0; }
+.route-issue { border: 1px solid #d5dde7; border-left: 4px solid #b45309; border-radius: 9px; padding: 12px; background: #fffbeb; overflow-wrap: anywhere; }
+.route-issue-conflict { border-left-color: #dc2626; background: #fff1f2; }
+.route-issue-incomplete { border-left-color: #b45309; background: #fff7ed; }
+.route-issue .route-issue-label { margin: 0 0 6px; color: #7c2d12; font-size: 12px; font-weight: 700; }
+.route-issue-conflict .route-issue-label { color: #9f1239; }
+.route-issue p { margin: 7px 0; line-height: 1.5; font-size: 13px; }
+.route-issue-buttons { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; }
+.route-issue-buttons button, .route-issue-buttons a { white-space: normal; font-size: 12px; }
+.route-review-summary { margin: 12px 0; padding: 14px 18px; border: 1px solid #d5dde7; border-left: 4px solid #b45309; border-radius: 10px; background: #fffbeb; }
+.route-review-summary.has-conflict { border-left-color: #dc2626; background: #fff1f2; }
+.route-review-summary p { margin: 0 0 9px; line-height: 1.5; }

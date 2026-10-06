@@ -6,11 +6,18 @@ export interface RadioArea {
   id: string; name: string; type: string; unit: string; callSign: string; channels: RadioChannel[];
   volumes: RadioVolume[]; hours: string; remarks: string; sourceUrl: string; unresolvedGeometry?: boolean;
 }
+export interface PublishedRestriction {
+  id: string; name: string; type: 'P' | 'R' | 'D'; sourceUrl: string;
+  volumes: RadioVolume[]; remarks: string; activation: 'unknown';
+  unresolvedGeometry?: boolean; verticalLimitsUnknown?: boolean;
+}
 export interface RadioCatalog {
   schemaVersion: 1; source: string; effectiveDate: string; checkedAt: string; generatedAt: string;
   issueUrl: string; nextEffectiveDate: string | null; airspaces: RadioArea[]; coverageWarnings: string[];
   withheldAreas?: Array<{ name: string; bounds: [number, number, number, number]; sourceUrl: string; }>;
   boundarySource: { source: string; sourceUrl: string; license: string; simplificationMeters: number; };
+  restrictions?: PublishedRestriction[];
+  restrictionCoverage?: { sourceUrl: string; sha256: string; publishedAreaCount: number };
 }
 export function validateRadioCatalog(value: unknown): asserts value is RadioCatalog {
   const d = value as RadioCatalog;
@@ -29,6 +36,21 @@ export function validateRadioCatalog(value: unknown): asserts value is RadioCata
     ids.add(area.id);
   }
   if (d.withheldAreas !== undefined && (!Array.isArray(d.withheldAreas) || d.withheldAreas.some(a => !a || typeof a.name !== 'string' || !sourceUrl(a.sourceUrl) || !Array.isArray(a.bounds) || a.bounds.length !== 4 || a.bounds.some(n => !Number.isFinite(n)) || a.bounds[0] >= a.bounds[2] || a.bounds[1] >= a.bounds[3]))) throw new Error('Invalid ATS review area.');
+  if (d.restrictions !== undefined || d.restrictionCoverage !== undefined) {
+    const coverage = d.restrictionCoverage;
+    if (!coverage || !sourceUrl(coverage.sourceUrl) || !/^[a-f0-9]{64}$/.test(coverage.sha256) || !Number.isInteger(coverage.publishedAreaCount) || coverage.publishedAreaCount < 1 ||
+        !Array.isArray(d.restrictions) || d.restrictions.length !== coverage.publishedAreaCount) throw new Error('Published restriction coverage is incomplete.');
+    const restrictionIds = new Set<string>();
+    for (const area of d.restrictions) {
+      if (!area || !/^EN[PRD]\d+$/.test(area.id) || restrictionIds.has(area.id) || area.type !== area.id[2] || typeof area.name !== 'string' || typeof area.remarks !== 'string' ||
+          area.activation !== 'unknown' || area.sourceUrl !== coverage.sourceUrl || area.unresolvedGeometry !== undefined && typeof area.unresolvedGeometry !== 'boolean' ||
+          area.verticalLimitsUnknown !== undefined && typeof area.verticalLimitsUnknown !== 'boolean' || !Array.isArray(area.volumes) || !area.volumes.length ||
+          area.volumes.some(v => !v || typeof v.publishedLimits !== 'string' || !limit(v.lower) || !limit(v.upper) || !Array.isArray(v.polygon) || v.polygon.length < 4 ||
+            v.polygon.some(p => !Array.isArray(p) || p.length !== 2 || !Number.isFinite(p[0]) || !Number.isFinite(p[1]) || Math.abs(p[0]) > 180 || Math.abs(p[1]) > 90) ||
+            v.polygon[0][0] !== v.polygon.at(-1)![0] || v.polygon[0][1] !== v.polygon.at(-1)![1] || v.upper.reference !== 'UNL' && v.lower.reference === v.upper.reference && (v.lower.value ?? 0) >= (v.upper.value ?? 0))) throw new Error('Published restriction data contain an invalid area.');
+      restrictionIds.add(area.id);
+    }
+  }
 }
 export function radioFreshness(data: RadioCatalog, status: AipRefreshStatus | null, airports: AipAerodromeCatalog, now = new Date(), flightDate = ''): { usable: boolean; message: string; warning?: boolean } {
   if (data.effectiveDate !== airports.effectiveDate) return { usable: false, message: 'ATS and airport data use different AIP editions. Automatic channels are withheld.' };

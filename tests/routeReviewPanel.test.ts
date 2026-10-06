@@ -6,7 +6,7 @@ import { RouteReviewPanel } from '../src/components/RouteReviewPanel';
 import type { FrequencyPlanner } from '../src/frequencies/FrequencyPlanner';
 import type { RadioCatalog } from '../src/frequencies/catalog';
 afterEach(() => { vi.unstubAllGlobals(); localStorage.clear(); });
-function setup() {
+function setup(options = {}) {
   const store = new FlightPlanStore();
   store.addWaypoint({ lat: 69.05, lon: 18.5 }); store.addWaypoint({ lat: 69.65, lon: 18.9 });
   const leg = store.getLegs()[0];
@@ -16,7 +16,7 @@ function setup() {
   let catalog: RadioCatalog | null = JSON.parse(readFileSync('public/aip-frequencies.json', 'utf8'));
   let listener: () => void = () => {};
   const frequencies = { reload: vi.fn(async () => {}), getVerifiedCatalog: () => catalog, getStatus: () => 'Source verification unavailable.', subscribe: (callback: () => void) => { listener = callback; } } as unknown as FrequencyPlanner;
-  new RouteReviewPanel(element, store, frequencies);
+  new RouteReviewPanel(element, store, frequencies, options);
   return { element, store, leg, frequencies, expire: () => { catalog = null; listener(); } };
 }
 function heightResponse(input: RequestInfo | URL) {
@@ -60,4 +60,24 @@ it('removes airspace results if verified source data expire or a reload fails', 
   expire();
   expect(element.textContent).toContain('Airspace unavailable');
   expect(element.textContent).not.toContain('modeled altitude within published limits');
+});
+it('exposes leg-specific warnings, map actions and a visible summary, then clears stale overlays', async () => {
+  const summaryElement = document.createElement('section'), onIssues = vi.fn(), onFocusIssue = vi.fn();
+  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => heightResponse(input)));
+  const { element, store, leg } = setup({ summaryElement, onIssues, onFocusIssue });
+  document.body.append(summaryElement);
+  expect(summaryElement.textContent).toContain('has not been checked');
+  summaryElement.querySelector<HTMLButtonElement>('button')!.click();
+  await vi.waitFor(() => expect(element.textContent).toContain('terrain points returned'));
+  expect(summaryElement.textContent).toContain('conflicts');
+  const warning = element.querySelector<HTMLElement>('.route-issue-conflict')!;
+  expect(warning.textContent).toContain('Leg 1:'); expect(warning.textContent).toContain('Next action:');
+  warning.querySelector<HTMLButtonElement>('[data-issue-action="map"]')!.click();
+  expect(onFocusIssue).toHaveBeenCalledWith(expect.objectContaining({ legIndex: 0 }), expect.any(Array));
+  const request = vi.fn(); window.addEventListener('flightplanner-open-leg-editor', request, { once: true });
+  warning.querySelector<HTMLButtonElement>('[data-issue-action="edit"]')!.click();
+  expect(request.mock.calls[0][0].detail).toEqual({ fromId: leg.from.id, toId: leg.to.id, focus: 'pl' });
+  store.setPlannedAltitudeFt(leg.from.id, leg.to.id, 4000);
+  expect(summaryElement.textContent).toContain('has not been checked');
+  expect(onIssues.mock.calls.at(-1)![0]).toEqual([]);
 });

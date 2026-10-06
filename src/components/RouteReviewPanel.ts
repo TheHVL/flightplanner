@@ -11,6 +11,16 @@ import { buildTerrainProbes, fetchTerrainReview, summarizeTerrainLeg, type Terra
 import type { RouteLeg } from '../types';
 import { escapeHtml as e } from '../utils/html';
 import { setPanelMarkup } from '../utils/panelMarkup';
+import { openLegEditor } from './legEditorEvents';
+import { airspaceRouteIssues, profileRouteIssues, sortRouteIssues, terrainRouteIssues, type RouteIssue } from '../routing/issues';
+import { hasRestrictionCoverage } from '../routing/restrictions';
+import { routeIssueMarkup } from '../presentation/routeIssues';
+
+interface RouteReviewOptions {
+  summaryElement?: HTMLElement;
+  onIssues?: (issues: RouteIssue[], legs: RouteLeg[]) => void;
+  onFocusIssue?: (issue: RouteIssue, legs: RouteLeg[]) => void;
+}
 
 export class RouteReviewPanel {
   private controller: AbortController | null = null;
@@ -21,12 +31,21 @@ export class RouteReviewPanel {
   private altitudeNote = '';
   private airspaceNote = '';
   private version = 0;
-  constructor(private readonly element: HTMLElement, private readonly store: FlightPlanStore, private readonly frequencies: FrequencyPlanner) {
+  private profileIssues: RouteIssue[] = [];
+  private issues: RouteIssue[] = [];
+  constructor(private readonly element: HTMLElement, private readonly store: FlightPlanStore, private readonly frequencies: FrequencyPlanner, private readonly options: RouteReviewOptions = {}) {
     element.addEventListener('click', event => {
+      const issueButton = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-route-issue]');
+      if (issueButton) { this.openIssue(issueButton.dataset.routeIssue!, issueButton.dataset.issueAction!); return; }
       const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-route-review]');
       if (!button) return;
       if (this.controller) this.invalidate('Check cancelled.');
       else void this.check();
+    });
+    options.summaryElement?.addEventListener('click', () => {
+      this.reveal();
+      this.element.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });
+      if (!this.terrain && !this.controller) void this.check();
     });
     store.subscribe(() => this.invalidate());
     window.addEventListener(ROUTE_SHAPE_CHANGED_EVENT, () => this.invalidate());
@@ -38,6 +57,7 @@ export class RouteReviewPanel {
     const hadResults = !!this.terrain || !!this.controller || this.airspace.size > 0;
     this.version++; this.controller?.abort(); this.controller = null;
     this.terrain = null; this.catalog = null; this.airspace.clear(); this.altitudeNote = ''; this.airspaceNote = '';
+    this.profileIssues = [];
     if (hadResults) this.status = message;
     this.render();
   }
@@ -50,6 +70,7 @@ export class RouteReviewPanel {
         waypointConstraints: this.store.getVerticalWaypointConstraints().map(c => ({ waypointId: c.waypointId, mode: c.mode, elevationFt: c.elevationFt })),
         ...this.store.getVerticalProfileSettings(), climbPerformanceMode: getFuelPlanningSettings().climbPerformanceMode,
         climbOatC: this.store.getPerformanceSettings().oatC });
+      this.profileIssues = profileRouteIssues(profile, legs);
       if (profile.climbPerformanceIncomplete || calculateVerticalProfileConflicts(profile).length) throw new Error('Resolve the vertical profile before comparing altitude with terrain or airspace.');
       if (levels.some(level => level === null)) this.altitudeNote = 'Enter PL for every leg to compare the modeled altitude.';
       return { at: (leg, distance) => levels[leg.index] === null ? null : modeledAltitudeFtAtRouteDistance(legs, levels, profile.events, offsets.get(leg.index)! + distance),
@@ -95,19 +116,53 @@ export class RouteReviewPanel {
     if (this.catalog && this.catalog !== this.frequencies.getVerifiedCatalog()) {
       this.catalog = null; this.airspace.clear(); this.airspaceNote = this.frequencies.getStatus();
     }
+    const legs = this.store.getLegs();
+    const airports = this.store.getWaypoints().filter(point => this.store.isAirportWaypoint(point.id));
+    this.issues = sortRouteIssues([...this.profileIssues, ...(this.terrain ? terrainRouteIssues(this.terrain, legs, airports) : []),
+      ...airspaceRouteIssues([...this.airspace.values()].flat())]);
+    if (this.terrain && !hasRestrictionCoverage(this.catalog)) this.issues.push({ id: 'restriction-coverage', severity: 'incomplete', category: 'coverage', blocksTransfer: true,
+      title: 'Published restriction coverage unavailable', detail: 'This check has no verified ENR 5.1 restriction footprint coverage. Missing results do not establish unrestricted airspace.',
+      action: 'Run the check again after the published-data refresh succeeds, and review the official AIP and current NOTAM.' });
+    if (this.altitudeNote && !this.issues.some(issue => issue.category === 'profile')) this.issues.push({ id: 'profile-unavailable', severity: 'incomplete', category: 'profile', blocksTransfer: true,
+      title: 'Altitude/profile needs attention', detail: this.altitudeNote, action: 'Review aircraft and climb/descent settings and enter PL for every leg, then run the check again.', focus: 'profile' });
+    this.issues = sortRouteIssues(this.issues);
+    this.options.onIssues?.(this.issues, legs);
+    if (this.options.summaryElement) {
+      const conflicts = this.issues.filter(issue => issue.severity === 'conflict').length, missing = this.issues.filter(issue => issue.severity === 'incomplete').length;
+      this.options.summaryElement.hidden = !legs.length;
+      this.options.summaryElement.classList.toggle('has-conflict', conflicts > 0);
+      this.options.summaryElement.innerHTML = `<p><strong>Route checks:</strong> ${this.controller ? 'Checking current route…' : this.terrain ? `${conflicts} conflicts · ${missing} incomplete checks · ${this.issues.filter(issue => issue.severity === 'review').length} review notices. See affected legs and next actions.` : 'Current route has not been checked. Terrain, airspace and restriction coverage need review.'}</p><button type="button" class="ghost-button">${this.terrain ? 'Review notices' : 'Check terrain &amp; airspace'}</button>`;
+    }
     setPanelMarkup(this.element, `
       <p class="hint">Optional review of the plotted route, including climb and descent. Your MSA entries stay as entered.</p>
       <button type="button" data-route-review ${!this.store.getLegs().length ? 'disabled' : ''}>${this.controller ? 'Cancel check' : 'Check terrain &amp; airspace'}</button>
       <p role="status" aria-live="polite">${e(this.status)}</p>
       ${this.altitudeNote ? `<p class="menu-note">${e(this.altitudeNote)}</p>` : ''}
       ${this.airspaceNote ? `<p class="menu-note">Airspace unavailable: ${e(this.airspaceNote)}</p>` : ''}
+      ${this.issues.length ? `<div class="route-issues">${this.issues.slice(0, 3).map(issue => routeIssueMarkup(issue, legs, 'manual')).join('')}${this.issues.length > 3 ? `<details class="menu-subsection" data-menu-section="route-issues-more"><summary>Show ${this.issues.length - 3} more notices</summary>${this.issues.slice(3).map(issue => routeIssueMarkup(issue, legs, 'manual')).join('')}</details>` : ''}</div>` : ''}
       ${this.terrain || this.airspace.size ? `<div class="route-review-list">${this.store.getLegs().map(leg => this.legMarkup(leg)).join('')}</div>` : ''}
       <details class="menu-help" data-menu-section="route-review-coverage"><summary>Sources &amp; coverage</summary>
         <p>Terrain: <a href="https://ws.geonorge.no/hoydedata/v1/" target="_blank" rel="noopener noreferrer">Kartverket height API</a>. Sample spacing up to 0.5 NM along and across a strip 1 NM either side. This is sampled terrain, not a complete terrain maximum or obstacle database. The 500 ft margin is a review reference, including at departure and arrival; it does not calculate MSA.</p>
         ${this.terrain ? `<p>Fetched ${e(this.terrain.fetchedAt)}. Datasets: ${e([...new Set(this.terrain.heights.flatMap(h => h ? [h.dataset] : []))].join(', ') || 'none')}. Dataset observation dates are not supplied by this API.</p>` : ''}
-        <p>Airspace: imported AIP terminal volumes only. ATS radio sectors are excluded. Restricted/danger areas, temporary restrictions and NOTAM are not covered. FL and AGL boundaries require review; no QNH conversion is assumed. An empty list does not mean unrestricted airspace.</p>
+        <p>Airspace: imported AIP terminal volumes and available ENR 5.1 restriction footprints. ATS radio sectors are excluded. Restriction activation, temporary restrictions and NOTAM are not covered. FL and AGL boundaries require review; no QNH conversion is assumed. An empty list does not mean unrestricted airspace.</p>
+        ${hasRestrictionCoverage(this.catalog) ? `<p>${this.catalog!.restrictionCoverage!.publishedAreaCount} published restriction footprints imported. Activation is unknown. Unsupported geometry is labelled as a conservative review footprint.</p>` : ''}
         ${this.catalog ? `<p>AIP ${e(this.catalog.effectiveDate)} · checked ${e(this.catalog.checkedAt)}.</p>${this.catalog.coverageWarnings.map(w => `<p>${e(w)}</p>`).join('')}` : ''}
       </details>`);
+  }
+  private reveal(): void {
+    let node: HTMLElement | null = this.element;
+    while (node) { if (node instanceof HTMLDetailsElement) node.open = true; node = node.parentElement; }
+  }
+  private openIssue(id: string, action: string): void {
+    const issue = this.issues.find(item => item.id === id); if (!issue) return;
+    const legs = this.store.getLegs(), leg = legs.find(l => l.index === issue.legIndex);
+    if (action === 'profile') {
+      const panel = document.querySelector<HTMLElement>('#profile-settings-panel');
+      let node = panel ?? null;
+      while (node) { if (node instanceof HTMLDetailsElement) node.open = true; node = node.parentElement; }
+      panel?.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' }); panel?.querySelector<HTMLInputElement>('input, select')?.focus();
+    } else if (action === 'edit' && leg) openLegEditor({ fromId: leg.from.id, toId: leg.to.id, focus: issue.focus === 'profile' ? 'pl' : issue.focus });
+    else if (action === 'map') this.options.onFocusIssue?.(issue, legs);
   }
   private legMarkup(leg: RouteLeg): string {
     const summary = this.terrain ? summarizeTerrainLeg(this.terrain, leg.index) : null;

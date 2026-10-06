@@ -1,14 +1,13 @@
 // @vitest-environment happy-dom
-import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { GeneratorPage } from '../src/generator/GeneratorPage';
-import { generatorFixture, generatorNow, generatorRaster } from './helpers/generatorFixture.mjs';
+import { generatorFixture, generatorNow, generatorRaster, generatorRadioFixture } from './helpers/generatorFixture.mjs';
 import { FlightPlanStore } from '../src/flightplan/FlightPlanStore';
 import { RouteShapeController } from '../src/flightplan/RouteShapeController';
 import { saveWorkingRoute } from '../src/flightplan/workingRoutePersistence';
-const map = vi.hoisted(() => ({ calls: [] }));
-vi.mock('../src/generator/GeneratorMap', () => ({ GeneratorMap: class { show(candidates, selected) { map.calls.push({ candidates, selected }); } } }));
-let terrainMode = 'normal', resolvers = [];
+const map = vi.hoisted(() => ({ calls: [], focus: [] }));
+vi.mock('../src/generator/GeneratorMap', () => ({ GeneratorMap: class { show(candidates, selected, issues) { map.calls.push({ candidates, selected, issues }); } focusIssue(candidate, issue) { map.focus.push({ candidate, issue }); } } }));
+let terrainMode = 'normal', radioMode = 'normal', resolvers = [];
 vi.mock('../src/routing/terrainRaster', async importOriginal => ({ ...await importOriginal(),
   fetchRouteTerrainRaster: vi.fn(async (_points, signal) => {
     if (terrainMode === 'pending') await new Promise(resolve => resolvers.push(resolve));
@@ -17,11 +16,10 @@ vi.mock('../src/routing/terrainRaster', async importOriginal => ({ ...await impo
 }));
 beforeEach(() => {
   vi.setConfig({ testTimeout: 15000 });
-  localStorage.clear(); sessionStorage.clear(); map.calls = []; terrainMode = 'normal'; resolvers = [];
+  localStorage.clear(); sessionStorage.clear(); map.calls = []; map.focus = []; terrainMode = 'normal'; radioMode = 'normal'; resolvers = [];
   vi.setSystemTime(generatorNow);
   const { catalog, refresh } = generatorFixture();
-  const radio = JSON.parse(readFileSync('tests/fixtures/aip/northern-radio-areas.json', 'utf8'));
-  radio.checkedAt = generatorNow.toISOString(); radio.effectiveDate = catalog.effectiveDate; radio.nextEffectiveDate = catalog.nextEffectiveDate;
+  const radio = generatorRadioFixture();
   vi.stubGlobal('fetch', vi.fn(async input => {
     const url = String(input);
     if (url.includes('hoydedata')) {
@@ -30,7 +28,9 @@ beforeEach(() => {
       if (terrainMode === 'pending') return new Promise(resolve => resolvers.push(() => resolve(response())));
       return response();
     }
-    return new Response(JSON.stringify(url.includes('aip-frequencies.json') ? radio : url.includes('status.json') ? refresh : catalog));
+    const radioData = structuredClone(radio);
+    if (radioMode === 'missing') { delete radioData.restrictions; delete radioData.restrictionCoverage; }
+    return new Response(JSON.stringify(url.includes('aip-frequencies.json') ? radioData : url.includes('status.json') ? refresh : catalog));
   }));
 });
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
@@ -83,8 +83,20 @@ it('blocks transferring terrain-conflicting drafts and cancels old results after
 it('keeps missing terrain visibly incomplete and blocks transfer until it can be checked', async () => {
   const root = page(); await waitReady(root); terrainMode = 'missing'; submit(root);
   await vi.waitFor(() => expect(root.querySelector('[data-generator-status]').textContent).toContain('No draft meets'), { timeout: 10000 });
-  expect(root.querySelector('.generator-check-state').textContent).toContain('Terrain check incomplete');
+  expect(root.querySelector('.route-issues').textContent).toContain('Terrain heights missing');
   expect(root.textContent).not.toContain('No low transit margin found');
   expect(root.querySelector('[data-generator-transfer]').disabled).toBe(true);
   expect(sessionStorage.length).toBe(0);
+});
+it('locates a warning on the map without changing the manual plan and blocks an unverified restriction snapshot', async () => {
+  const root = page(); await waitReady(root); terrainMode = 'mountain'; submit(root);
+  await vi.waitFor(() => expect(root.querySelector('[data-generator-status]').textContent).toContain('No draft meets'), { timeout: 10000 });
+  const issueButton = root.querySelector('[data-route-issue][data-issue-action="map"]');
+  expect(issueButton.closest('.route-issue').textContent).toMatch(/Leg \d+:/);
+  issueButton.click(); expect(map.focus).toHaveLength(1);
+  expect(map.focus[0].issue.legIndex).toBeTypeOf('number'); expect(sessionStorage.length).toBe(0);
+  terrainMode = 'normal'; radioMode = 'missing'; submit(root);
+  await vi.waitFor(() => expect(root.querySelector('[data-generator-status]').textContent).toContain('No draft meets'), { timeout: 10000 });
+  expect(root.textContent).toContain('Published restriction coverage unavailable');
+  expect(root.querySelector('[data-generator-transfer]').disabled).toBe(true);
 });

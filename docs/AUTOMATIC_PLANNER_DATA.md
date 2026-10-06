@@ -1,6 +1,6 @@
 # Route Generator and automatic planner data
 
-The **Route Generator** is a separate page at `generator.html`, with its own form, map and temporary plan state. Airport selection covers current AIP mainland aerodromes at or north of Bodø, ordered by ICAO. Published terminal procedure coverage remains partial, with reviewed segments initially available for ENDU and ENTC and unresolved ENSR procedures. It generates route drafts for comparison and later editing in Manual Planner. It is not a complete operational route solver: published chart bends, airport joins, obstacles, restricted airspace and NOTAM are not fully encoded.
+The **Route Generator** is a separate page at `generator.html`, with its own form, map and temporary plan state. Airport selection covers current AIP mainland aerodromes at or north of Bodø, ordered by ICAO. Published terminal procedure coverage remains partial, with reviewed segments initially available for ENDU and ENTC and unresolved ENSR procedures. It generates route drafts for comparison and later editing in Manual Planner. It is not a complete operational route solver: published chart bends, airport joins, obstacles, restriction activation and NOTAM are not fully encoded.
 
 ## Using the separate page
 
@@ -32,7 +32,19 @@ The optional panel compares modeled flight altitude at each station with sampled
 
 `src/routing/airspace.ts` follows plotted paths and modeled climb/descent, splitting at geometry and AMSL altitude boundaries. Chords are at most 0.5 NM; intersection distances are planning estimates. It uses the existing verified AIP terminal-volume catalog, excluding Polaris ATS radio sectors from airspace restrictions. Each encounter retains published limits and source links.
 
-FL and AGL boundaries are marked for review without assuming QNH or terrain-reference conversions. Unresolved geometry or missing modeled altitude is also marked for review. The catalog is a terminal/radio-data subset, not complete legal airspace coverage: restricted/danger areas, temporary restrictions, NOTAM and all local procedures are not covered. A missing encounter never means unrestricted airspace. Source freshness uses the existing matching-edition, 48-hour verification and flight-date checks.
+FL and AGL boundaries are marked for review without assuming QNH or terrain-reference conversions. Unresolved geometry or missing modeled altitude is also marked for review. A missing encounter never means unrestricted airspace. Source freshness uses the existing matching-edition, 48-hour verification and flight-date checks.
+
+The ATS refresh also imports the current ENR 5.1 prohibited, restricted and danger-area entries into a separate `restrictions` array, with source checksum and published entry count. They never supply frequency suggestions. Explicit polygons, country-border edges and circumscribed sampled circles are supported. Unsupported curves use conservative bounded review footprints; missing/NOTAM-only vertical limits retain an explicit unknown flag and the original publication text. Unknown vertical limits do not replace valid polygon geometry with a bounding box. Every imported entry has `activation: 'unknown'`. A source with an unlocated or duplicate entry fails the refresh instead of silently omitting it. Previously imported missing entries require publication-removal review.
+
+Inter-airport terrain search avoids every imported restriction footprint horizontally, regardless of altitude or activity, with a 250 m search allowance. Node connections, endpoint anchors and shortcut simplification all retain avoidance, including narrow and collinear boundary intersections. It does not assume that a danger area is active, or that an unknown area is inactive. This conservative policy can exclude usable routes, particularly around unsupported sector geometry. The allowance is not an operational clearance margin. Published terminal chains are checked separately against the restriction volumes after profile modeling. A restriction encounter or incomplete verified restriction coverage blocks generator transfer. Controlled terminal-airspace encounters remain review/clearance notices, not an automatic prohibition.
+
+This is publication footprint coverage, not complete legal airspace coverage. Restriction activation, temporary restrictions, NOTAM, obstacles and all local procedures remain outside the model. Circles and route intersection distances are planning approximations. Airports and restriction data must use the same current, verified edition. Generator transfer rechecks data age and edition before staging a route.
+
+## Actionable notices
+
+`src/routing/issues.ts` represents conflict, incomplete-check and review notices separately. Terrain notices retain the controlling sample's own modeled altitude, returned surface elevation, lateral offset and along-leg distance. Coarse raster notices retain the controlling corridor section. Published MAX conflicts explain why raising preferred altitude cannot resolve that conflict. Missing heights and missing modeled altitudes remain incomplete checks, never clearance results.
+
+The manual planner shows a route-check summary above the OFP, with up to three notices visible in the review panel and the rest in a disclosure. Notices identify the leg, explain the finding and suggest a next action; buttons locate the affected map section and open the existing altitude/frequency editor or profile settings. The generator uses the same notices and map colors. Red indicates a detected conflict; amber indicates incomplete data or review. Data editing cancels checks and clears old overlays. Notices do not change PL or manual MSA. Results are not added to saved-plan JSON.
 
 ## VFR inputs for the generator
 
@@ -44,6 +56,6 @@ Chart review corrected two older inferred connections: ENTC's northeast sequence
 
 ## Remaining work before operational automatic routing
 
-Review and encode actual chart geometry, airport joins and unresolved altitude/direction requirements. Add authoritative obstacle and restricted-airspace coverage and a complete terrain corridor. Higher-resolution peak-preserving search, geographic landmark/coastline preferences, integrated restricted-airspace avoidance, forecast winds during generation and runway-specific approach/pattern geometry remain future work. `readyForAutomaticRouting` stays false to distinguish the present draft comparison from complete operational routing.
+Review and encode actual chart geometry, airport joins and unresolved altitude/direction requirements. Add authoritative obstacles and a complete terrain corridor. Higher-resolution peak-preserving search, geographic landmark/coastline preferences, verified restriction activation and NOTAM, more precise curved restriction geometry, forecast winds during generation and runway-specific approach/pattern geometry remain future work. `readyForAutomaticRouting` stays false to distinguish the present draft comparison from complete operational routing.
 
 Route-review results are temporary. Editing route, profile, flight date, aircraft or fuel settings cancels pending checks and removes old results. Loading a saved plan likewise requires a fresh check. Nothing is added to saved-plan JSON.

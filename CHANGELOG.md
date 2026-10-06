@@ -2,6 +2,13 @@
 
 This file records significant Flightplanner updates, formulas, source assumptions, limitations and implementation decisions. New updates are added at the top.
 
+## 2026-10-06, actionable route notices and restriction footprint coverage
+
+- Added shared leg-specific conflict, incomplete-check and review notices, retaining controlling terrain/altitude values and map locations. Published MAX conflicts explain why raising cruise altitude cannot resolve them. Manual notices open the existing leg/profile editors; a summary above the OFP keeps check status visible.
+- Extended the daily AIP radio-area refresh with a separate ENR 5.1 restriction dataset, source checksum and entry count. The current import retains all 164 published entries. Explicit polygons, country-border edges and sampled circumscribed circles are supported. Unsupported curves retain conservative review footprints; NOTAM-only vertical limits stay unknown. Restriction entries never supply radio channels.
+- Terrain search conservatively avoids every imported restriction footprint, regardless of altitude or activation, with a 250 m search allowance. Endpoint anchors, graph edges and simplified shortcuts retain avoidance. This can exclude usable routes and does not supply operational clearance. Terminal chains receive a separate restriction review.
+- Generator transfer is withheld for restriction encounters or unavailable verified airspace/restriction coverage. Controlled airspace remains a clearance/review notice. Activation, temporary restrictions, NOTAM, full chart tracks and obstacles remain outside these checks. Existing manual PL/MSA and save/load formats are unchanged.
+
 ## 2026-10-05, whole-number OFP total distance
 
 - OFP Total route now displays whole nautical miles, rounded upward using the existing distance-display convention. Exact distance remains available in its tooltip and continues to drive calculations. Accumulated-distance cells retain their existing display precision.

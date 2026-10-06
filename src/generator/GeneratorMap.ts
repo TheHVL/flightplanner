@@ -3,19 +3,23 @@ import 'leaflet/dist/leaflet.css';
 import { AvinorIcaoLayer } from '../map/MapManager';
 import { escapeHtml } from '../utils/html';
 import type { RouteCandidate } from './candidates';
+import { issueRouteCoordinates, issueSeverityLabel, type RouteIssue } from '../routing/issues';
 /** A preview map with no waypoint editing and no reference to the manual store. */
 export class GeneratorMap {
   private readonly map: L.Map;
   private readonly routes: L.LayerGroup;
+  private readonly notice: L.LayerGroup;
   constructor(element: HTMLElement) {
     this.map = L.map(element).setView([69.5, 19.2], 7);
     const topo = L.tileLayer('https://cache.kartverket.no/v1/wmts/1.0.0/topo/default/webmercator/{z}/{y}/{x}.png', { attribution: '&copy; Kartverket', maxZoom: 19, noWrap: true }).addTo(this.map);
     const icao = new AvinorIcaoLayer({ attribution: 'ICAO 1:500 000 &copy; Avinor' });
     L.control.layers({ 'Norgeskart · Kartverket': topo, 'ICAO 1:500 000 · Avinor': icao }, undefined, { collapsed: true }).addTo(this.map);
     this.routes = L.layerGroup().addTo(this.map);
+    this.notice = L.layerGroup().addTo(this.map);
   }
-  show(candidates: RouteCandidate[], selected: string): void {
+  show(candidates: RouteCandidate[], selected: string, issues: RouteIssue[] = []): void {
     this.routes.clearLayers();
+    this.notice.clearLayers();
     for (const candidate of [...candidates].sort((a, b) => Number(a.id === selected) - Number(b.id === selected))) {
       const chosen = candidate.id === selected;
       const points = candidate.draft.waypoints;
@@ -28,7 +32,21 @@ export class GeneratorMap {
       });
     }
     const chosen = candidates.find(c => c.id === selected);
+    if (chosen) for (const issue of issues.filter(i => i.startNm !== undefined && i.endNm !== undefined).reverse()) {
+      const points = issueRouteCoordinates(issue, chosen.legs);
+      if (!points.length) continue;
+      L.polyline(points.map(p => [p.lat, p.lon] as [number, number]), { color: issue.severity === 'conflict' ? '#dc2626' : '#b45309', weight: 8, opacity: 0.55, interactive: false }).addTo(this.routes);
+    }
     if (chosen) this.map.fitBounds(L.latLngBounds(chosen.draft.waypoints.map(p => [p.lat, p.lon] as [number, number])), { padding: [35, 35], maxZoom: 10 });
     this.map.invalidateSize();
+  }
+  focusIssue(candidate: RouteCandidate, issue: RouteIssue): void {
+    const points = issueRouteCoordinates(issue, candidate.legs); if (!points.length) return;
+    this.notice.clearLayers();
+    const color = issue.severity === 'conflict' ? '#dc2626' : '#b45309';
+    L.polyline(points.map(p => [p.lat, p.lon] as [number, number]), { color, weight: 10, opacity: 0.85 }).addTo(this.notice);
+    this.map.fitBounds(L.latLngBounds(points.map(p => [p.lat, p.lon] as [number, number])), { padding: [70, 70], maxZoom: 12 });
+    L.popup().setLatLng([points[0].lat, points[0].lon]).setContent(`<strong>${escapeHtml(issueSeverityLabel(issue.severity))}: ${escapeHtml(issue.title)}</strong><p>${escapeHtml(issue.action)}</p>`).openOn(this.map);
+    this.map.getContainer().scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });
   }
 }

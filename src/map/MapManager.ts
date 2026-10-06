@@ -14,6 +14,7 @@ import L, {
 import 'leaflet/dist/leaflet.css';
 import type { Coordinate, RouteLeg, Waypoint } from '../types';
 import { routeLegPath } from '../navigation/geodesy';
+import { issueRouteCoordinates, issueSeverityLabel, type RouteIssue } from '../routing/issues';
 import {
   buildLegCorridorPolygon,
   destinationCoordinate,
@@ -155,6 +156,7 @@ export class MapManager {
   private readonly selectedLegLine: Polyline;
   private readonly verticalProfileLayer: LayerGroup;
   private readonly verticalConflictLayer: LayerGroup;
+  private readonly routeIssueLayer: LayerGroup;
   private readonly msaCorridorLayer: LayerGroup;
   private readonly glideEnvelopeLayer: LayerGroup;
   private readonly glideCoastlineLayer: LayerGroup;
@@ -199,6 +201,7 @@ export class MapManager {
     conflictPane.style.zIndex = '610';
     conflictPane.style.pointerEvents = 'none';
     this.verticalConflictLayer = L.layerGroup().addTo(this.map);
+    this.routeIssueLayer = L.layerGroup().addTo(this.map);
 
     const verticalPane = this.map.createPane('vertical-profile-pane');
     verticalPane.style.zIndex = '620';
@@ -510,6 +513,19 @@ export class MapManager {
         },
       ).addTo(this.verticalConflictLayer);
     }
+  }
+  renderRouteIssues(issues: RouteIssue[], legs: RouteLeg[]): void {
+    this.routeIssueLayer.clearLayers();
+    for (const issue of issues.filter(i => i.startNm !== undefined && i.endNm !== undefined).reverse()) {
+      const points = issueRouteCoordinates(issue, legs); if (!points.length) continue;
+      L.polyline(points.map(p => [p.lat, p.lon] as [number, number]), { color: issue.severity === 'conflict' ? '#dc2626' : '#b45309', weight: 8, opacity: 0.6, interactive: false }).addTo(this.routeIssueLayer);
+    }
+  }
+  focusRouteIssue(issue: RouteIssue, legs: RouteLeg[]): void {
+    const points = issueRouteCoordinates(issue, legs); if (!points.length) return;
+    this.map.fitBounds(L.latLngBounds(points.map(p => [p.lat, p.lon] as [number, number])), { padding: [55, 55], maxZoom: 12 });
+    L.popup().setLatLng([points[0].lat, points[0].lon]).setContent(`<strong>${escapeHtml(issueSeverityLabel(issue.severity))}: ${escapeHtml(issue.title)}</strong><p>${escapeHtml(issue.action)}</p>`).openOn(this.map);
+    this.map.getContainer().scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });
   }
 
   renderVerticalProfileMarkers(markers: VerticalProfileMapMarker[]): void {
