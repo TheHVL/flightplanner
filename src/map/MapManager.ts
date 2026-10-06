@@ -323,7 +323,6 @@ export class MapManager {
         zIndexOffset: -500,
       }).addTo(this.publishedPointLayer);
       marker.getElement()?.setAttribute('aria-label', label);
-      marker.bindTooltip(escapeHtml(point.name), { permanent: zoom >= 9, direction: 'right', offset: [9,0], className: 'aip-map-label' });
       marker.on('click', event => { L.DomEvent.stop(event.originalEvent); this.publishedPointSelected(point); });
     }
   }
