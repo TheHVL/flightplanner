@@ -24,8 +24,9 @@ The working plan is autosaved locally. Named plans can be saved, loaded and expo
 
 - Kartverket Norgeskart and Avinor ICAO 1:500 000 layers.
 - Great-circle distance and initial true track, wind triangle, WCA, headings, groundspeed, and WMM2025 magnetic variation with manual overrides.
-- One draggable shaping bend per leg. It changes flown distance, time and fuel without adding an OFP fix; TT/MT/MH still use the direct waypoint-to-waypoint course.
-- Optional ±1 NM MSA inspection corridor, including shaped legs. MSA is entered by the pilot; PL below entered MSA is highlighted.
+- One draggable shaping bend per leg. It changes flown distance, time and fuel without adding an OFP fix; TT/MT/MH still use the direct waypoint-to-waypoint course. Add an actual waypoint when you want a separate navigation leg.
+- The manual and generator maps draw densified great-circle sections matching route distance and terrain sampling. Terrain cross-sections follow the local path tangent; this does not change OFP tracks or headings.
+- Optional ±1 NM MSA inspection corridor, including shaped legs. Lateral terrain offsets use WGS84 ellipsoidal distances with a 1 cm inset for API coordinate rounding. Terrain is point-sampled, so peaks between probes and obstacles remain outside the check. MSA is entered by the pilot; PL below entered MSA is highlighted.
 - Optional C182T zero-wind glide and coarse coastline screening. The Figure 3-1 approximation is height above the assumed landing surface divided by 700, bounded at 14,000 ft. It assumes a sea-level shoreline and does not establish terrain clearance or a suitable landing site. The bundled Natural Earth 1:10m coastline can omit small islands and fine shoreline detail.
 
 ### Vertical profile and patterns

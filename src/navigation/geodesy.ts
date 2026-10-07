@@ -105,13 +105,28 @@ export function trackAtRouteDistance(legs: RouteLeg[], distanceFromDepartureNm: 
       const to = path[index + 1];
       const segmentDistanceNm = greatCircleDistanceNm(from, to);
       if (remaining <= segmentDistanceNm || (leg === legs[legs.length - 1] && index === path.length - 2)) {
-        return initialTrueTrackDeg(from, to);
+        if (segmentDistanceNm <= 1e-9) return initialTrueTrackDeg(from, to);
+        if (remaining >= segmentDistanceNm - 1e-9) return normalizeDegrees(initialTrueTrackDeg(to, from) + 180);
+        const point = interpolateGreatCircle(from, to, remaining / segmentDistanceNm);
+        return initialTrueTrackDeg(point, to);
       }
       remaining -= segmentDistanceNm;
     }
   }
 
   return legs[legs.length - 1].trueTrackDeg;
+}
+
+/** Densify the same great-circle sections used for distance and terrain sampling. */
+export function densifyRoutePath(path: Coordinate[], maxStepNm = 0.1): Coordinate[] {
+  if (!Number.isFinite(maxStepNm) || maxStepNm <= 0) throw new Error('Route drawing step must be positive.');
+  if (!path.length) return [];
+  const points: Coordinate[] = [{ lat: path[0].lat, lon: path[0].lon }];
+  for (let i = 0; i < path.length - 1; i++) {
+    const count = Math.max(1, Math.ceil(greatCircleDistanceNm(path[i], path[i + 1]) / maxStepNm));
+    for (let j = 1; j <= count; j++) points.push(interpolateGreatCircle(path[i], path[i + 1], j / count));
+  }
+  return points;
 }
 
 function interpolateGreatCircle(a: Coordinate, b: Coordinate, fraction: number): Coordinate {

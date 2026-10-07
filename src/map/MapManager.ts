@@ -13,7 +13,7 @@ import L, {
 } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import type { Coordinate, RouteLeg, Waypoint } from '../types';
-import { routeLegPath } from '../navigation/geodesy';
+import { densifyRoutePath, routeLegPath } from '../navigation/geodesy';
 import { issueRouteCoordinates, issueSeverityLabel, type RouteIssue } from '../routing/issues';
 import {
   buildLegCorridorPolygon,
@@ -243,14 +243,16 @@ export class MapManager {
       .addTo(this.map);
 
     this.routeLine = L.polyline([], {
+      smoothFactor: 0,
       color: '#2563eb',
       weight: 4,
       opacity: 0.9,
       interactive: false,
     }).addTo(this.map);
 
-    this.selectedLegLine = L.polyline([], { color: '#e6a325', weight: 7, opacity: 0.85, interactive: false }).addTo(this.map);
+    this.selectedLegLine = L.polyline([], { smoothFactor: 0, color: '#e6a325', weight: 7, opacity: 0.85, interactive: false }).addTo(this.map);
     this.routeHitLine = L.polyline([], {
+      smoothFactor: 0,
       color: '#2563eb',
       weight: 18,
       opacity: 0.001,
@@ -293,7 +295,7 @@ export class MapManager {
 
   setSelectedLeg(selection: {fromId: string; toId: string}): void {
     const leg = this.renderedLegs.find(l => l.from.id === selection.fromId && l.to.id === selection.toId);
-    this.selectedLegLine.setLatLngs(leg ? routeLegPath(leg).map(p => [p.lat, p.lon] as [number, number]) : []);
+    this.selectedLegLine.setLatLngs(leg ? densifyRoutePath(routeLegPath(leg)).map(p => [p.lat, p.lon] as [number, number]) : []);
   }
 
   setPublishedPoints(points: PublishedMapPoint[]): void {
@@ -363,6 +365,7 @@ export class MapManager {
 
     const pathStyle = {
       pane: 'msa-corridor-pane',
+      smoothFactor: 0,
       color: '#c46a12',
       weight: 1.2,
       opacity: 0.72,
@@ -382,10 +385,9 @@ export class MapManager {
       }
 
       for (const point of path) {
-        L.circle([point.lat, point.lon], {
-          ...pathStyle,
-          radius: MSA_CORRIDOR_HALF_WIDTH_METERS,
-        }).addTo(this.msaCorridorLayer);
+        const cap = Array.from({ length: 72 }, (_, i) =>
+          destinationCoordinate(point, i * 5, MSA_CORRIDOR_HALF_WIDTH_METERS / 1852));
+        L.polygon(cap.map(p => [p.lat, p.lon] as [number, number]), pathStyle).addTo(this.msaCorridorLayer);
       }
     }
   }
@@ -623,7 +625,7 @@ export class MapManager {
       const path = overrideLegIndex === legIndex && overridePoint
         ? [leg.from, { lat: overridePoint.lat, lon: overridePoint.lng }, leg.to]
         : routeLegPath(leg);
-      path.forEach((point, pointIndex) => {
+      densifyRoutePath(path).forEach((point, pointIndex) => {
         if (legIndex > 0 && pointIndex === 0) return;
         result.push(L.latLng(point.lat, point.lon));
       });
@@ -638,7 +640,7 @@ export class MapManager {
     let closestDistance = Number.POSITIVE_INFINITY;
 
     for (const leg of this.renderedLegs) {
-      const path = routeLegPath(leg);
+      const path = densifyRoutePath(routeLegPath(leg));
       for (let pathIndex = 0; pathIndex < path.length - 1; pathIndex += 1) {
         const from = path[pathIndex];
         const to = path[pathIndex + 1];
