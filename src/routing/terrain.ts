@@ -39,7 +39,8 @@ export function buildTerrainProbes(legs: RouteLeg[], altitudeAt: (leg: RouteLeg,
       const center = coordinateAtRouteDistance([leg], distanceNm)!;
       const bearing = trackAtRouteDistance([leg], distanceNm);
       for (const offsetNm of [-1, -0.5, 0, 0.5, 1]) {
-        const point = offsetNm === 0 ? center : destinationCoordinate(center, bearing + (offsetNm > 0 ? 90 : -90), Math.abs(offsetNm));
+        // A 1 cm inset covers coordinate rounding to 8 decimals in API requests.
+        const point = offsetNm === 0 ? center : destinationCoordinate(center, bearing + (offsetNm > 0 ? 90 : -90), Math.max(0, Math.abs(offsetNm) - 0.01 / 1852));
         probes.push({ ...point, legIndex: leg.index, distanceNm, offsetNm, altitudeFt: altitudeAt(leg, distanceNm) });
       }
     }

@@ -12,7 +12,12 @@ describe('sampled terrain review', () => {
     const bendProbe = probes.find(p => p.offsetNm === 0 && greatCircleDistanceNm(p, bend) < 0.00001)!;
     expect(bendProbe).toBeDefined();
     expect(bendProbe.altitudeFt).toBeCloseTo(254 + greatCircleDistanceNm(leg.from, bend) * 300);
-    for (const p of probes) expect(greatCircleDistanceNm(p, coordinateAtRouteDistance([leg], p.distanceNm)!)).toBeCloseTo(Math.abs(p.offsetNm), 5);
+    for (const p of probes) {
+      const sphericalDistance = greatCircleDistanceNm(p, coordinateAtRouteDistance([leg], p.distanceNm)!);
+      // Ellipsoidal distances are tested independently against GeographicLib fixtures.
+      expect(sphericalDistance).toBeLessThanOrEqual(Math.abs(p.offsetNm));
+      expect(sphericalDistance).toBeGreaterThanOrEqual(Math.abs(p.offsetNm) * 0.995);
+    }
     const distances = probes.filter(p => p.offsetNm === 0).map(p => p.distanceNm);
     expect(Math.max(...distances.slice(1).map((value, i) => value - distances[i]))).toBeLessThanOrEqual(0.500001);
   });

@@ -1,4 +1,5 @@
 import L from 'leaflet';
+import { densifyRoutePath, routeLegPath } from '../navigation/geodesy';
 import 'leaflet/dist/leaflet.css';
 import { AvinorIcaoLayer } from '../map/MapManager';
 import { escapeHtml } from '../utils/html';
@@ -23,7 +24,7 @@ export class GeneratorMap {
     for (const candidate of [...candidates].sort((a, b) => Number(a.id === selected) - Number(b.id === selected))) {
       const chosen = candidate.id === selected;
       const points = candidate.draft.waypoints;
-      L.polyline(points.map(p => [p.lat, p.lon] as [number, number]), { color: chosen ? '#2563eb' : '#64748b', weight: chosen ? 4 : 2, opacity: chosen ? 0.95 : 0.35, interactive: false }).addTo(this.routes);
+      L.polyline(candidate.legs.flatMap(leg => densifyRoutePath(routeLegPath(leg))).map(p => [p.lat, p.lon] as [number, number]), { smoothFactor: 0, color: chosen ? '#2563eb' : '#64748b', weight: chosen ? 4 : 2, opacity: chosen ? 0.95 : 0.35, interactive: false }).addTo(this.routes);
       if (!chosen) continue;
       points.forEach((point, i) => {
         const airport = /^[A-Z]{4}$/.test(point.aipId ?? '');

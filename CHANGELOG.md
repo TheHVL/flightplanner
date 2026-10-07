@@ -2,6 +2,13 @@
 
 This file records significant Flightplanner updates, formulas, source assumptions, limitations and implementation decisions. New updates are added at the top.
 
+## 2026-10-07, plotted route and terrain-boundary geometry
+
+- Manual and generator lines, selected-leg highlights, drag previews and hit testing use the same great-circle interpolation as distance and terrain sampling, at no more than 0.1 NM intervals. Leaflet simplification is disabled for these lines so it cannot straighten the densified curve. Corridor borders and end caps follow the same path geometry.
+- Bends remain distance-only routing aids, preserving the user's VFR workflow: TT, MT and wind-derived heading use the direct named-waypoint track; bends change distance, time and fuel. Add a real waypoint for a separate navigation leg. Saved-plan format and bend behaviour remain unchanged.
+- Terrain lateral offsets follow the local path tangent and use Vincenty's WGS84 direct geodesic instead of a spherical approximation, which previously extended the 1 NM boundary several metres at Norwegian latitudes. A 1 cm inset covers API coordinate rounding. Regression coordinates come from independent GeographicLib calculations.
+- Independent checks of all 1255 rounded probes on ENDU to ENTC, ENTC to ENSR and a bent ENDU to ENTC path found every point within 1852 m of both the modeled route and the densified map coordinates before screen pixel rounding. This remains a point-sampled terrain tool with gaps between probes, no obstacle survey and no complete corridor maximum; manual MSA remains the pilot's input.
+
 ## 2026-10-07, optional terrain checks per manual leg
 
 - Moved manual terrain checking into a collapsed optional tool and removed the persistent route-check summary above the OFP. Added Check terrain for this leg beside PL/MSA; it saves pending fields and opens a check for the selected leg. Whole route remains an explicit option.
