@@ -60,6 +60,9 @@ it('retains damaged data, reports recovery and copies the original before allowi
   store.addWaypoint({lat:69,lon:18},'A'); expect(status.save()).toBe(true);
   const recoveryKey = Object.keys(localStorage).find(key=>key.startsWith('flightplanner-working-route-recovery-'))!;
   expect(localStorage.getItem(recoveryKey)).toBe('{damaged');
+  const reloadedRoot = document.createElement('div'), reloaded = new FlightPlanStore();
+  const reloadedStatus = new WorkingRouteStatus(reloadedRoot,reloaded,new RouteShapeController(reloaded));
+  expect(reloadedStatus.restore()).toBe(true); expect(reloadedRoot.querySelector('[data-download-recovery]')).not.toBeNull();
   vi.spyOn(localStorage,'setItem').mockImplementation(()=>{throw new Error('quota');});
   expect(status.save()).toBe(false); expect(root.textContent).toContain('Autosave failed');
 });

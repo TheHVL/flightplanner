@@ -8,7 +8,7 @@ export class WorkingRouteStatus {
   private recoveryRaw: string | null = null;
   private recoveryCopied = false;
   private recoveryMessage = '';
-  private readonly recoveryKey = `flightplanner-working-route-recovery-${Date.now()}`;
+  private readonly recoveryKey = `flightplanner-working-route-recovery-${Date.now()}-${crypto.randomUUID()}`;
 
   constructor(private readonly root: HTMLElement, private readonly store: FlightPlanStore, private readonly shapes: RouteShapeController) {
     root.addEventListener('click', event => {
@@ -23,6 +23,16 @@ export class WorkingRouteStatus {
     const restored = restoreWorkingRoute(this.store, this.shapes, (message, raw) => {
       this.recoveryRaw = raw; this.recoveryMessage = message;
     });
+    if (!this.recoveryMessage) {
+      try {
+        const key = Object.keys(window.localStorage).filter(key => key.startsWith('flightplanner-working-route-recovery-')).sort().at(-1);
+        if (key) {
+          this.recoveryRaw = window.localStorage.getItem(key);
+          this.recoveryCopied = true;
+          this.recoveryMessage = 'A retained working-route recovery copy is available for download.';
+        }
+      } catch { /* Recovery listing is optional; save failures are reported below. */ }
+    }
     this.show(restored ? 'Working route restored locally.' : this.recoveryMessage ? '' : 'Autosave ready.');
     return restored;
   }
@@ -44,6 +54,7 @@ export class WorkingRouteStatus {
   }
 
   private show(message: string): void {
-    this.root.innerHTML = `<span>${escapeHtml(message)}</span>${this.recoveryMessage ? `<span class="working-route-recovery">${escapeHtml(this.recoveryMessage)}${this.recoveryRaw !== null ? ' <button type="button" class="ghost-button" data-download-recovery>Download recovery data</button>' : ''}</span>` : ''}`;
+    const markup = `<span>${escapeHtml(message)}</span>${this.recoveryMessage ? `<span class="working-route-recovery">${escapeHtml(this.recoveryMessage)}${this.recoveryRaw !== null ? ' <button type="button" class="ghost-button" data-download-recovery>Download recovery data</button>' : ''}</span>` : ''}`;
+    if (this.root.innerHTML !== markup) this.root.innerHTML = markup;
   }
 }

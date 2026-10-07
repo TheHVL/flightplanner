@@ -110,7 +110,7 @@ export class OFPTable {
         </div>
       </div>
       <p class="ofp-editor-hint">Click a flight row, level or frequency to open that leg in Prepare legs.</p>
-      <div class="table-scroll">
+      <div class="table-scroll" role="region" aria-label="OFP navigation log" tabindex="0">
         <table class="ofp-table">
           <thead>
             <tr class="ofp-group-row">

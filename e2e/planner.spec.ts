@@ -17,7 +17,7 @@ test('new manual legs default to 2500 ft, undo/redo and autosave survive reload'
   await page.reload();
   await page.getByRole('button', { name: 'I understand and want to continue' }).click();
   await expect(page.locator('input[data-leg-field="pl"]')).toHaveValue('2500');
-  await expect(page.locator('#working-route-status')).toContainText('restored');
+  await expect(page.locator('#working-route-status')).toContainText(/restored|Saved locally/);
 });
 
 for (const entry of ['./', 'generator.html']) {

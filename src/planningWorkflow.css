@@ -41,3 +41,5 @@
 #working-route-status { font-size: 12px; color: #334155; }
 .working-route-recovery { display: block; color: #92400e; margin-top: 4px; }
 .weather-altitude-warning { color: #92400e; padding: 8px; background: #fffbeb; border-left: 3px solid #b45309; font-size: 12px; }
+
+.table-scroll:focus-visible { outline: 3px solid #2563eb; outline-offset: 2px; }
