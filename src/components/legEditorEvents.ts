@@ -1,5 +1,6 @@
 export const OPEN_LEG_EDITOR = 'flightplanner-open-leg-editor';
 export const LEG_SELECTED = 'flightplanner-leg-selected';
+export const OPEN_TERRAIN_CHECK = 'flightplanner-open-terrain-check';
 export interface LegEditorRequest {
   fromId: string;
   toId: string;

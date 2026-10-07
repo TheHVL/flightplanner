@@ -28,6 +28,9 @@ it('mounts the complete workflow and connects map requests to the shared editor'
   await import('../src/main');
   const titles = [...document.querySelectorAll('.workflow-step > summary strong')].map(e => e.textContent);
   expect(titles).toEqual(['Build route', 'Prepare legs', 'Weather & fuel', 'Review OFP']);
+  expect(document.querySelector('#route-check-summary')).toBeNull();
+  expect(document.querySelector<HTMLDetailsElement>('[data-menu-section="terrain-airspace"]')!.open).toBe(false);
+  expect(document.querySelector<HTMLButtonElement>('[data-leg-terrain]')!.disabled).toBe(true);
   expect(document.querySelector('#aircraft-settings-panel')!.closest('[data-panel-key="settings"]')).not.toBeNull();
   expect(document.querySelector('#profile-settings-panel')!.querySelector('[data-aip-endpoint-code]')).toBeNull();
   expect(document.querySelector('#performance-panel')!.querySelector('[data-performance-field]')).toBeNull();
@@ -36,6 +39,9 @@ it('mounts the complete workflow and connects map requests to the shared editor'
   map.callbacks!.onMapClick(69.5, 19);
   map.callbacks!.onLegSelected!(1);
   expect(document.querySelector<HTMLSelectElement>('[data-leg-selector]')!.value).toBe('1');
+  expect(document.querySelector<HTMLButtonElement>('[data-leg-terrain]')!.disabled).toBe(false);
+  expect(document.querySelector<HTMLSelectElement>('[data-review-scope]')!.selectedOptions[0].textContent).toContain('Leg 2');
+  expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input).includes('ws.geonorge.no'))).toBe(false);
   const pl = document.querySelector<HTMLInputElement>('[data-leg-field="pl"]')!;
   pl.value = '3000'; pl.dispatchEvent(new Event('change', { bubbles: true }));
   expect(document.querySelector('[data-workflow-summary="leg-entry"]')!.textContent).toContain('1 missing PL');

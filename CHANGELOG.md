@@ -2,6 +2,12 @@
 
 This file records significant Flightplanner updates, formulas, source assumptions, limitations and implementation decisions. New updates are added at the top.
 
+## 2026-10-07, optional terrain checks per manual leg
+
+- Moved manual terrain checking into a collapsed optional tool and removed the persistent route-check summary above the OFP. Added Check terrain for this leg beside PL/MSA; it saves pending fields and opens a check for the selected leg. Whole route remains an explicit option.
+- Fetches only the chosen leg's sampled terrain while retaining the full route's modeled climb/descent altitude. Results show sampled surface height first, with detailed findings collapsed. Airspace/restriction checking and map overlays are separately selectable and off by default. Clear check removes results; route and scope changes cancel stale requests.
+- Manual MSA is never overwritten. Sampling still omits obstacles and peaks between samples, so this does not calculate a complete MSA. Generator checks and transfer constraints remain unchanged.
+
 ## 2026-10-07, OFP accumulated fuel and forecast freshness
 
 - ACC fuel now sums the displayed whole-gallon INT entries, including separate pattern rows. Two exact 1.5-gallon legs display INT 2 + 2 and ACC 4. Startup is separate; physical trip and remaining-fuel calculations retain unrounded consumption. Missing required fuel keeps subsequent ACC unknown.

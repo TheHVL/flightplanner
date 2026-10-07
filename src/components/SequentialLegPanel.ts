@@ -1,6 +1,6 @@
 import type { FlightPlanStore } from '../flightplan/FlightPlanStore';
 import { escapeHtml as e } from '../utils/html';
-import { LEG_SELECTED, OPEN_LEG_EDITOR, type LegEditorRequest } from './legEditorEvents';
+import { LEG_SELECTED, OPEN_LEG_EDITOR, OPEN_TERRAIN_CHECK, type LegEditorRequest } from './legEditorEvents';
 
 /** Stable controls: store emissions update the preview, never replace a field being edited. */
 export class SequentialLegPanel {
@@ -26,6 +26,7 @@ export class SequentialLegPanel {
         <label>Wind (kt)<input data-leg-field="speed" type="number" min="0" max="150" step="1" placeholder="kt" /></label>
         <div class="leg-entry-actions"><button type="button" data-leg-prev>Previous</button><button type="submit">Save &amp; next leg</button></div>
       </form>
+      <button type="button" class="ghost-button" data-leg-terrain>Check terrain for this leg</button>
       <label class="nav-toggle"><input type="checkbox" data-leg-use-winds /><span>Use per-leg winds (forecast first, manual backup second)</span></label>
       <p data-leg-status role="status" aria-live="polite"></p>
       <section data-leg-frequency></section>
@@ -36,6 +37,9 @@ export class SequentialLegPanel {
       else this.selector.value = String(this.store.getLegs().findIndex(leg => leg.from.id === this.fromId && leg.to.id === this.toId));
     });
     window.addEventListener(OPEN_LEG_EDITOR, event => this.open((event as CustomEvent<LegEditorRequest>).detail));
+    this.element.querySelector('[data-leg-terrain]')!.addEventListener('click', () => {
+      if (this.save(true)) window.dispatchEvent(new CustomEvent(OPEN_TERRAIN_CHECK, { detail: this.getSelectedLeg() }));
+    });
     this.element.addEventListener('input', event => {
       if ((event.target as HTMLElement).hasAttribute('data-leg-field')) this.hasDraft = true;
     });
@@ -113,7 +117,7 @@ export class SequentialLegPanel {
     if (index < 0) index = Math.min(previousIndex, legs.length - 1);
     this.selector.value = String(index);
     this.element.querySelector<HTMLInputElement>('[data-leg-use-winds]')!.checked = this.store.getWeatherSettings().useForecastWinds;
-    for (const control of this.element.querySelectorAll<HTMLInputElement | HTMLButtonElement | HTMLSelectElement>('[data-leg-field], form button, [data-leg-selector], [data-leg-use-winds]')) control.disabled = legs.length === 0;
+    for (const control of this.element.querySelectorAll<HTMLInputElement | HTMLButtonElement | HTMLSelectElement>('[data-leg-field], form button, [data-leg-selector], [data-leg-use-winds], [data-leg-terrain]')) control.disabled = legs.length === 0;
     const editing = this.fields.includes(document.activeElement as HTMLInputElement);
     if (!this.saving && (keys !== this.lastLegKeys || (!editing && !this.hasDraft))) this.select(index);
     this.lastLegKeys = keys;

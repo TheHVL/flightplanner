@@ -7,6 +7,7 @@
 .route-issue p { margin: 7px 0; line-height: 1.5; font-size: 13px; }
 .route-issue-buttons { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; }
 .route-issue-buttons button, .route-issue-buttons a { white-space: normal; font-size: 12px; }
-.route-review-summary { margin: 12px 0; padding: 14px 18px; border: 1px solid #d5dde7; border-left: 4px solid #b45309; border-radius: 10px; background: #fffbeb; }
-.route-review-summary.has-conflict { border-left-color: #dc2626; background: #fff1f2; }
-.route-review-summary p { margin: 0 0 9px; line-height: 1.5; }
+.route-review-scope { display: grid; gap: 6px; padding: 0 16px 10px; font-size: 11px; font-weight: 700; }
+.route-review-scope select { width: 100%; min-width: 0; padding: 8px; border: 1px solid #c9d3df; border-radius: 6px; background: #fff; }
+.route-review-actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 8px 16px; }
+.route-review-actions button { white-space: normal; }

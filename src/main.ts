@@ -133,7 +133,6 @@ root.innerHTML = `
       </section>
     </main>
 
-    <section id="route-check-summary" class="route-review-summary" aria-label="Current route check summary" hidden></section>
     <section id="ofp-table" class="ofp-panel panel"></section>
   </div>
 `;
@@ -258,7 +257,6 @@ document.querySelector<HTMLInputElement>('#aip-snap-toggle')!.addEventListener('
 
 window.addEventListener(LEG_SELECTED, () => mapManager.setSelectedLeg(legEditor.getSelectedLeg()));
 new RouteReviewPanel(document.querySelector<HTMLElement>('#route-review-panel')!, store, frequencyPlanner, {
-  summaryElement: document.querySelector<HTMLElement>('#route-check-summary')!,
   onIssues: (issues, legs) => mapManager.renderRouteIssues(issues, legs),
   onFocusIssue: (issue, legs) => mapManager.focusRouteIssue(issue, legs),
 });
