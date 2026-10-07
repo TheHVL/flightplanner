@@ -1,8 +1,9 @@
+import { readPreference, writePreference } from './utils/preferences';
 import './styles.css';
 import './mapEnhancements.css';
-import './phase4.css';
-import './phase5.css';
-import './phase6.css';
+import './performance.css';
+import './verticalProfile.css';
+import './weather.css';
 import './uxEnhancements.css';
 import './aipPlanning.css';
 import './sidebarLayout.css';
@@ -18,7 +19,8 @@ import { FrequencyPlanner } from './frequencies/FrequencyPlanner';
 import { FrequencyPanel } from './components/FrequencyPanel';
 import { FlightPlanStore } from './flightplan/FlightPlanStore';
 import { ROUTE_SHAPE_CHANGED_EVENT, RouteShapeController } from './flightplan/RouteShapeController';
-import { restoreWorkingRoute, saveWorkingRoute } from './flightplan/workingRoutePersistence';
+import { WorkingRouteStatus } from './components/WorkingRouteStatus';
+import { PlanningHistory } from './components/PlanningHistory';
 import { MapManager, type ChartDetailMode } from './map/MapManager';
 import { RoutePanel } from './components/RoutePanel';
 import { NavigationPanel } from './components/NavigationPanel';
@@ -28,7 +30,7 @@ import { VerticalProfilePanel } from './components/VerticalProfilePanel';
 import { OFPTable } from './components/OFPTable';
 import { AipPanel } from './components/AipPanel';
 import { SequentialLegPanel } from './components/SequentialLegPanel';
-import { SidebarResize } from './components/SidebarResize';
+import { initializeWorkspaceLayout } from './components/WorkspaceLayout';
 import { PlanLibraryPanel } from './components/PlanLibraryPanel';
 import { RouteReviewPanel } from './components/RouteReviewPanel';
 import { importGeneratedRoute } from './generator/transfer';
@@ -72,6 +74,7 @@ root.innerHTML = `
       <div class="phase-chip"><span></span> VFR FLIGHT PLANNING</div>
     </header>
 
+    <div class="planning-toolbar"><div id="plan-history" aria-label="Plan history"></div><div id="working-route-status" role="status" aria-live="polite"></div></div>
     <p id="generator-import-status" class="generator-import-status" role="status" hidden></p>
     <main class="workspace">
       <aside id="planning-sidebar" class="left-column">
@@ -185,18 +188,20 @@ warningAck.addEventListener('click', () => {
 });
 window.setTimeout(() => warningAck.focus(), 0);
 
-const store = new FlightPlanStore();
+const store = new FlightPlanStore(2500);
 const moveMapWaypoint = (id: string, lat: number, lon: number, point?: PublishedMapPoint) => store.updateWaypoint(id, { lat, lon }, point);
 const frequencyPlanner = new FrequencyPlanner(store);
 const routeShapeController = new RouteShapeController(store);
-restoreWorkingRoute(store, routeShapeController);
+const workingRouteStatus = new WorkingRouteStatus(document.querySelector<HTMLElement>('#working-route-status')!, store, routeShapeController);
+workingRouteStatus.restore();
+new PlanningHistory(document.querySelector<HTMLElement>('#plan-history')!, store);
 const transferToken = new URL(location.href).searchParams.get('generatedRoute');
 if (transferToken) {
   const message = document.querySelector<HTMLElement>('#generator-import-status')!;
   try {
     if (importGeneratedRoute(transferToken, sessionStorage, localStorage, store, routeShapeController)) {
       message.textContent = 'Generated draft imported. Review chart joins, MSA and frequencies, then set the forecast date/time and fetch fresh winds. Your previous manual plan is available under Save & load → Restore previous work.';
-      saveWorkingRoute(store, routeShapeController);
+      workingRouteStatus.save();
     }
   } catch (error) { message.textContent = error instanceof Error ? error.message : 'Generated draft could not be imported. Your manual plan was kept.'; }
   message.hidden = false;
@@ -269,10 +274,10 @@ for (const disclosure of document.querySelectorAll<HTMLDetailsElement>('.phase-d
   const key = disclosure.dataset.panelKey;
   if (!key) continue;
   const storageKey = `flightplanner-panel-${key}-open`;
-  const saved = localStorage.getItem(storageKey);
+  const saved = readPreference(storageKey);
   if (saved !== null) disclosure.open = saved === 'true';
   disclosure.addEventListener('toggle', () => {
-    localStorage.setItem(storageKey, String(disclosure.open));
+    writePreference(storageKey, String(disclosure.open));
     window.requestAnimationFrame(() => mapManager.invalidateSize());
   });
 }
@@ -283,142 +288,43 @@ document.querySelector('#collapse-planning-menus')!.addEventListener('click', ()
 
 const isChartDetailMode = (value: string | null): value is ChartDetailMode =>
   value === 'auto' || value === 'sharp' || value === 'fast';
-const savedDetailMode = localStorage.getItem('flightplanner-icao-detail');
+const savedDetailMode = readPreference('flightplanner-icao-detail');
 const initialDetailMode: ChartDetailMode = isChartDetailMode(savedDetailMode) ? savedDetailMode : 'auto';
 chartDetailSelect.value = initialDetailMode;
 mapManager.setChartDetail(initialDetailMode);
 chartDetailSelect.addEventListener('change', () => {
   const mode = chartDetailSelect.value;
   if (!isChartDetailMode(mode)) return;
-  localStorage.setItem('flightplanner-icao-detail', mode);
+  writePreference('flightplanner-icao-detail', mode);
   mapManager.setChartDetail(mode);
 });
 
-const savedMsaCorridor = localStorage.getItem('flightplanner-msa-corridor') === 'true';
+const savedMsaCorridor = readPreference('flightplanner-msa-corridor') === 'true';
 msaCorridorToggle.checked = savedMsaCorridor;
 mapManager.setMsaCorridorVisible(savedMsaCorridor);
 msaCorridorToggle.addEventListener('change', () => {
-  localStorage.setItem('flightplanner-msa-corridor', String(msaCorridorToggle.checked));
+  writePreference('flightplanner-msa-corridor', String(msaCorridorToggle.checked));
   mapManager.setMsaCorridorVisible(msaCorridorToggle.checked);
 });
 
-const savedGlideEnvelope = localStorage.getItem('flightplanner-glide-envelope') === 'true';
+const savedGlideEnvelope = readPreference('flightplanner-glide-envelope') === 'true';
 glideEnvelopeToggle.checked = savedGlideEnvelope;
 glideAssumptionBar.hidden = !savedGlideEnvelope;
 mapManager.setGlideEnvelopeVisible(savedGlideEnvelope);
 glideEnvelopeToggle.addEventListener('change', () => {
-  localStorage.setItem('flightplanner-glide-envelope', String(glideEnvelopeToggle.checked));
+  writePreference('flightplanner-glide-envelope', String(glideEnvelopeToggle.checked));
   glideAssumptionBar.hidden = !glideEnvelopeToggle.checked;
   mapManager.setGlideEnvelopeVisible(glideEnvelopeToggle.checked);
   void renderGlideEnvelope();
 });
 
-const MIN_WORKSPACE_HEIGHT = 480;
-const MAX_WORKSPACE_HEIGHT = 1000;
-const defaultWorkspaceHeight = Math.min(700, Math.max(560, window.innerHeight - 180));
-const savedWorkspaceHeight = Number(localStorage.getItem('flightplanner-workspace-height'));
-
-const setWorkspaceHeight = (height: number, persist = false) => {
-  const clamped = Math.round(Math.min(MAX_WORKSPACE_HEIGHT, Math.max(MIN_WORKSPACE_HEIGHT, height)));
-  workspace.style.setProperty('--workspace-height', `${clamped}px`);
-  mapResizeHandle.setAttribute('aria-valuenow', String(clamped));
-  if (persist) localStorage.setItem('flightplanner-workspace-height', String(clamped));
-  window.requestAnimationFrame(() => mapManager.invalidateSize());
-};
-
-setWorkspaceHeight(Number.isFinite(savedWorkspaceHeight) && savedWorkspaceHeight > 0 ? savedWorkspaceHeight : defaultWorkspaceHeight);
-new SidebarResize(workspace, document.querySelector<HTMLElement>('#planning-sidebar')!,
-  document.querySelector<HTMLElement>('#sidebar-resize-handle')!, () => window.requestAnimationFrame(() => mapManager.invalidateSize()));
-
-let resizePointerId: number | null = null;
-let resizeStartY = 0;
-let resizeStartHeight = 0;
-
-const finishMapResize = () => {
-  if (resizePointerId === null) return;
-  resizePointerId = null;
-  document.body.classList.remove('map-resizing');
-  const currentHeight = workspace.getBoundingClientRect().height;
-  setWorkspaceHeight(currentHeight, true);
-};
-
-mapResizeHandle.addEventListener('pointerdown', (event) => {
-  if (window.matchMedia('(max-width: 900px)').matches) return;
-  resizePointerId = event.pointerId;
-  resizeStartY = event.clientY;
-  resizeStartHeight = workspace.getBoundingClientRect().height;
-  mapResizeHandle.setPointerCapture(event.pointerId);
-  document.body.classList.add('map-resizing');
-  event.preventDefault();
-});
-
-mapResizeHandle.addEventListener('pointermove', (event) => {
-  if (resizePointerId !== event.pointerId) return;
-  setWorkspaceHeight(resizeStartHeight + event.clientY - resizeStartY);
-});
-
-mapResizeHandle.addEventListener('pointerup', (event) => {
-  if (resizePointerId !== event.pointerId) return;
-  if (mapResizeHandle.hasPointerCapture(event.pointerId)) {
-    mapResizeHandle.releasePointerCapture(event.pointerId);
-  }
-  finishMapResize();
-});
-
-mapResizeHandle.addEventListener('pointercancel', finishMapResize);
-mapResizeHandle.addEventListener('dblclick', () => setWorkspaceHeight(defaultWorkspaceHeight, true));
-mapResizeHandle.addEventListener('keydown', (event) => {
-  if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
-  event.preventDefault();
-  const currentHeight = workspace.getBoundingClientRect().height;
-  const delta = event.key === 'ArrowUp' ? -20 : 20;
-  setWorkspaceHeight(currentHeight + delta, true);
-});
-
-const setMapExpanded = (expanded: boolean) => {
-  mapColumn.classList.toggle('map-column--expanded', expanded);
-  document.body.classList.toggle('map-overlay-open', expanded);
-  mapExpandButton.setAttribute('aria-pressed', String(expanded));
-  mapExpandButton.textContent = expanded ? '× Exit large map' : '⛶ Expand map';
-  window.requestAnimationFrame(() => mapManager.invalidateSize());
-};
+initializeWorkspaceLayout(workspace, mapColumn, mapResizeHandle, mapExpandButton, () => mapManager.invalidateSize());
 
 mapDeleteRouteButton.addEventListener('click', () => {
   if (store.getWaypoints().length === 0) return;
   const confirmed = window.confirm('Delete the entire route and its route-specific planning data?');
   if (!confirmed) return;
-  routeShapeController.clearAllShapes();
   store.clear();
-});
-
-mapExpandButton.addEventListener('click', () => {
-  setMapExpanded(!mapColumn.classList.contains('map-column--expanded'));
-});
-
-document.addEventListener('keydown', (event) => {
-  const undoShortcut =
-    (event.ctrlKey || event.metaKey) &&
-    !event.altKey &&
-    !event.shiftKey &&
-    event.key.toLowerCase() === 'z';
-
-  if (undoShortcut) {
-    event.preventDefault();
-    const target = event.target;
-    if (
-      target instanceof HTMLInputElement ||
-      target instanceof HTMLTextAreaElement ||
-      target instanceof HTMLSelectElement
-    ) {
-      target.blur();
-    }
-    if (!routeShapeController.undoImmediateShape()) store.undoLastAction();
-    return;
-  }
-
-  if (event.key === 'Escape' && mapColumn.classList.contains('map-column--expanded')) {
-    setMapExpanded(false);
-  }
 });
 
 navigationPanel.render();
@@ -595,12 +501,12 @@ const render = () => {
 };
 
 store.subscribe(() => {
-  saveWorkingRoute(store, routeShapeController);
+  workingRouteStatus.save();
   render();
 });
 window.addEventListener(FUEL_SETTINGS_CHANGED_EVENT, render);
 window.addEventListener(ROUTE_SHAPE_CHANGED_EVENT, () => {
-  saveWorkingRoute(store, routeShapeController);
+  workingRouteStatus.save();
   render();
 });
 render();

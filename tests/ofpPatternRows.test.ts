@@ -162,3 +162,13 @@ it('keeps stale active forecasts visible above the OFP even when the sidebar is 
     expect(banner().hidden).toBe(true);
   } finally { vi.useRealTimers(); }
 });
+
+it('keeps a fresh clamped-altitude warning above the OFP while fetched winds are active', () => {
+  const {store,a,b} = trainingRoute();
+  store.updateWeatherSettings({useForecastWinds:true});
+  store.setRouteWeatherForecasts([{fromId:a.id,toId:b.id,altitudeFt:0,altitudeClamped:true,sampledAltitudeFt:328,
+    validTimeUtc:new Date().toISOString(),fetchedAtUtc:new Date().toISOString(),windFromDeg:0,windSpeedKt:0,temperatureC:0,source:'Open-Meteo'}]);
+  const element = document.createElement('section'); const table = new OFPTable(element,store); table.render();
+  const banner = element.querySelector<HTMLElement>('[data-ofp-weather-warning]')!;
+  expect(banner.hidden).toBe(false); expect(banner.textContent).toContain('nearest available forecast altitude');
+});

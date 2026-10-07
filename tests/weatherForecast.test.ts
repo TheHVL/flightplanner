@@ -50,3 +50,15 @@ describe('route weather interpolation', () => {
     expect(sample.windSpeedKt).toBeGreaterThan(19);
   });
 });
+
+it('marks out-of-range requested altitude while recording the actual returned forecast height', () => {
+  const hourly: Record<string, Array<string | number | null>> = { time: ['2026-09-06T20:00', '2026-09-06T21:00'] };
+  PRESSURE_LEVELS_HPA.forEach((level,index)=> {
+    hourly[`geopotential_height_${level}hPa`] = [100+index*1000,100+index*1000];
+    hourly[`temperature_${level}hPa`] = [5,5]; hourly[`wind_speed_${level}hPa`] = [20,20]; hourly[`wind_direction_${level}hPa`] = [270,270];
+  });
+  const time = new Date('2026-09-06T20:30:00Z');
+  expect(sampleHourlyForecast(hourly,0,time)).toMatchObject({altitudeFt:0,altitudeClamped:true});
+  expect(sampleHourlyForecast(hourly,0,time).sampledAltitudeFt).toBeCloseTo(100/0.3048);
+  expect(sampleHourlyForecast(hourly,100/0.3048,time).altitudeClamped).toBe(false);
+});

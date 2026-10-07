@@ -2,6 +2,14 @@
 
 This file records significant Flightplanner updates, formulas, source assumptions, limitations and implementation decisions. New updates are added at the top.
 
+## 2026-10-07, planning feedback and generator safeguards
+
+- Terrain search fetches twice-finer WCS samples and max-pools four per search cell, normally 100 m samples / 200 m cells. Unknown samples stay unknown. Drafts and map previews show resolution and warn of missed peaks; this does not establish native-model maxima or obstacle clearance. Transfer requires a per-draft chart-review acknowledgement and still respects every existing blocking check.
+- Generator airport choices extend to mainland airports from Trondheim (ENVA) northward, with explicit coverage copy. New manual legs and preferred generator altitude start at 2,500 ft; saved levels and blanks remain unchanged. Conservative restriction failures explain that all altitudes and inactive areas are excluded.
+- Clamped forecast altitude and its returned level are retained and shown in Weather, with an active-wind warning above the OFP. Removed future-QNH language and phase terminology from warnings; CSS modules use descriptive names. IAS correction supports plausible pressure altitudes down to -2,000 ft without changing the published cruise tables.
+- Added plan Undo/Redo buttons and keyboard shortcuts that leave editable fields alone. Unified bend geometry and planner history, including MSA and weather invalidation. Autosave success/failure is visible; damaged originals are retained and backed up before replacement, with recovery downloads that remain available after reload and failure pause. Optional layout preferences fall back when storage is denied; fuel edits remain in memory and exports, with a persistent failure notice. Named-plan loads retain their existing atomic storage guard.
+- Extracted workspace controls, planning history and storage status from main.ts. Added source lint, Chromium browser and automated accessibility CI checks, plus a production CSP for the known data providers. Updated README and automatic-planner limitations. Direct waypoint TT/MT and heading calculations remain unchanged.
+
 ## 2026-10-07, plotted route and terrain-boundary geometry
 
 - Manual and generator lines, selected-leg highlights, drag previews and hit testing use the same great-circle interpolation as distance and terrain sampling, at no more than 0.1 NM intervals. Leaflet simplification is disabled for these lines so it cannot straighten the densified curve. Corridor borders and end caps follow the same path geometry.

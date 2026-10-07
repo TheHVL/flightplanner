@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { writeArrayBuffer } from 'geotiff';
-import { decodeTerrainRaster, fetchRouteTerrainRaster } from '../src/routing/terrainRaster';
+import { decodeTerrainRaster, fetchRouteTerrainRaster, maxPoolTerrainRaster } from '../src/routing/terrainRaster';
 
 function tiff(values, width, height, west = 600000, north = 7740000, resolution = 200, projection = 25833) {
   return writeArrayBuffer(values, { width, height, BitsPerSample: [32], SampleFormat: [3],
@@ -17,12 +17,13 @@ it('reads numeric GeoTIFF heights, clamps sea-surface noise and retains missing 
 it('assembles matching fresh WCS windows and rejects wrong tile geometry', async () => {
   const requests = [];
   vi.stubGlobal('fetch', vi.fn(async (url, options) => {
-    const u = new URL(String(url)), [west, , , north] = u.searchParams.get('bbox').split(',').map(Number);
+    const u = new URL(String(url)), [west, , east, north] = u.searchParams.get('bbox').split(',').map(Number);
     const width = Number(u.searchParams.get('width')), height = Number(u.searchParams.get('height'));
     requests.push({ u, options });
-    return new Response(tiff(new Float32Array(width * height).fill(123), width, height, west, north));
+    return new Response(tiff(new Float32Array(width * height).fill(123), width, height, west, north, (east - west) / width));
   }));
   const result = await fetchRouteTerrainRaster([{ lat: 69.2, lon: 19 }, { lat: 69.3, lon: 19.1 }], new AbortController().signal);
+  expect(result.sampleResolutionM).toBe(100); expect(result.aggregation).toBe('max-2x2');
   expect(result.elevationsM.every(v => v === 123)).toBe(true);
   expect(requests.every(r => r.options.cache === 'no-store' && r.u.searchParams.get('coverage') === 'nhm_dtm_topo_25833')).toBe(true);
   vi.stubGlobal('fetch', vi.fn(async () => new Response(tiff(new Float32Array(4), 2, 2))));
@@ -34,4 +35,10 @@ it('fails visibly on service errors and never requests data after cancellation',
   await expect(fetchRouteTerrainRaster(points, new AbortController().signal)).rejects.toThrow('No straight-line fallback');
   const aborted = new AbortController(); aborted.abort(); fetch.mockClear();
   await expect(fetchRouteTerrainRaster(points, aborted.signal)).rejects.toThrow(); expect(fetch).not.toHaveBeenCalled();
+});
+
+it('keeps a peak from any finer sample and does not treat missing samples as clear terrain', () => {
+  expect([...maxPoolTerrainRaster(new Float32Array([0, 1200, 4, 7, 0, 1, 8, 9]), 4, 2)]).toEqual([1200, 9]);
+  expect(Number.isNaN(maxPoolTerrainRaster(new Float32Array([0, NaN, 5, 6]), 2, 2)[0])).toBe(true);
+  expect(() => maxPoolTerrainRaster(new Float32Array(6), 3, 2)).toThrow();
 });

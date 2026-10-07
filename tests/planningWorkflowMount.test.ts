@@ -44,7 +44,7 @@ it('mounts the complete workflow and connects map requests to the shared editor'
   expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input).includes('ws.geonorge.no'))).toBe(false);
   const pl = document.querySelector<HTMLInputElement>('[data-leg-field="pl"]')!;
   pl.value = '3000'; pl.dispatchEvent(new Event('change', { bubbles: true }));
-  expect(document.querySelector('[data-workflow-summary="leg-entry"]')!.textContent).toContain('1 missing PL');
+  expect(document.querySelector('[data-workflow-summary="leg-entry"]')!.textContent).toContain('PL entered');
   const second = map.legs[1];
   map.callbacks!.onWaypointSelected!(second.to.id);
   expect(document.querySelector<HTMLDetailsElement>('[data-leg-visit]')!.open).toBe(true);

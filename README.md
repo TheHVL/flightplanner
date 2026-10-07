@@ -12,13 +12,13 @@ Browser-based VFR planning for Norwegian flight training, primarily using the Ce
 The sidebar follows four steps. Saved plans and aircraft defaults sit below them. Drag the divider beside the sidebar to adjust its width; open menus and entered values are preserved when panels update.
 
 1. **Build route:** add waypoints on the map or from the airport/reporting-point browser. Airports are ordered by ICAO and reporting points grouped by airport. Map clicks and marker drags can snap to published points without floating name labels. Reorder, rename or delete waypoints, and use undo for recent changes.
-2. **Prepare legs:** select each leg's PL, manual MSA, wind backup and OFP frequency. The OFP shows one selected channel; alternatives stay in the sidebar. Enter advances through leg fields and Shift+Enter goes backwards. Altitude arrows use 100 ft increments.
+2. **Prepare legs:** edit each leg's PL (new legs start at 2,500 ft), manual MSA, wind backup and OFP frequency. The OFP shows one selected channel; alternatives stay in the sidebar. Enter advances through leg fields and Shift+Enter goes backwards. Altitude arrows use 100 ft increments.
 3. **Weather & fuel:** set the intended flight date/time in UTC, fetch fresh route winds, review performance assumptions and enter fuel onboard, reserve and contingency as needed.
 4. **Review OFP:** inspect the navigation log, TOC/TOD and airport/pattern settings. **Optional terrain & airspace check** starts collapsed. Use **Check terrain for this leg** beside the PL/MSA fields when reviewing a particular leg, or choose **Whole route** inside the tool. Results show sampled terrain heights and modeled altitude margins without changing your MSA. Airspace checks and map findings are separate opt-in options; detailed notices stay collapsed until opened. Red indicates a conflict; amber indicates incomplete data or a review requirement.
 
 Departure time, ETO, ATO and actual fuel remain in-flight entries rather than required planning inputs.
 
-The working plan is autosaved locally. Named plans can be saved, loaded and exported/imported as JSON. Saved plans retain manual wind backups and planning inputs, but fetched forecasts are deliberately not restored: choose the new flight date and fetch again. Browser storage is local to the browser/device; exporting a plan provides a portable copy. Ctrl+Z or Cmd+Z undoes recent planner actions.
+The working plan is autosaved locally. Named plans can be saved, loaded and exported/imported as JSON. Saved plans retain manual wind backups and planning inputs, but fetched forecasts are deliberately not restored: choose the new flight date and fetch again. Browser storage is local to the browser/device; exporting a plan provides a portable copy. Undo and Redo buttons cover recent planner actions, including route bends. Ctrl+Z/Cmd+Z and Ctrl+Shift+Z/Cmd+Shift+Z (or Ctrl+Y) work outside text fields; editing fields retain native text undo. Autosave status reports failures. Damaged working-route data are retained, offered for download and copied locally before any replacement; a failed recovery copy pauses autosave. Optional layout preferences fall back when storage is denied. Fuel edits remain available in memory and exports if their local save fails, with a visible reminder before closing.
 
 ### Map and navigation
 
@@ -58,7 +58,7 @@ The selected 500 ft/min climb is within the supplied 500–1000 ft/min range. Cl
 - **POH climb:** Figure 5-8 at 3100 lb, 2400 RPM, full throttle and the stated configuration. Normal 90 KIAS climb is published through 10,000 ft; maximum-rate climb through 14,000 ft. Time, fuel and zero-wind distance use differences in cumulative table values, increased by 10% per 10°C above ISA. Average climb TAS comes from table distance/time; active leg winds determine ground distance.
 - **Manual climb/descent:** editable rates and speed modes. Descent and pattern fuel flows are planning inputs; manual climb requires its own fuel flow.
 
-Leg PL is currently used as a **pressure-altitude proxy**, with the aircraft altitude setting as fallback. QNH conversion is not implemented. Fetched leg temperature is used where available; manual OAT is the fallback. Unsupported performance settings or vertical conflicts withhold a complete result.
+Leg PL is currently used as a **pressure-altitude proxy**, with the aircraft altitude setting as fallback. This remains an approximation; no QNH input is planned. Fetched leg temperature is used where available; manual OAT is the fallback. Unsupported performance settings or vertical conflicts withhold a complete result.
 
 ### Fuel accounting and rounding
 
@@ -86,7 +86,7 @@ Displayed planning times round upward to whole minutes. Individual and total rou
 
 A route fetch sends all leg midpoint coordinates in one request for up to 50 legs, with bounded batches for larger routes. Each request retrieves temperature, wind speed/direction and geopotential height at eight pressure levels (1000, 925, 850, 700, 600, 500, 400 and 300 hPa). The 32 variables support altitude interpolation; batching reduces HTTP calls rather than removing required atmospheric data. An explicit refresh bypasses browser caching.
 
-Series are sampled locally in flight order, interpolating wind vectors in altitude and time. Earlier wind-adjusted leg durations affect subsequent estimated times. The forecast window covers the departure UTC date and following date; times outside returned coverage fail explicitly. This remains an estimate at each leg midpoint/PL, not a full four-dimensional weather integration.
+Requested altitudes outside the available forecast levels use the nearest returned level, with a visible warning in Weather and above the OFP when those winds are active. The sampled altitude is retained alongside the requested altitude. Series are sampled locally in flight order, interpolating wind vectors in altitude and time. Earlier wind-adjusted leg durations affect subsequent estimated times. The forecast window covers the departure UTC date and following date; times outside returned coverage fail explicitly. This remains an estimate at each leg midpoint/PL, not a full four-dimensional weather integration.
 
 Each fetched forecast records source, valid date/time, retrieval time and **Best Match** automatic model selection. The response does not report the selected underlying model name or model-run timestamp; these are stored as unknown. `generationtime_ms` is response-generation duration, not a model initialization timestamp. Retrieval age is therefore **not model-run age**.
 
@@ -112,11 +112,11 @@ AIP refreshes do not ingest NOTAM, restriction activation or AIP SUP. AIP public
 
 ## Separate Route Generator
 
-Choose departure, destination, up to four ordered airport visits, patterns, lesson duration and preferred altitude. Airport selection currently covers mainland AIP aerodromes at or north of Bodø. It compares up to three drafts using reviewed terminal point sequences and a free Kartverket terrain graph between airports; there is no manually maintained airport-to-airport route table or AI service.
+Choose departure, destination, up to four ordered airport visits, patterns, lesson duration and preferred altitude. Airport selection currently covers mainland AIP aerodromes at or north of Trondheim, including ENVA. Preferred altitude starts at 2,500 ft. Terrain search normally fetches 100 m samples and retains the highest of four per 200 m search cell, with coarser resolution for larger itineraries. Every draft and its map preview show the resolution and warn that peaks may be higher. This is not a maximum of the native 1 m terrain model. It compares up to three drafts using reviewed terminal point sequences and a free Kartverket terrain graph between airports; there is no manually maintained airport-to-airport route table or AI service.
 
 The search uses coarse route-window terrain rasters, conservative restrictions avoidance and subsequent sampled terrain/profile checks. Missing verified restriction coverage, terrain coverage or detected blocking conflicts prevent transfer. Charted MAX limits constrain terminal levels; raising cruise altitude cannot override them. Airport joins, full curved chart geometry, obstacles, NOTAM/activation, finer terrain peaks and operational route suitability remain incomplete. A usable route may exist outside the bounded search. Generator calculations use still air; fresh weather is fetched in Manual Planner after transfer.
 
-Generation and preview keep manual planning separate. **Use this route in Manual Planner** explicitly transfers a draft, preserving recovery of the preceding working plan. It does not invent MSA, selected frequencies or forecast winds. See [automatic planner data and limitations](docs/AUTOMATIC_PLANNER_DATA.md) for search resolutions, coverage, source checks and remaining work.
+Generation and preview keep manual planning separate. **Use this route in Manual Planner** requires acknowledgement that the draft is a starting point for chart review, not a cleared route, and explicitly transfers it, preserving recovery of the preceding working plan. It does not invent MSA, selected frequencies or forecast winds. See [automatic planner data and limitations](docs/AUTOMATIC_PLANNER_DATA.md) for search resolutions, coverage, source checks and remaining work.
 
 ## Development and deployment
 
@@ -125,11 +125,14 @@ Requirements: Node.js 22+, npm and, for AIP chart extraction, Poppler (`pdftotex
 ```bash
 npm ci
 npm run dev
+npm run lint
 npm test
 npm run build
+npx playwright install chromium
+npm run test:e2e
 ```
 
-Vite builds both `index.html` and `generator.html`. GitHub Actions tests and builds changes; the Pages workflow refreshes aviation data, tests, builds and deploys main. Failed upstream refreshes retain the verified snapshot with visible status rather than replacing it with partial data.
+Vite builds both `index.html` and `generator.html`. GitHub Actions lints, unit-tests, builds and runs Chromium workflow and automated accessibility checks; the Pages workflow refreshes aviation data, tests, builds and deploys main. Failed upstream refreshes retain the verified snapshot with visible status rather than replacing it with partial data.
 
 To refresh the committed data manually:
 
@@ -139,6 +142,8 @@ npm run aip:frequencies
 npm test
 npm run build
 ```
+
+Production HTML includes a Content Security Policy limiting scripts, connections, images and workers to the application and its known data providers. Inline styles remain allowed for Leaflet; WebAssembly decoding and blob workers are allowed for terrain rasters. The GitHub Pages meta policy cannot enforce frame-ancestors, which requires response headers.
 
 No private API keys or credentials belong in this repository.
 

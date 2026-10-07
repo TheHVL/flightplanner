@@ -70,8 +70,8 @@ describe('generic terrain route search', () => {
     const catalog = { aerodromes: [
       { icao: 'ENTC', lat: 69.68, lon: 18.9 }, { icao: 'ENBO', lat: 67.269, lon: 14.4 },
       { icao: 'ENAT', lat: 69.98, lon: 23.3 }, { icao: 'ENAS', lat: 78.9, lon: 11.9 },
-      { icao: 'ENRA', lat: 66.3, lon: 14.3 }, { icao: 'ENXX', lat: null, lon: null },
+      { icao: 'ENVA', lat: 63.4575, lon: 10.924 }, { icao: 'ENBR', lat: 60.3, lon: 5.2 }, { icao: 'ENRA', lat: 66.3, lon: 14.3 }, { icao: 'ENXX', lat: null, lon: null },
     ] } as AipAerodromeCatalog;
-    expect(northernAirports(catalog).map(a => a.icao)).toEqual(['ENAT', 'ENBO', 'ENTC']);
+    expect(northernAirports(catalog).map(a => a.icao)).toEqual(['ENAT', 'ENBO', 'ENRA', 'ENTC', 'ENVA']);
   });
 });

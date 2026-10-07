@@ -20,6 +20,7 @@ export interface ForecastSample extends ForecastMetadata {
   validTimeUtc: string;
   altitudeFt: number;
   altitudeClamped: boolean;
+  sampledAltitudeFt?: number;
   source: string;
 }
 
@@ -28,6 +29,7 @@ interface OpenMeteoResponse {
 }
 
 interface VectorSample {
+  sampledAltitudeM: number;
   uKt: number;
   vKt: number;
   temperatureC: number;
@@ -118,6 +120,7 @@ export function sampleHourlyForecast(
     validTimeUtc: when.toISOString(),
     altitudeFt: Math.round(altitudeFt),
     altitudeClamped: lower.altitudeClamped || upper.altitudeClamped,
+    sampledAltitudeFt: lerp(lower.sampledAltitudeM, upper.sampledAltitudeM, timeFraction) / 0.3048,
     source: 'Open-Meteo pressure-level forecast',
   };
 }
@@ -161,12 +164,12 @@ function verticalSample(
     return { altitudeM, temperatureC, ...vector };
   }).sort((a, b) => a.altitudeM - b.altitudeM);
 
-  if (targetMeters <= levels[0].altitudeM) {
-    return { ...levels[0], altitudeClamped: true };
+  if (targetMeters < levels[0].altitudeM) {
+    return { ...levels[0], sampledAltitudeM: levels[0].altitudeM, altitudeClamped: true };
   }
   const highest = levels[levels.length - 1];
-  if (targetMeters >= highest.altitudeM) {
-    return { ...highest, altitudeClamped: true };
+  if (targetMeters > highest.altitudeM) {
+    return { ...highest, sampledAltitudeM: highest.altitudeM, altitudeClamped: true };
   }
 
   for (let index = 0; index < levels.length - 1; index += 1) {
@@ -179,6 +182,7 @@ function verticalSample(
       vKt: lerp(lower.vKt, upper.vKt, fraction),
       temperatureC: lerp(lower.temperatureC, upper.temperatureC, fraction),
       altitudeClamped: false,
+      sampledAltitudeM: targetMeters,
     };
   }
 

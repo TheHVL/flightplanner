@@ -3,6 +3,7 @@ import { densifyRoutePath, routeLegPath } from '../navigation/geodesy';
 import 'leaflet/dist/leaflet.css';
 import { AvinorIcaoLayer } from '../map/MapManager';
 import { escapeHtml } from '../utils/html';
+import { terrainResolutionLabel } from './terrainSummary';
 import type { RouteCandidate } from './candidates';
 import { issueRouteCoordinates, issueSeverityLabel, type RouteIssue } from '../routing/issues';
 /** A preview map with no waypoint editing and no reference to the manual store. */
@@ -10,6 +11,7 @@ export class GeneratorMap {
   private readonly map: L.Map;
   private readonly routes: L.LayerGroup;
   private readonly notice: L.LayerGroup;
+  private readonly terrainBadge: HTMLElement;
   constructor(element: HTMLElement) {
     this.map = L.map(element).setView([69.5, 19.2], 7);
     const topo = L.tileLayer('https://cache.kartverket.no/v1/wmts/1.0.0/topo/default/webmercator/{z}/{y}/{x}.png', { attribution: '&copy; Kartverket', maxZoom: 19, noWrap: true }).addTo(this.map);
@@ -17,6 +19,11 @@ export class GeneratorMap {
     L.control.layers({ 'Norgeskart · Kartverket': topo, 'ICAO 1:500 000 · Avinor': icao }, undefined, { collapsed: true }).addTo(this.map);
     this.routes = L.layerGroup().addTo(this.map);
     this.notice = L.layerGroup().addTo(this.map);
+    this.terrainBadge = L.DomUtil.create('div', 'generator-terrain-badge');
+    this.terrainBadge.hidden = true;
+    const badge = new L.Control({ position: 'bottomleft' });
+    badge.onAdd = () => this.terrainBadge;
+    badge.addTo(this.map);
   }
   show(candidates: RouteCandidate[], selected: string, issues: RouteIssue[] = []): void {
     this.routes.clearLayers();
@@ -33,6 +40,8 @@ export class GeneratorMap {
       });
     }
     const chosen = candidates.find(c => c.id === selected);
+    this.terrainBadge.hidden = !chosen;
+    this.terrainBadge.textContent = chosen ? terrainResolutionLabel(chosen.searchTerrain) : '';
     if (chosen) for (const issue of issues.filter(i => i.startNm !== undefined && i.endNm !== undefined).reverse()) {
       const points = issueRouteCoordinates(issue, chosen.legs);
       if (!points.length) continue;

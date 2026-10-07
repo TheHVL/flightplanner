@@ -8,6 +8,7 @@ export interface ProjectedPoint { x: number; y: number; }
 export interface TerrainRaster {
   west: number; north: number; resolutionM: number; width: number; height: number;
   elevationsM: Float32Array; fetchedAt: string; sourceUrl: string;
+  sampleResolutionM?: number; aggregation?: 'max-2x2';
 }
 export function projectTerrainPoint(point: Coordinate): ProjectedPoint {
   const [x, y] = proj4('EPSG:4326', UTM33, [point.lon, point.lat]);
@@ -39,7 +40,8 @@ export async function decodeTerrainRaster(buffer: ArrayBuffer, signal?: AbortSig
 }
 
 /** Fresh route-window rasters, bounded memory and three service requests at once.
- * WCS nearest-neighbour sampling is NOT a maximum of the native 1 m model.
+ * Max-pool four twice-finer WCS samples per search cell. This is still NOT
+ * a maximum of the native 1 m model; peaks between source samples can be missed.
  */
 export async function fetchRouteTerrainRaster(points: Coordinate[], signal: AbortSignal,
   progress?: (done: number, total: number) => void): Promise<TerrainRaster> {
@@ -55,8 +57,8 @@ export async function fetchRouteTerrainRaster(points: Coordinate[], signal: Abor
   const width = Math.ceil((maxX - west) / resolutionM), height = Math.ceil((north - minY) / resolutionM);
   const elevationsM = new Float32Array(width * height).fill(NaN);
   const tiles: Array<{ col: number; row: number; width: number; height: number }> = [];
-  for (let row = 0; row < height; row += 1600) for (let col = 0; col < width; col += 1600) {
-    tiles.push({ col, row, width: Math.min(1600, width - col), height: Math.min(1600, height - row) });
+  for (let row = 0; row < height; row += 800) for (let col = 0; col < width; col += 800) {
+    tiles.push({ col, row, width: Math.min(800, width - col), height: Math.min(800, height - row) });
   }
   let next = 0, done = 0;
   const requests = new AbortController(), cancelRequests = () => requests.abort(signal.reason);
@@ -69,7 +71,7 @@ export async function fetchRouteTerrainRaster(points: Coordinate[], signal: Abor
       const params = { service: 'WCS', request: 'GetCoverage', version: '1.0.0', coverage: 'nhm_dtm_topo_25833',
         crs: 'EPSG:25833', response_crs: 'EPSG:25833', format: 'GeoTIFF', interpolation: 'nearest neighbor',
         bbox: [tileWest, tileNorth - tile.height * resolutionM, tileWest + tile.width * resolutionM, tileNorth].join(','),
-        width: String(tile.width), height: String(tile.height) };
+        width: String(tile.width * 2), height: String(tile.height * 2) };
       Object.entries(params).forEach(([key, value]) => url.searchParams.set(key, value));
       const timeout = new AbortController(), abort = () => timeout.abort(requests.signal.reason);
       requests.signal.addEventListener('abort', abort, { once: true }); const timer = setTimeout(() => timeout.abort(), 45000);
@@ -79,19 +81,30 @@ export async function fetchRouteTerrainRaster(points: Coordinate[], signal: Abor
         const buffer = await response.arrayBuffer();
         if (buffer.byteLength > 24_000_000) throw new Error('Terrain service returned an oversized tile.');
         const raster = await decodeTerrainRaster(buffer, timeout.signal);
-        if (raster.width !== tile.width || raster.height !== tile.height || Math.abs(raster.west - tileWest) > 1 ||
-            Math.abs(raster.north - tileNorth) > 1 || Math.abs(raster.resolutionM - resolutionM) > 0.1) throw new Error('Terrain tile does not match the requested window.');
-        for (let row = 0; row < tile.height; row++) elevationsM.set(raster.elevationsM.subarray(row * tile.width, (row + 1) * tile.width), (tile.row + row) * width + tile.col);
+        if (raster.width !== tile.width * 2 || raster.height !== tile.height * 2 || Math.abs(raster.west - tileWest) > 1 ||
+            Math.abs(raster.north - tileNorth) > 1 || Math.abs(raster.resolutionM - resolutionM / 2) > 0.1) throw new Error('Terrain tile does not match the requested window.');
+        const pooled = maxPoolTerrainRaster(raster.elevationsM, raster.width, raster.height);
+        for (let row = 0; row < tile.height; row++) elevationsM.set(pooled.subarray(row * tile.width, (row + 1) * tile.width), (tile.row + row) * width + tile.col);
       } catch (error) {
         signal.throwIfAborted(); requests.abort();
-        throw new Error(`Terrain search data could not be loaded. No straight-line fallback was generated. ${error instanceof Error ? error.message : ''}`);
+        throw new Error(`Terrain search data could not be loaded. No straight-line fallback was generated. ${error instanceof Error ? error.message : ''}`, { cause: error });
       } finally { clearTimeout(timer); requests.signal.removeEventListener('abort', abort); }
       requests.signal.throwIfAborted(); progress?.(++done, tiles.length);
     }
   };
   try { await Promise.all([worker(), worker(), worker()]); signal.throwIfAborted(); }
   finally { signal.removeEventListener('abort', cancelRequests); }
-  return { west, north, resolutionM, width, height, elevationsM, fetchedAt: new Date().toISOString(), sourceUrl: TERRAIN_RASTER_SOURCE };
+  return { west, north, resolutionM, sampleResolutionM: resolutionM / 2, aggregation: 'max-2x2', width, height, elevationsM, fetchedAt: new Date().toISOString(), sourceUrl: TERRAIN_RASTER_SOURCE };
+}
+
+export function maxPoolTerrainRaster(values: Float32Array, width: number, height: number): Float32Array {
+  if (width % 2 || height % 2 || width < 2 || height < 2 || values.length !== width * height) throw new Error('Invalid pooling grid.');
+  const result = new Float32Array(width * height / 4).fill(NaN);
+  for (let y = 0; y < height; y += 2) for (let x = 0; x < width; x += 2) {
+    const samples = [values[y * width + x], values[y * width + x + 1], values[(y + 1) * width + x], values[(y + 1) * width + x + 1]];
+    if (samples.every(Number.isFinite)) result[(y / 2) * (width / 2) + x / 2] = Math.max(...samples);
+  }
+  return result;
 }
 
 function distanceToSegment(point: ProjectedPoint, from: ProjectedPoint, to: ProjectedPoint): number {

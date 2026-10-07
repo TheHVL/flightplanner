@@ -57,7 +57,7 @@ function selectAt(data: RadioCatalog, lon: number, lat: number, altitude: number
   };
   const primary = suggestions(selected.filter(s => s.rank === rank));
   const alternatives = suggestions(selected.filter(s => s.rank < rank)).filter(c => !primary.some(p => p.channel === c.channel && p.callSign === c.callSign));
-  let note = pressureBoundary ? 'Near a published FL boundary. Confirm the pressure-altitude reference and ATS channel.' : primary.length > 1 ? 'Multiple published channels. Confirm the active channel with ATS.' : undefined;
+  const note = pressureBoundary ? 'Near a published FL boundary. Confirm the pressure-altitude reference and ATS channel.' : primary.length > 1 ? 'Multiple published channels. Confirm the active channel with ATS.' : undefined;
   const withheld = data.withheldAreas?.find(a => lon >= a.bounds[0] && lon <= a.bounds[2] && lat >= a.bounds[1] && lat <= a.bounds[3]);
   if (withheld) return { primary: [], alternatives: [...primary, ...alternatives], note: `${withheld.name}: local radio-area geometry requires chart review. Choose a channel manually.` };
   return { primary, alternatives, note: note || (primary.length ? undefined : 'No imported ATS radio area at this position and altitude. Check the AIP.') };

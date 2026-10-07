@@ -55,7 +55,7 @@ export interface VerticalProfileSettings {
   legCruiseTasKt?: Array<number | null>;
   /** Derived on read so all vertical-profile consumers use the same active per-leg winds. */
   legWinds?: VerticalLegWind[];
-  /** Derived on read from route weather where available, otherwise the Phase 4 OAT fallback. */
+  /** Derived on read from route weather where available, otherwise the Aircraft & defaults OAT fallback. */
   legOatC?: Array<number | null>;
 }
 
@@ -82,6 +82,8 @@ export interface LegWeatherForecast {
   modelSelection?: 'best_match';
   modelName?: string | null;
   modelRunTimeUtc?: string | null;
+  altitudeClamped?: boolean;
+  sampledAltitudeFt?: number;
 }
 
 export interface FlightPlanWorkingDraftState {
@@ -100,6 +102,7 @@ export interface FlightPlanWorkingDraftState {
 
 interface FlightPlanSnapshot extends FlightPlanWorkingDraftState {
   weatherForecasts: Array<[string, LegWeatherForecast]>;
+  routeShapes: Array<{ fromId: string; toId: string; coordinate: { lat: number; lon: number } }>;
 }
 
 const DEFAULT_NAVIGATION_SETTINGS: NavigationSettings = {
@@ -161,6 +164,32 @@ export class FlightPlanStore {
   private automaticWaypointIds = new Set<string>();
   private listeners = new Set<Listener>();
   private undoStack: FlightPlanSnapshot[] = [];
+  private redoStack: FlightPlanSnapshot[] = [];
+  private historyDepth = 0;
+  private shapeHistory: { capture: () => FlightPlanSnapshot['routeShapes']; restore: (shapes: FlightPlanSnapshot['routeShapes']) => void } | null = null;
+
+  attachRouteShapeHistory(capture: () => FlightPlanSnapshot['routeShapes'], restore: (shapes: FlightPlanSnapshot['routeShapes']) => void): void {
+    this.shapeHistory = { capture, restore };
+  }
+
+  runUndoableAction(action: () => void): void {
+    this.rememberUndo();
+    this.historyDepth++;
+    try { action(); } finally { this.historyDepth--; if (!this.historyDepth) this.emit(); }
+  }
+
+  canRedo(): boolean { return this.redoStack.length > 0; }
+
+  redoLastAction(): boolean {
+    const next = this.redoStack.pop();
+    if (!next) return false;
+    this.undoStack.push(this.createSnapshot());
+    this.restoreSnapshot(next);
+    this.emit();
+    return true;
+  }
+
+  constructor(private readonly newLegAltitudeFt: number | null = null) {}
 
   getWaypoints(): Waypoint[] {
     return this.waypoints.map((waypoint) => ({ ...waypoint }));
@@ -246,6 +275,7 @@ export class FlightPlanStore {
     this.weatherForecasts.clear();
     this.automaticWaypointIds = new Set(draft.automaticWaypointIds);
     this.undoStack = [];
+    this.redoStack = [];
     this.renumberAutomaticWaypointNames();
     this.retainCurrentLegSettings();
     this.emit();
@@ -259,6 +289,7 @@ export class FlightPlanStore {
   undoLastAction(): boolean {
     const previous = this.undoStack.pop();
     if (!previous) return false;
+    this.redoStack.push(this.createSnapshot());
     this.restoreSnapshot(previous);
     this.emit();
     return true;
@@ -555,6 +586,8 @@ export class FlightPlanStore {
     };
 
     if (!hasCustomName) this.automaticWaypointIds.add(id);
+    const previous = this.waypoints.at(-1);
+    if (previous && this.newLegAltitudeFt !== null) this.plannedAltitudesFt.set(this.legKey(previous.id, id), this.newLegAltitudeFt);
     this.waypoints = [...this.waypoints, waypoint];
     this.renumberAutomaticWaypointNames();
     this.weatherForecasts.clear();
@@ -568,6 +601,8 @@ export class FlightPlanStore {
     this.rememberUndo();
     for (const point of points) {
       const waypoint: Waypoint = { id: crypto.randomUUID(), name: point.name, lat: point.lat, lon: point.lon, aipId: point.aipId, aipEffectiveDate: point.aipEffectiveDate };
+      const previous = this.waypoints.at(-1);
+      if (previous && this.newLegAltitudeFt !== null) this.plannedAltitudesFt.set(this.legKey(previous.id, waypoint.id), this.newLegAltitudeFt);
       this.waypoints.push(waypoint);
       if (point.elevationFt !== undefined) {
         this.verticalWaypointConstraints.set(waypoint.id, { ...DEFAULT_WAYPOINT_VERTICAL_CONSTRAINT, mode: 'airport', elevationFt: point.elevationFt, icaoCode: point.aipId });
@@ -588,7 +623,7 @@ export class FlightPlanStore {
     const from = this.waypoints[index - 1];
     const to = this.waypoints[index];
     const previousLegKey = this.legKey(from.id, to.id);
-    const inheritedAltitudeFt = this.plannedAltitudesFt.get(previousLegKey) ?? null;
+    const inheritedAltitudeFt = this.plannedAltitudesFt.get(previousLegKey) ?? this.newLegAltitudeFt;
     const inheritedManualWind = this.manualLegWinds.get(previousLegKey) ?? null;
 
     this.rememberUndo();
@@ -757,12 +792,15 @@ export class FlightPlanStore {
   }
 
   private rememberUndo(): void {
+    if (this.historyDepth) return;
+    this.redoStack = [];
     this.undoStack.push(this.createSnapshot());
     if (this.undoStack.length > MAX_UNDO_STEPS) this.undoStack.shift();
   }
 
   private createSnapshot(): FlightPlanSnapshot {
     return {
+      routeShapes: this.shapeHistory?.capture() ?? [],
       waypoints: this.waypoints.map((waypoint) => ({ ...waypoint })),
       navigationSettings: { ...this.navigationSettings },
       performanceSettings: { ...this.performanceSettings },
@@ -797,9 +835,11 @@ export class FlightPlanStore {
       snapshot.verticalWaypointConstraints.map(([key, constraint]) => [key, { ...constraint }]),
     );
     this.automaticWaypointIds = new Set(snapshot.automaticWaypointIds);
+    this.shapeHistory?.restore(snapshot.routeShapes);
   }
 
   private emit(): void {
+    if (this.historyDepth) return;
     this.listeners.forEach((listener) => listener());
   }
 }

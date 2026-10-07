@@ -31,7 +31,7 @@ export interface RouteCandidate {
   profileWarnings: RouteIssue[];
   coverageIssues: RouteIssue[];
   rasterIssues: RasterLegIssue[];
-  searchTerrain: { resolutionM: number; fetchedAt: string; highestRasterFt: number | null; conflicts: number; missingCorridors: number };
+  searchTerrain: { sampleResolutionM?: number; aggregation?: string; resolutionM: number; fetchedAt: string; highestRasterFt: number | null; conflicts: number; missingCorridors: number };
 }
 export const INITIAL_GENERATOR_AIRPORTS = ['ENDU', 'ENSR', 'ENTC'];
 const airportPoint = (a: AipAerodrome): DraftPoint => ({ name: a.icao, aipId: a.icao, lat: a.lat!, lon: a.lon!, elevationFt: a.elevationFt });
@@ -39,7 +39,7 @@ const distance = (points: Coordinate[]) => points.slice(1).reduce((sum, p, i) =>
 
 export function validateGeneratorRequest(request: GeneratorRequest, catalog?: AipAerodromeCatalog): void {
   const airports = [request.departure, ...request.visits.map(v => v.icao), request.destination];
-  if (airports.some(code => !/^EN[A-Z]{2}$/.test(code) || catalog && !northernAirports(catalog).some(a => a.icao === code))) throw new Error('Choose a published mainland airport at or north of Bodø. This is the terrain search coverage area.');
+  if (airports.some(code => !/^EN[A-Z]{2}$/.test(code) || catalog && !northernAirports(catalog).some(a => a.icao === code))) throw new Error('Choose a published mainland airport at or north of Trondheim (ENVA included). This is the terrain search coverage area.');
   if (!request.visits.length && request.departure === request.destination) throw new Error('Add an airport visit for a return flight.');
   if (request.visits.length > 4 || airports.some((code, i) => i > 0 && airports[i - 1] === code)) throw new Error('Use at most four visits and avoid consecutive visits to the same airport.');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(request.flightDate) || !Number.isFinite(Date.parse(request.flightDate))) throw new Error('Choose a flight date.');
@@ -121,7 +121,7 @@ export async function generateRouteCandidates(request: GeneratorRequest, catalog
         name: `Terrain turn ${i + 1}`, aipId: `terrain:${point.lat.toFixed(6)}:${point.lon.toFixed(6)}` }));
       hops.push([...out, ...turns, ...inbound, airportPoint(pair.to)]);
     }
-    if (!hops.length) throw new Error(`No draft connection found for ${pair.from.icao} → ${pair.to.icao} at ${request.altitudeFt} ft within the terrain search and published restriction footprints. Try another itinerary or entry/exit. A higher preferred altitude cannot override terminal MAX limits or the conservative restriction avoidance. Missing terrain and the bounded search window can also prevent a result.`);
+    if (!hops.length) throw new Error(`No draft connection found for ${pair.from.icao} → ${pair.to.icao} at ${request.altitudeFt} ft within the terrain search and published restriction footprints. Try another itinerary or entry/exit. Restricted and danger areas are avoided regardless of altitude or activation, so an inactive or overflyable area may exclude a usable route. A higher preferred altitude cannot override terminal MAX limits. Missing terrain and the bounded search window can also prevent a result.`);
     // Feasibility and shorter coherent paths come before duration. Preserve
     // multiple terminal choices so the later profile review can reject a join.
     paths = paths.flatMap(path => hops.map(hop => [...path, ...hop])).sort((a, b) => distance(a) - distance(b)).slice(0, 48);
@@ -267,5 +267,5 @@ function createCandidate(path: DraftPoint[], request: GeneratorRequest, catalog:
   return { id, name: '', draft: store.exportWorkingDraftState(), legs: calculateRouteLegs(waypoints), distanceNm: distance(path), flightMinutes, patternMinutes,
     totalMinutes: flightMinutes + patternMinutes, fuelGal: fuel.tripFuelGal, durationDifference: flightMinutes + patternMinutes - request.lessonMinutes,
     sourceNotes: [...notes], profileIssues: issues, reviewedEdges, profileWarnings, coverageIssues, rasterIssues: [],
-    searchTerrain: { resolutionM: raster.resolutionM, fetchedAt: raster.fetchedAt, highestRasterFt: null, conflicts: 0, missingCorridors: 0 } };
+    searchTerrain: { sampleResolutionM: raster.sampleResolutionM, aggregation: raster.aggregation, resolutionM: raster.resolutionM, fetchedAt: raster.fetchedAt, highestRasterFt: null, conflicts: 0, missingCorridors: 0 } };
 }

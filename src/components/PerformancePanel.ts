@@ -85,7 +85,7 @@ export class PerformancePanel {
         </div>
         <div id="fuel-result" class="fuel-result"></div>
         <details class="menu-help" data-menu-section="fuel-help"><summary>Fuel source &amp; assumptions</summary><div class="nav-help fuel-source">
-          <strong>Source/assumptions:</strong> the UiT OFP v4.2 fuel-requirements box states that Trip Fuel includes 1.7 US gal for startup, taxi and takeoff, the original default allowance is 1.7 gal. The school preset uses your updated allowance of 2 US gal. Figure 5-8 supplies climb fuel when a POH climb profile is selected. Figure 5-9 supplies cruise fuel flow. Calculated fuel usage is displayed rounded up to the next whole US gallon, while internal calculations retain full precision. PL/elevation are currently used as pressure-altitude proxies until QNH conversion is added.
+          <strong>Source/assumptions:</strong> the UiT OFP v4.2 fuel-requirements box states that Trip Fuel includes 1.7 US gal for startup, taxi and takeoff, the original default allowance is 1.7 gal. The school preset uses your updated allowance of 2 US gal. Figure 5-8 supplies climb fuel when a POH climb profile is selected. Figure 5-9 supplies cruise fuel flow. Calculated fuel usage is displayed rounded up to the next whole US gallon, while internal calculations retain full precision. PL/elevation are currently used as pressure-altitude proxies for the performance estimate.
         </div></details>
       </div>
     `);

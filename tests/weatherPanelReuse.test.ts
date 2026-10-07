@@ -175,3 +175,10 @@ it('updates the forecast status when the user enables or disables the fetched wi
   expect(status()).toContain('Enable');
   expect(status()).not.toContain('Forecast winds are active');
 });
+
+it('shows nearest-level forecast warnings with requested and sampled altitudes', () => {
+  const {store,root,a,b} = setup();
+  store.setRouteWeatherForecasts([{...sample, fromId:a.id,toId:b.id,altitudeFt:0,altitudeClamped:true,sampledAltitudeFt:328}]);
+  expect(root.querySelector('.weather-altitude-warning')!.textContent).toContain('approximately 328 ft');
+  expect(root.querySelector('.weather-altitude-warning')!.textContent).toContain('Requested 0 ft');
+});

@@ -1,7 +1,7 @@
 import type { FlightPlanStore, FlightPlanWorkingDraftState } from './FlightPlanStore';
 import type { RouteShapeController, RouteShapeDraft } from './RouteShapeController';
 
-const STORAGE_KEY = 'flightplanner-working-route-v1';
+export const WORKING_ROUTE_STORAGE_KEY = 'flightplanner-working-route-v1';
 const SCHEMA_VERSION = 1;
 
 interface StoredWorkingRoute {
@@ -19,7 +19,7 @@ export function saveWorkingRoute(
 
   try {
     if (store.getWaypoints().length === 0) {
-      window.localStorage.removeItem(STORAGE_KEY);
+      window.localStorage.removeItem(WORKING_ROUTE_STORAGE_KEY);
       return true;
     }
 
@@ -29,7 +29,7 @@ export function saveWorkingRoute(
       flightPlan: store.exportWorkingDraftState(),
       routeShapes: routeShapes.getShapeDraft(),
     };
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    window.localStorage.setItem(WORKING_ROUTE_STORAGE_KEY, JSON.stringify(payload));
     return true;
   } catch {
     return false;
@@ -39,34 +39,28 @@ export function saveWorkingRoute(
 export function restoreWorkingRoute(
   store: FlightPlanStore,
   routeShapes: RouteShapeController,
+  onProblem: (message: string, raw: string | null) => void = () => undefined,
 ): boolean {
   if (typeof window === 'undefined') return false;
-
+  let raw: string | null = null;
+  const previous = store.exportWorkingDraftState(), previousShapes = routeShapes.getShapeDraft();
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    raw = window.localStorage.getItem(WORKING_ROUTE_STORAGE_KEY);
     if (!raw) return false;
     const parsed: unknown = JSON.parse(raw);
-    if (!isStoredWorkingRoute(parsed)) {
-      window.localStorage.removeItem(STORAGE_KEY);
-      return false;
-    }
-
-    if (!store.restoreWorkingDraftState(parsed.flightPlan)) {
-      window.localStorage.removeItem(STORAGE_KEY);
+    if (!isStoredWorkingRoute(parsed) || !store.restoreWorkingDraftState(parsed.flightPlan)) {
+      onProblem('The saved working route could not be read. Its original data have been retained for recovery.', raw);
       return false;
     }
     if (!routeShapes.restoreShapeDraft(parsed.routeShapes)) {
-      store.clear();
-      window.localStorage.removeItem(STORAGE_KEY);
+      store.restoreWorkingDraftState(previous);
+      routeShapes.restoreShapeDraft(previousShapes);
+      onProblem('The saved route geometry could not be read. Its original data have been retained for recovery.', raw);
       return false;
     }
     return true;
   } catch {
-    try {
-      window.localStorage.removeItem(STORAGE_KEY);
-    } catch {
-      // Ignore storage cleanup failures.
-    }
+    onProblem(raw ? 'The saved working route is damaged. Its original data have been retained for recovery.' : 'Local storage is unavailable. Export your plan before closing this page.', raw);
     return false;
   }
 }
@@ -74,7 +68,7 @@ export function restoreWorkingRoute(
 export function clearWorkingRoute(): void {
   if (typeof window === 'undefined') return;
   try {
-    window.localStorage.removeItem(STORAGE_KEY);
+    window.localStorage.removeItem(WORKING_ROUTE_STORAGE_KEY);
   } catch {
     // Local storage can be unavailable in private/restricted browser contexts.
   }
