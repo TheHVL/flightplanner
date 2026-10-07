@@ -51,7 +51,14 @@ it('mounts a separate workflow, generates alternatives and preserves the manual 
   expect(root.querySelectorAll('.generator-candidate').length).toBeGreaterThan(1);
   expect(localStorage.getItem('flightplanner-working-route-v1')).toBe(before);
   expect(sessionStorage.length).toBe(0);
+  expect(root.querySelector('[name="altitudeFt"]').value).toBe('2500');
+  expect(root.querySelector('.generator-terrain-badge').textContent).toContain('Peaks may be higher');
+  expect(root.querySelector('[data-generator-transfer]').disabled).toBe(true);
+  const ack = root.querySelector('[data-generator-ack]'); ack.checked = true; ack.dispatchEvent(new Event('change', { bubbles: true }));
   expect(root.querySelector('[data-generator-transfer]').disabled).toBe(false);
+  root.querySelectorAll('[data-generator-select]')[1].click();
+  expect(root.querySelector('[data-generator-ack]').checked).toBe(false);
+  expect(root.querySelector('[data-generator-transfer]').disabled).toBe(true);
   const altitude = root.querySelector('[name="altitudeFt"]'); altitude.value = '4000'; altitude.dispatchEvent(new Event('input', { bubbles: true }));
   expect(root.querySelectorAll('.generator-candidate')).toHaveLength(0);
   expect(localStorage.getItem('flightplanner-working-route-v1')).toBe(before);
@@ -86,6 +93,9 @@ it('keeps missing terrain visibly incomplete and blocks transfer until it can be
   expect(root.querySelector('.route-issues').textContent).toContain('Terrain heights missing');
   expect(root.textContent).not.toContain('No low transit margin found');
   expect(root.querySelector('[data-generator-transfer]').disabled).toBe(true);
+  const ack = root.querySelector('[data-generator-ack]'); ack.checked = true; ack.dispatchEvent(new Event('change', { bubbles: true }));
+  expect(root.querySelector('[data-generator-transfer]').disabled).toBe(true);
+  root.querySelector('[data-generator-transfer]').click();
   expect(sessionStorage.length).toBe(0);
 });
 it('locates a warning on the map without changing the manual plan and blocks an unverified restriction snapshot', async () => {

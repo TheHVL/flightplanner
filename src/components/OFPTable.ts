@@ -170,8 +170,9 @@ export class OFPTable {
     const node = this.element.querySelector<HTMLElement>('[data-ofp-weather-warning]');
     if (!node) return;
     const freshness = forecastFreshness(this.store.getWeatherForecasts());
-    node.hidden = !this.store.getWeatherSettings().useForecastWinds || !freshness.stale;
-    node.textContent = `Forecast winds need review. ${freshness.message}`;
+    const clamped = this.store.getWeatherForecasts().filter(forecast => forecast.altitudeClamped);
+    node.hidden = !this.store.getWeatherSettings().useForecastWinds || (!freshness.stale && !clamped.length);
+    node.textContent = [freshness.stale ? `Forecast winds need review. ${freshness.message}` : '', clamped.length ? `${clamped.length} leg(s) use the nearest available forecast altitude. Requested levels are outside the forecast range; review their winds in Weather.` : ''].filter(Boolean).join(' ');
   }
 
   private legRow(

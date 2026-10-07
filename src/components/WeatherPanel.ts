@@ -111,7 +111,7 @@ export class WeatherPanel {
               <strong>${String(Math.round(forecast.windFromDeg) % 360).padStart(3, '0')}°/${Math.round(forecast.windSpeedKt)} kt</strong>
               <span>${forecast.temperatureC >= 0 ? '+' : ''}${forecast.temperatureC.toFixed(1)}°C</span>
             </div>
-          </div>`;
+          </div>${forecast.altitudeClamped ? `<p class="weather-altitude-warning">Nearest available forecast level used${Number.isFinite(forecast.sampledAltitudeFt) ? `: approximately ${Math.round(forecast.sampledAltitudeFt!)} ft` : ''}. Requested ${Math.round(forecast.altitudeFt)} ft is outside the forecast altitude range. Review this leg's wind.</p>` : ''}`;
       }).join('')}</div>`;
   }
 
@@ -274,6 +274,8 @@ export class WeatherPanel {
           modelSelection: sample.modelSelection,
           modelName: sample.modelName,
           modelRunTimeUtc: sample.modelRunTimeUtc,
+          altitudeClamped: sample.altitudeClamped,
+          sampledAltitudeFt: sample.sampledAltitudeFt,
         });
         legStartMs += legHours * 60 * 60 * 1000;
       }

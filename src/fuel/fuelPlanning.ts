@@ -247,7 +247,7 @@ export function calculateRouteFuelPlan(input: RouteFuelPlanInput): RouteFuelPlan
     const oatSource: 'forecast' | 'manual' = forecast ? 'forecast' : 'manual';
 
     if (plannedAltitudeFt === null && performanceSettings.usePohPerformance) {
-      warnings.push(`${leg.from.name} -> ${leg.to.name}: no PL entered, so the Phase 4 pressure-altitude field is used for cruise performance.`);
+      warnings.push(`${leg.from.name} -> ${leg.to.name}: no PL entered, so the Aircraft & defaults altitude is used for cruise performance.`);
     }
 
     let cruiseTasKt = navigationSettings.tasKt;
@@ -414,17 +414,17 @@ export function calculateRouteFuelPlan(input: RouteFuelPlanInput): RouteFuelPlan
   }
 
   if (performanceSettings.usePohPerformance) {
-    warnings.push('Per-leg PL is currently used as a pressure-altitude proxy for Figure 5-9. A future QNH conversion can refine this.');
+    warnings.push('Per-leg PL is currently used as a pressure-altitude proxy for Figure 5-9.');
   }
   if (fuelSettings.climbPerformanceMode !== 'manual') {
     warnings.push('POH Figure 5-8 climb time and fuel use entered elevation/PL as pressure-altitude proxies. Its zero-wind distance is used to derive average climb TAS; active per-leg wind then determines TOC ground distance.');
-    warnings.push('Figure 5-8 temperature correction uses route-weather OAT for the outbound leg where available, otherwise the Phase 4 OAT fallback, and increases time/fuel/distance only when above ISA.');
+    warnings.push('Figure 5-8 temperature correction uses route-weather OAT for the outbound leg where available, otherwise the Aircraft & defaults OAT fallback, and increases time/fuel/distance only when above ISA.');
   }
   if (legPlans.some((leg) => leg.descentTimeMin > EPSILON)) {
     warnings.push('Descent uses the selected TAS mode with active per-leg wind. Descent rate and fuel flow are editable planning inputs.');
   }
   if (legPlans.some((leg) => leg.oatSource === 'manual')) {
-    warnings.push('Where no route-weather temperature is available, the Phase 4 OAT field is used as the cruise-temperature fallback.');
+    warnings.push('Where no route-weather temperature is available, the Aircraft & defaults OAT field is used as the cruise-temperature fallback.');
   }
 
   return {

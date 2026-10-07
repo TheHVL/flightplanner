@@ -61,7 +61,7 @@ export function buildVfrRoutingInputs(catalog: AipAerodromeCatalog, status: AipR
       if (['both', 'reverse'].includes(segment.direction)) add(true);
     }
   }
-  result.coverageWarnings.push('Airport selection covers mainland AIP airports at or north of Bodø. Verified terminal route coverage remains partial. Airport joins, pattern geometry, obstacles and complete restricted airspace are not encoded. Chart bends must be reviewed before automatic routing.');
+  result.coverageWarnings.push('Airport selection covers mainland AIP airports at or north of Trondheim (ENVA included). Verified terminal route coverage remains partial. Airport joins, pattern geometry, obstacles and complete restricted airspace are not encoded. Chart bends must be reviewed before automatic routing.');
   result.coverageWarnings = [...new Set(result.coverageWarnings)];
   return result;
 }

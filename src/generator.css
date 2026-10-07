@@ -37,3 +37,7 @@
 .generator-coverage p, .generator-candidate p { overflow-wrap: anywhere; }
 @media (max-width: 850px) { .generator-workspace { grid-template-columns: minmax(0, 1fr); } #generator-map { height: 370px; } .generator-shell { padding: 12px; } }
 @media (max-width: 420px) { .generator-fields { grid-template-columns: minmax(0, 1fr); } .generator-metrics strong { font-size: 17px; } }
+
+.generator-terrain-badge { padding: 8px 10px; border: 1px solid #b45309; border-radius: 6px; background: #fffbeb; color: #78350f; font-size: 12px; max-width: min(420px, 70vw); line-height: 1.4; }
+.generator-ack { display: flex; align-items: flex-start; gap: 9px; margin: 16px 0; font-size: 13px; line-height: 1.5; }
+.generator-ack input { flex: 0 0 auto; width: 18px; height: 18px; margin-top: 2px; }
