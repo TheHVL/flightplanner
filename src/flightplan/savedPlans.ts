@@ -131,7 +131,7 @@ export class SavedPlanRepository {
 
 function applySnapshot(snapshot: PlanSnapshot, store: FlightPlanStore, shapes: RouteShapeController): void {
   // This is the only write that can fail; perform it before mutating the route.
-  try { saveFuelPlanningSettings(snapshot.fuelSettings); }
+  try { saveFuelPlanningSettings(snapshot.fuelSettings, { requireStorage: true }); }
   catch { throw new Error('Could not restore fuel settings. Your current route has been kept.'); }
   store.restoreWorkingDraftState(snapshot.flightPlan);
   shapes.restoreShapeDraft(snapshot.routeShapes);

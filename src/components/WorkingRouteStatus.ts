@@ -1,16 +1,24 @@
 import type { FlightPlanStore } from '../flightplan/FlightPlanStore';
 import type { RouteShapeController } from '../flightplan/RouteShapeController';
 import { restoreWorkingRoute, saveWorkingRoute } from '../flightplan/workingRoutePersistence';
+import { FUEL_SETTINGS_CHANGED_EVENT } from '../fuel/fuelPlanning';
 import { escapeHtml } from '../utils/html';
 
 /** Keeps damaged data until a recovery copy exists, and reports every save result. */
 export class WorkingRouteStatus {
   private recoveryRaw: string | null = null;
   private recoveryCopied = false;
+  private fuelSaveFailed = false;
   private recoveryMessage = '';
   private readonly recoveryKey = `flightplanner-working-route-recovery-${Date.now()}-${crypto.randomUUID()}`;
 
   constructor(private readonly root: HTMLElement, private readonly store: FlightPlanStore, private readonly shapes: RouteShapeController) {
+    window.addEventListener(FUEL_SETTINGS_CHANGED_EVENT, event => {
+      const saved = (event as CustomEvent<{ savedLocally?: boolean }>).detail?.savedLocally;
+      if (typeof saved !== 'boolean') return;
+      this.fuelSaveFailed = !saved;
+      this.save();
+    });
     root.addEventListener('click', event => {
       if (!(event.target as HTMLElement).closest('[data-download-recovery]') || this.recoveryRaw === null) return;
       const url = URL.createObjectURL(new Blob([this.recoveryRaw], { type: 'application/json' }));
@@ -54,6 +62,7 @@ export class WorkingRouteStatus {
   }
 
   private show(message: string): void {
+    if (this.fuelSaveFailed) message = `${message === 'Saved locally.' ? 'Route saved locally.' : message} Fuel settings are unsaved locally. Export your current plan under Save & load before closing.`;
     const markup = `<span>${escapeHtml(message)}</span>${this.recoveryMessage ? `<span class="working-route-recovery">${escapeHtml(this.recoveryMessage)}${this.recoveryRaw !== null ? ' <button type="button" class="ghost-button" data-download-recovery>Download recovery data</button>' : ''}</span>` : ''}`;
     if (this.root.innerHTML !== markup) this.root.innerHTML = markup;
   }

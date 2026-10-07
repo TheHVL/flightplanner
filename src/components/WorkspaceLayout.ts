@@ -1,16 +1,17 @@
+import { readPreference, writePreference } from '../utils/preferences';
 import { SidebarResize } from './SidebarResize';
 
 export function initializeWorkspaceLayout(workspace: HTMLElement, mapColumn: HTMLElement, mapResizeHandle: HTMLElement, mapExpandButton: HTMLButtonElement, invalidateMap: () => void): void {
   const MIN_WORKSPACE_HEIGHT = 480;
   const MAX_WORKSPACE_HEIGHT = 1000;
   const defaultWorkspaceHeight = Math.min(700, Math.max(560, window.innerHeight - 180));
-  const savedWorkspaceHeight = Number(localStorage.getItem('flightplanner-workspace-height'));
+  const savedWorkspaceHeight = Number(readPreference('flightplanner-workspace-height'));
 
   const setWorkspaceHeight = (height: number, persist = false) => {
     const clamped = Math.round(Math.min(MAX_WORKSPACE_HEIGHT, Math.max(MIN_WORKSPACE_HEIGHT, height)));
     workspace.style.setProperty('--workspace-height', `${clamped}px`);
     mapResizeHandle.setAttribute('aria-valuenow', String(clamped));
-    if (persist) localStorage.setItem('flightplanner-workspace-height', String(clamped));
+    if (persist) writePreference('flightplanner-workspace-height', String(clamped));
     window.requestAnimationFrame(() => invalidateMap());
   };
 

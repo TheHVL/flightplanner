@@ -1,3 +1,4 @@
+import { readPreference, writePreference } from '../utils/preferences';
 const DEFAULT_WIDTH = 340;
 const MIN_WIDTH = 300;
 const MAX_WIDTH = 760;
@@ -12,7 +13,7 @@ export class SidebarResize {
 
   constructor(private readonly workspace: HTMLElement, private readonly sidebar: HTMLElement,
     private readonly handle: HTMLElement, private readonly onResize: () => void) {
-    const saved = Number(localStorage.getItem(STORAGE_KEY));
+    const saved = Number(readPreference(STORAGE_KEY));
     this.preferredWidth = Number.isFinite(saved) && saved >= MIN_WIDTH ? saved : DEFAULT_WIDTH;
     this.apply(this.preferredWidth);
     window.addEventListener('resize', () => this.apply(this.preferredWidth));
@@ -66,7 +67,7 @@ export class SidebarResize {
     this.handle.setAttribute('aria-valuetext', `${clamped} pixels`);
     if (persist) {
       this.preferredWidth = clamped;
-      localStorage.setItem(STORAGE_KEY, String(clamped));
+      writePreference(STORAGE_KEY, String(clamped));
     }
     this.onResize();
   }

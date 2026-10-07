@@ -1,3 +1,4 @@
+import { readPreference, writePreference } from './utils/preferences';
 import './styles.css';
 import './mapEnhancements.css';
 import './performance.css';
@@ -273,10 +274,10 @@ for (const disclosure of document.querySelectorAll<HTMLDetailsElement>('.phase-d
   const key = disclosure.dataset.panelKey;
   if (!key) continue;
   const storageKey = `flightplanner-panel-${key}-open`;
-  const saved = localStorage.getItem(storageKey);
+  const saved = readPreference(storageKey);
   if (saved !== null) disclosure.open = saved === 'true';
   disclosure.addEventListener('toggle', () => {
-    localStorage.setItem(storageKey, String(disclosure.open));
+    writePreference(storageKey, String(disclosure.open));
     window.requestAnimationFrame(() => mapManager.invalidateSize());
   });
 }
@@ -287,31 +288,31 @@ document.querySelector('#collapse-planning-menus')!.addEventListener('click', ()
 
 const isChartDetailMode = (value: string | null): value is ChartDetailMode =>
   value === 'auto' || value === 'sharp' || value === 'fast';
-const savedDetailMode = localStorage.getItem('flightplanner-icao-detail');
+const savedDetailMode = readPreference('flightplanner-icao-detail');
 const initialDetailMode: ChartDetailMode = isChartDetailMode(savedDetailMode) ? savedDetailMode : 'auto';
 chartDetailSelect.value = initialDetailMode;
 mapManager.setChartDetail(initialDetailMode);
 chartDetailSelect.addEventListener('change', () => {
   const mode = chartDetailSelect.value;
   if (!isChartDetailMode(mode)) return;
-  localStorage.setItem('flightplanner-icao-detail', mode);
+  writePreference('flightplanner-icao-detail', mode);
   mapManager.setChartDetail(mode);
 });
 
-const savedMsaCorridor = localStorage.getItem('flightplanner-msa-corridor') === 'true';
+const savedMsaCorridor = readPreference('flightplanner-msa-corridor') === 'true';
 msaCorridorToggle.checked = savedMsaCorridor;
 mapManager.setMsaCorridorVisible(savedMsaCorridor);
 msaCorridorToggle.addEventListener('change', () => {
-  localStorage.setItem('flightplanner-msa-corridor', String(msaCorridorToggle.checked));
+  writePreference('flightplanner-msa-corridor', String(msaCorridorToggle.checked));
   mapManager.setMsaCorridorVisible(msaCorridorToggle.checked);
 });
 
-const savedGlideEnvelope = localStorage.getItem('flightplanner-glide-envelope') === 'true';
+const savedGlideEnvelope = readPreference('flightplanner-glide-envelope') === 'true';
 glideEnvelopeToggle.checked = savedGlideEnvelope;
 glideAssumptionBar.hidden = !savedGlideEnvelope;
 mapManager.setGlideEnvelopeVisible(savedGlideEnvelope);
 glideEnvelopeToggle.addEventListener('change', () => {
-  localStorage.setItem('flightplanner-glide-envelope', String(glideEnvelopeToggle.checked));
+  writePreference('flightplanner-glide-envelope', String(glideEnvelopeToggle.checked));
   glideAssumptionBar.hidden = !glideEnvelopeToggle.checked;
   mapManager.setGlideEnvelopeVisible(glideEnvelopeToggle.checked);
   void renderGlideEnvelope();

@@ -5,6 +5,8 @@ import { RouteShapeController } from '../src/flightplan/RouteShapeController';
 import { PlanningHistory } from '../src/components/PlanningHistory';
 import { WorkingRouteStatus } from '../src/components/WorkingRouteStatus';
 import { restoreWorkingRoute, WORKING_ROUTE_STORAGE_KEY } from '../src/flightplan/workingRoutePersistence';
+import { getFuelPlanningSettings, saveFuelPlanningSettings } from '../src/fuel/fuelPlanning';
+import { readPreference, writePreference } from '../src/utils/preferences';
 import { approximateTasFromIas } from '../src/performance/airspeed';
 
 afterEach(() => { vi.restoreAllMocks(); localStorage.clear(); document.body.replaceChildren(); });
@@ -80,4 +82,31 @@ it('pauses autosave if a damaged original cannot be backed up', () => {
 it('accepts a plausible negative pressure altitude for IAS correction and rejects values outside the supported range', () => {
   expect(approximateTasFromIas(90,-1000,16.9812)).toBeLessThan(90);
   expect(()=>approximateTasFromIas(90,-2001,15)).toThrow();
+});
+
+it('keeps optional UI preferences usable and reports working-route failure when storage is denied', () => {
+  vi.spyOn(localStorage,'getItem').mockImplementation(()=>{throw new Error('storage denied');});
+  vi.spyOn(localStorage,'setItem').mockImplementation(()=>{throw new Error('storage denied');});
+  expect(readPreference('layout')).toBeNull(); expect(writePreference('layout','700')).toBe(false);
+  const root = document.createElement('div'), store = new FlightPlanStore();
+  const status = new WorkingRouteStatus(root,store,new RouteShapeController(store));
+  expect(status.restore()).toBe(false); expect(root.textContent).toContain('Local storage is unavailable');
+  store.addWaypoint({lat:69,lon:18},'A'); expect(status.save()).toBe(false); expect(root.textContent).toContain('Autosave failed');
+});
+
+it('retains fuel edits in memory on storage failure, with a warning even when the route saves successfully', () => {
+  const previous = getFuelPlanningSettings(), store = new FlightPlanStore(), root = document.createElement('div');
+  const status = new WorkingRouteStatus(root,store,new RouteShapeController(store));
+  store.addWaypoint({lat:69,lon:18},'A');
+  const original = localStorage.setItem.bind(localStorage);
+  vi.spyOn(localStorage,'setItem').mockImplementation((key,value) => {
+    if (key === 'flightplanner-fuel-settings-v1') throw new Error('quota');
+    original(key,value);
+  });
+  try {
+    saveFuelPlanningSettings({...previous,manualCruiseFuelFlowGph:18});
+    expect(getFuelPlanningSettings().manualCruiseFuelFlowGph).toBe(18);
+    expect(root.textContent).toContain('Fuel settings are unsaved locally');
+    expect(status.save()).toBe(true); expect(root.textContent).toContain('Fuel settings are unsaved locally');
+  } finally { vi.restoreAllMocks(); saveFuelPlanningSettings(previous); }
 });

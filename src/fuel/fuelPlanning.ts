@@ -143,7 +143,10 @@ export const DEFAULT_FUEL_PLANNING_SETTINGS: FuelPlanningSettings = {
   contingencyGal: null,
 };
 
+let unsavedFuelSettings: FuelPlanningSettings | null = null;
+
 export function getFuelPlanningSettings(): FuelPlanningSettings {
+  if (unsavedFuelSettings) return { ...unsavedFuelSettings };
   if (typeof window === 'undefined') return { ...DEFAULT_FUEL_PLANNING_SETTINGS };
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
@@ -154,11 +157,19 @@ export function getFuelPlanningSettings(): FuelPlanningSettings {
   }
 }
 
-export function saveFuelPlanningSettings(settings: FuelPlanningSettings): FuelPlanningSettings {
+export function saveFuelPlanningSettings(settings: FuelPlanningSettings, options: { requireStorage?: boolean } = {}): FuelPlanningSettings {
   const sanitized = sanitizeSettings(settings);
   if (typeof window !== 'undefined') {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(sanitized));
-    window.dispatchEvent(new CustomEvent(FUEL_SETTINGS_CHANGED_EVENT));
+    let savedLocally = false;
+    try {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(sanitized));
+      unsavedFuelSettings = null;
+      savedLocally = true;
+    } catch (error) {
+      if (options.requireStorage) throw error;
+      unsavedFuelSettings = { ...sanitized };
+    }
+    window.dispatchEvent(new CustomEvent(FUEL_SETTINGS_CHANGED_EVENT, { detail: { savedLocally } }));
   }
   return sanitized;
 }
