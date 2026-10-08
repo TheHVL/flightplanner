@@ -5,6 +5,8 @@ Browser-based VFR planning for Norwegian flight training, primarily using the Ce
 - [Manual Planner](https://thehvl.github.io/flightplanner/)
 - [Route Generator](https://thehvl.github.io/flightplanner/generator.html), a separate page for comparing draft routes
 
+Development continuity: [Codex handoff, status and proposed roadmap](docs/CODEX_HANDOFF.md), with concise repository instructions in [AGENTS.md](AGENTS.md).
+
 > Training and planning aid. Check the aircraft POH/AFM, current official AIP, NOTAM, weather briefing, mass and balance, operational procedures and applicable requirements. A modeled route or absence of warnings does not establish operational suitability. Each page requires acknowledgement before use.
 
 ## Manual planning workflow
