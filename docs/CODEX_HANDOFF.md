@@ -12,9 +12,9 @@ Updated: **2026-10-09**. This is a repository handoff, not an instruction to imp
 | Purpose | Intuitive Norwegian VFR student planning, primarily C182T; OFP and draft-route comparison |
 | Stack | TypeScript, Vite, Leaflet, WMM2025 magnetic variation, proj4, GeoTIFF; static GitHub Pages |
 | Storage | Browser-local working route/settings and named plans, JSON export/import; no server-side plan account |
-| Latest feature checkpoint | PR [#59](https://github.com/TheHVL/flightplanner/pull/59), merge `1c6d16c5e527b561992dbcd891d4a87e22000f4c` |
+| Feature checkpoints | PR [#59](https://github.com/TheHVL/flightplanner/pull/59), merge `1c6d16c5e527b561992dbcd891d4a87e22000f4c`; waypoint editing/readability release `77f41e0`; sidebar/map-click follow-up described below |
 | Original handoff snapshot | `f4307bd` on `main`, after two automated AIP refreshes following PR #59; subsequent docs/data commits do not change application behavior |
-| User-requested release | Distance display, waypoint drag/insertion, airport-sector colors and readability changes based on `d4e191c`; publication authorized on 2026-10-09. Verify current Git and Pages status separately from the local evidence below |
+| User-requested release | Distance display, waypoint drag/insertion, airport-sector colors and readability changes published as `77f41e0`, followed by automated AIP refresh `a7aa42c`. Its CI and Pages deployment succeeded. Follow-up fixes below are based on `a7aa42c`; verify their current Git and Pages status separately from local evidence |
 
 Codex can work on this existing repository and existing Pages hosting. No repository ownership migration or AI feature in the planner is necessary. Root `AGENTS.md` is the concise entry point; this file holds detailed context so permanent instructions stay manageable. The user requested this handoff to carry progress, plans and preferences into future development sessions.
 
@@ -27,6 +27,7 @@ The generator is a **draft comparison tool**, not a complete operational route s
 - Keep manual and automatic planning on separate pages. Do not add automatic CTR VFR procedure routing to the manual planner; individual AIP points and chart links remain useful there.
 - Keep the interface intuitive for someone who has never seen it. Sidebar sequence: Build route → Prepare legs → Weather & fuel → Review OFP. Use collapsed advanced sections rather than displaying every dense panel at once.
 - Airports are sorted by ICAO; reporting points are grouped by airport. Sidebar width is draggable. Dropdown text must fit and labels should be plain language, without development-stage terms such as “Phase 4”.
+- Keep waypoint-list/sidebar scroll position during editing, including deletion. The list's bottom resize handle supports mouse/touch and keyboard height adjustment, with double-click reset. Remember the height as an optional UI preference, separate from plan data and history.
 - Map-click/marker-drag snapping to airports and reporting points is supported. Do not restore floating snap-point name tags; the user finds them cluttered and reads names on the ICAO map.
 - OFP has one selected frequency for each leg. Suggested services and channel choices belong in the sidebar. Make uncertain/overlapping coverage explicit and leave selection to the pilot.
 - Departure time, ETO, ATO and actual fuel are filled in flight. Do not make them required OFP planning inputs. Intended departure **UTC date/time for weather retrieval** is a separate necessary input.
@@ -128,6 +129,14 @@ CI now includes source lint, unit tests, TypeScript/build, Chromium smoke tests 
 
 ## 5. Verification and open findings
 
+### Sidebar and route-click follow-up, 2026-10-09
+
+- Waypoint rendering retains the list container and resize handle, restores list/sidebar scroll offsets, and focuses the next (or previous final) remove button without scrolling after deletion. A shortened list clamps naturally to its remaining bottom.
+- **Resize waypoint list** adjusts its height from 180–1000 px (default 360), by pointer drag or keyboard; double-click resets it. The preference survives editing/reload and tolerates unavailable browser storage without affecting route data or Undo/Redo.
+- Route options open on click after Leaflet's popup-closing preclick, and the route hit line disables mouse-event bubbling. Clicking a leg no longer also appends a waypoint through the map background handler; ordinary map placement, shaping and published-point selection remain available.
+- Fresh local checks under Node **22.23.3**: **274 unit tests across 54 files**, lint and TypeScript/Vite build passed. **12/12 pinned-Chromium browser checks passed**, no skips/retries: previous checks plus repeated deletion/keyboard focus/bottom clamping, pointer/keyboard/touch resizing with persistence and 390 px layout, and mouse/touch route-menu insertion with no extra appended point.
+- These follow-up results were recorded locally before publication. For the preceding `77f41e0` release, [CI](https://github.com/TheHVL/flightplanner/actions/runs/37985054952) and [Pages](https://github.com/TheHVL/flightplanner/actions/runs/37985054948) succeeded; direct live-site requests were blocked by the environment network policy. No new live terrain or generator-route suitability is established.
+
 ### Local user-requested fixes, 2026-10-09
 
 - Changed distance presentation, waypoint drag/insertion, airport-sector coloring and sidebar readability; see the Unreleased changelog. The evidence below was recorded locally before publication; it does not establish deployment status. Existing navigation headings, fuel rules, manual MSA ownership, generator transfer blocks and storage formats are preserved.
@@ -171,7 +180,7 @@ These priorities consolidate the discussion; they are not the missing numbered p
 | --- | --- |
 | Entrypoints/build | `index.html`, `src/main.ts`, `generator.html`, `src/generator.ts`, `vite.config.ts` |
 | Plan/history/shape | `src/flightplan/FlightPlanStore.ts`, `RouteShapeController.ts`, `workingRoutePersistence.ts`, `savedPlans.ts`; `src/components/PlanningHistory.ts` |
-| Sidebar/OFP/persistence UX | `src/components/PlanningWorkflow.ts`, `RoutePanel.ts`, `SequentialLegPanel.ts`, `OFPTable.ts`, `RouteReviewPanel.ts`, `WorkingRouteStatus.ts`, `WorkspaceLayout.ts`, `legEditorEvents.ts`; `src/utils/panelMarkup.ts`, `src/readability.css` |
+| Sidebar/OFP/persistence UX | `src/components/PlanningWorkflow.ts`, `RoutePanel.ts`, `WaypointListResize.ts`, `SequentialLegPanel.ts`, `OFPTable.ts`, `RouteReviewPanel.ts`, `WorkingRouteStatus.ts`, `WorkspaceLayout.ts`, `legEditorEvents.ts`; `src/utils/panelMarkup.ts`, `src/readability.css` |
 | Map route editing/colors | `src/map/MapManager.ts`, `routeSectors.ts`; `tests/routeEditing.test.ts`, `e2e/route-editing.spec.ts` |
 | Performance/fuel/rounding | `src/performance/schoolPreset.ts`, `cruisePerformance.ts`, `climbPerformance.ts`, `airspeed.ts`; `src/fuel/fuelPlanning.ts`; `src/presentation/planningRounding.ts` |
 | Navigation/profile/MSA | `src/navigation/geodesy.ts`, `verticalProfile.ts`, `verticalConflicts.ts`, `msaCorridor.ts`, `wind.ts`, `magneticVariation.ts` |

@@ -260,6 +260,8 @@ export class MapManager {
       weight: 18,
       opacity: 0.001,
       interactive: true,
+      // A route click must not also append a waypoint through the map handler.
+      bubblingMouseEvents: false,
     }).addTo(this.map);
 
     this.routeHitLine.on('click', (event: LeafletMouseEvent) => {
@@ -620,8 +622,7 @@ export class MapManager {
       callbacks.onRouteLegShape(drag.legIndex, event.latlng.lat, event.latlng.lng);
     } else {
       this.updateRouteSectorPaths();
-      this.openRouteLegMenu(drag.legIndex, event.latlng, callbacks, event.originalEvent.altKey);
-      this.suppressNextMapClick = true;
+      // Open on click, after Leaflet's preclick has closed the previous popup.
     }
     L.DomEvent.stop(event.originalEvent);
   }

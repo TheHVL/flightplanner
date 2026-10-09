@@ -19,6 +19,10 @@
 .waypoint-drop-after { box-shadow: inset 0 -3px #1f67d8; }
 .waypoint-reorder-status:empty { display: none; }
 .waypoint-reorder-status { margin: 0; padding: 8px 14px; color: #245a91; }
+.route-panel .waypoint-list { max-height: var(--waypoint-list-height, 360px); scrollbar-gutter: stable; }
+.waypoint-list-resize { display: flex; justify-content: center; align-items: center; gap: 8px; min-height: 40px; padding: 4px 12px; border-top: 1px solid #c9d3df; background: #f4f8fc; color: #334b68; font-size: 14px; cursor: ns-resize; touch-action: none; user-select: none; }
+.waypoint-list-resize:is(:hover, :focus-visible, .is-resizing) { background: #e5edf8; }
+.waypoint-list-resize:focus-visible { outline: 2px solid #1f67d8; outline-offset: -3px; }
 .route-leg-menu { display: grid; gap: 10px; font-size: 14px; }
 .route-leg-menu button { padding: 9px 12px; border: 1px solid #c9d3df; border-radius: 5px; color: #16375d; background: #f4f8fc; font: inherit; }
 .route-sector-legend { max-width: min(280px, 65vw); max-height: 150px; overflow: auto; border: 1px solid #c9d3df; border-radius: 5px; background: #fff; padding: 6px 9px; color: #243750; font-size: 13px; }

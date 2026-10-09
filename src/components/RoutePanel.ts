@@ -1,5 +1,6 @@
 import { openLegEditor } from './legEditorEvents';
 import type { FlightPlanStore } from '../flightplan/FlightPlanStore';
+import { WaypointListResize } from './WaypointListResize';
 
 export class RoutePanel {
   private draggedId: string | null = null;
@@ -48,8 +49,9 @@ export class RoutePanel {
   render(): void {
     this.clearDrag();
     const waypoints = this.store.getWaypoints();
-
-    this.element.innerHTML = `
+    let list = this.element.querySelector<HTMLElement>('.waypoint-list');
+    if (!list) {
+      this.element.innerHTML = `
       <div class="panel-heading">
         <div>
           <p class="eyebrow">ROUTE</p>
@@ -59,11 +61,23 @@ export class RoutePanel {
       </div>
       <p class="hint">Drag a numbered waypoint handle to reorder the list, or use ↑ / ↓. Click a route line to add a waypoint between its endpoints or prepare that leg. Drag a map waypoint to move it; drag a route line to shape the flown path. Ctrl+Z / Cmd+Z undoes the latest action.</p>
       <p class="waypoint-reorder-status" role="status" aria-live="polite"></p>
-      <div class="waypoint-list">
-        ${waypoints.length === 0 ? '<div class="empty-state">No route yet</div>' : ''}
-        ${waypoints.map((waypoint, index) => this.waypointRow(waypoint.id, waypoint.name, waypoint.lat, waypoint.lon, index, waypoints.length)).join('')}
-      </div>
-    `;
+      <div class="waypoint-list" id="route-waypoint-list"></div>
+      <div class="waypoint-list-resize" role="separator" tabindex="0" aria-orientation="horizontal"
+        aria-label="Waypoint list height" aria-controls="route-waypoint-list"
+        title="Drag up or down to resize. Arrow keys also resize. Double-click to reset."><span aria-hidden="true">↕</span> Resize waypoint list</div>
+      `;
+      list = this.element.querySelector<HTMLElement>('.waypoint-list')!;
+      new WaypointListResize(this.element, list, this.element.querySelector<HTMLElement>('.waypoint-list-resize')!);
+    }
+    const scrollTop = list.scrollTop;
+    const sidebar = this.element.closest<HTMLElement>('#planning-sidebar');
+    const sidebarScrollTop = sidebar?.scrollTop ?? 0;
+    list.innerHTML = `${waypoints.length === 0 ? '<div class="empty-state">No route yet</div>' : ''}
+      ${waypoints.map((waypoint, index) => this.waypointRow(waypoint.id, waypoint.name, waypoint.lat, waypoint.lon, index, waypoints.length)).join('')}`;
+    list.scrollTop = scrollTop;
+    if (sidebar) sidebar.scrollTop = sidebarScrollTop;
+    this.element.querySelector<HTMLButtonElement>('[data-action="clear"]')!.disabled = waypoints.length === 0;
+    this.element.querySelector<HTMLElement>('.waypoint-reorder-status')!.textContent = '';
   }
 
   private waypointRow(
@@ -118,7 +132,16 @@ export class RoutePanel {
     }
     if (action === 'up') this.store.moveWaypoint(id, -1);
     if (action === 'down') this.store.moveWaypoint(id, 1);
-    if (action === 'remove') this.store.removeWaypoint(id);
+    if (action === 'remove') {
+      const points = this.store.getWaypoints();
+      const index = points.findIndex(point => point.id === id);
+      const nextId = (points[index + 1] ?? points[index - 1])?.id;
+      this.store.removeWaypoint(id);
+      const next = [...this.element.querySelectorAll<HTMLElement>('[data-id]')].find(item => item.dataset.id === nextId);
+      const focusTarget = next?.querySelector<HTMLElement>('[data-action="remove"]')
+        ?? this.element.querySelector<HTMLElement>('.waypoint-list-resize');
+      focusTarget?.focus({ preventScroll: true });
+    }
   }
 
   private handleChange(event: Event): void {

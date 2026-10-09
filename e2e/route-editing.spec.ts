@@ -98,6 +98,103 @@ test('OFP displays whole-NM leg distances and adds them for ACC and total', asyn
   await expect(page.locator('.route-total strong')).toHaveText('13 NM');
 });
 
+test('deleting waypoints keeps the list and sidebar at their editing position', async ({page}) => {
+  const store = new FlightPlanStore(2500);
+  for (let i = 0; i < 15; i++) store.addWaypoint({lat: 69.1 + i * .02, lon: 18.5 + i * .02}, `POINT ${i + 1}`);
+  await loadRoute(page, store);
+  const list = page.locator('.waypoint-list');
+  const sidebar = page.locator('#planning-sidebar');
+  await list.evaluate(element => { element.scrollTop = 650; });
+  await page.getByRole('button', {name: 'Remove POINT 6', exact: true}).scrollIntoViewIfNeeded();
+  const before = await list.evaluate(element => element.scrollTop);
+  const sidebarBefore = await sidebar.evaluate(element => element.scrollTop);
+  await page.getByRole('button', {name: 'Remove POINT 6', exact: true}).click();
+  await expect(page.locator('.waypoint-card')).toHaveCount(14);
+  await expect.poll(() => list.evaluate(element => element.scrollTop)).toBe(before);
+  await expect.poll(() => sidebar.evaluate(element => element.scrollTop)).toBe(sidebarBefore);
+  await expect(page.getByRole('button', {name: 'Remove POINT 7', exact: true})).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('.waypoint-card')).toHaveCount(13);
+  await expect.poll(() => list.evaluate(element => element.scrollTop)).toBe(before);
+  await page.locator('[data-plan-undo]').click();
+  await expect(page.locator('.waypoint-card')).toHaveCount(14);
+  await list.evaluate(element => { element.scrollTop = element.scrollHeight; });
+  await page.getByRole('button', {name: 'Remove POINT 15', exact: true}).click();
+  const bottom = await list.evaluate(element => ({top: element.scrollTop, max: element.scrollHeight - element.clientHeight}));
+  expect(bottom.top).toBe(bottom.max);
+  expect(bottom.top).toBeGreaterThan(0);
+  await expect(page.getByRole('button', {name: 'Remove POINT 14', exact: true})).toBeFocused();
+});
+
+test('waypoint list height supports dragging, keyboard and touch, and survives editing and reload', async ({page, context}) => {
+  await page.setViewportSize({width: 1280, height: 1100});
+  const store = new FlightPlanStore(2500);
+  for (let i = 0; i < 12; i++) store.addWaypoint({lat: 69.1 + i * .02, lon: 18.5 + i * .02}, `POINT ${i + 1}`);
+  await loadRoute(page, store);
+  const list = page.locator('.waypoint-list');
+  const handle = page.getByRole('separator', {name: 'Waypoint list height'});
+  await handle.scrollIntoViewIfNeeded();
+  const bounds = await handle.boundingBox();
+  await page.mouse.move(bounds!.x + bounds!.width / 2, bounds!.y + bounds!.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(bounds!.x + bounds!.width / 2, bounds!.y + bounds!.height / 2 + 120, {steps: 6});
+  await page.mouse.up();
+  await expect.poll(() => list.evaluate(element => element.clientHeight)).toBe(480);
+  await handle.press('ArrowDown');
+  await expect(handle).toHaveAttribute('aria-valuenow', '500');
+  await expect(page.locator('[data-plan-undo]')).toBeDisabled();
+  await page.getByRole('button', {name: 'Remove POINT 1', exact: true}).click();
+  await expect.poll(() => list.evaluate(element => element.clientHeight)).toBe(500);
+  await page.reload();
+  await page.getByRole('button', {name: 'I understand and want to continue'}).click();
+  await expect.poll(() => list.evaluate(element => element.clientHeight)).toBe(500);
+  await handle.scrollIntoViewIfNeeded();
+  const touchBounds = await handle.boundingBox();
+  const session = await context.newCDPSession(page);
+  await session.send('Emulation.setTouchEmulationEnabled', {enabled: true});
+  const point = {x: touchBounds!.x + touchBounds!.width / 2, y: touchBounds!.y + touchBounds!.height / 2, id: 1};
+  await session.send('Input.dispatchTouchEvent', {type: 'touchStart', touchPoints: [point]});
+  await session.send('Input.dispatchTouchEvent', {type: 'touchMove', touchPoints: [{...point, y: point.y + 60}]});
+  await session.send('Input.dispatchTouchEvent', {type: 'touchEnd', touchPoints: []});
+  await expect(handle).toHaveAttribute('aria-valuenow', '560');
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('flightplanner-waypoint-list-height'))).toBe('560');
+  await session.detach();
+  await page.setViewportSize({width: 390, height: 844});
+  await expect.poll(() => list.evaluate(element => element.clientHeight)).toBe(560);
+  expect(await page.locator('#planning-sidebar').evaluate(element => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1);
+  await handle.dblclick();
+  await expect(handle).toHaveAttribute('aria-valuenow', '360');
+});
+
+test('a route-line click stays open when the popup fits without moving the map', async ({page, context}) => {
+  await page.setViewportSize({width: 1280, height: 1100});
+  const store = new FlightPlanStore(2500);
+  store.addWaypoint({lat: 69.65, lon: 18}, 'A');
+  store.addWaypoint({lat: 69.7, lon: 18.8}, 'B');
+  await loadRoute(page, store);
+  const midpoint = await page.locator('#map .route-sector-line').first().evaluate(element => {
+    const line = element as SVGPathElement, point = line.getPointAtLength(line.getTotalLength() / 2);
+    const screen = new DOMPoint(point.x, point.y).matrixTransform(line.getScreenCTM()!);
+    return {x: screen.x, y: screen.y};
+  });
+  await page.mouse.click(midpoint.x, midpoint.y);
+  await expect(page.getByRole('button', {name: 'Add waypoint here'})).toBeVisible();
+  await expect(page.locator('.waypoint-card')).toHaveCount(2);
+  await page.locator('.leaflet-popup-close-button').click();
+  await expect(page.locator('.leaflet-popup')).toHaveCount(0);
+  const session = await context.newCDPSession(page);
+  await session.send('Emulation.setTouchEmulationEnabled', {enabled: true});
+  await session.send('Input.dispatchTouchEvent', {type: 'touchStart', touchPoints: [{...midpoint, id: 1}]});
+  await session.send('Input.dispatchTouchEvent', {type: 'touchEnd', touchPoints: []});
+  await expect(page.getByRole('button', {name: 'Add waypoint here'})).toBeVisible();
+  await expect(page.locator('.waypoint-card')).toHaveCount(2);
+  await page.getByRole('button', {name: 'Add waypoint here'}).click();
+  await expect(page.locator('.waypoint-card')).toHaveCount(3);
+  await expect(page.locator('.waypoint-name').first()).toHaveValue('A');
+  await expect(page.locator('.waypoint-name').last()).toHaveValue('B');
+  await session.detach();
+});
+
 test('touch dragging reorders waypoint handles without changing their coordinates', async ({page,context}) => {
   await page.setViewportSize({width:1280,height:1100});
   await page.addInitScript(()=>localStorage.setItem('flightplanner-sidebar-width','440'));

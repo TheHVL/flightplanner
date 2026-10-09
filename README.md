@@ -13,6 +13,8 @@ Development continuity: [Codex handoff, status and proposed roadmap](docs/CODEX_
 
 The sidebar follows four steps. Saved plans and aircraft defaults sit below them. Drag the divider beside the sidebar to adjust its width; open menus and entered values are preserved when panels update.
 
+Drag **Resize waypoint list** at the bottom of the waypoint list to see more or fewer points at once. You can also focus the handle and use ↑ / ↓; double-click resets the height. Your chosen height is remembered after reload, and deleting a waypoint keeps your scroll position so you can continue editing.
+
 1. **Build route:** add waypoints on the map or from the airport/reporting-point browser. Airports are ordered by ICAO and reporting points grouped by airport. Map clicks and marker drags can snap to published points without floating name labels. Drag a numbered waypoint handle with a mouse or touch to reorder it, or use its ↑ / ↓ buttons. Click a route line and choose **Add waypoint here** to insert between its endpoints, or **Prepare this leg** to edit it. Rename or delete waypoints, and use undo for recent changes.
 2. **Prepare legs:** edit each leg's PL (new legs start at 2,500 ft), manual MSA, wind backup and OFP frequency. The OFP shows one selected channel; alternatives stay in the sidebar. Enter advances through leg fields and Shift+Enter goes backwards. Altitude arrows use 100 ft increments.
 3. **Weather & fuel:** set the intended flight date/time in UTC, fetch fresh route winds, review performance assumptions and enter fuel onboard, reserve and contingency as needed.
