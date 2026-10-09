@@ -166,6 +166,41 @@ test('waypoint list height supports dragging, keyboard and touch, and survives e
   await expect(handle).toHaveAttribute('aria-valuenow', '360');
 });
 
+test('scrolling over the waypoint list continues through the sidebar to the OFP at the bottom', async ({page}) => {
+  await page.setViewportSize({width: 1280, height: 1100});
+  const store = new FlightPlanStore(2500);
+  for (let i = 0; i < 12; i++) store.addWaypoint({lat: 69.1 + i * .02, lon: 18.5 + i * .02}, `POINT ${i + 1}`);
+  await loadRoute(page, store);
+  const list = page.locator('.waypoint-list');
+  const sidebar = page.locator('#planning-sidebar');
+  const hoverVisibleList = async () => {
+    const listBounds = await list.boundingBox(), sidebarBounds = await sidebar.boundingBox();
+    const top = Math.max(listBounds!.y, sidebarBounds!.y, 0);
+    const bottom = Math.min(listBounds!.y + listBounds!.height, sidebarBounds!.y + sidebarBounds!.height, 1100);
+    expect(bottom).toBeGreaterThan(top);
+    await page.mouse.move(listBounds!.x + listBounds!.width / 2, (top + bottom) / 2);
+  };
+  await hoverVisibleList();
+  await page.mouse.wheel(0, 200);
+  await expect.poll(() => list.evaluate(element => element.scrollTop)).toBeGreaterThan(0);
+  expect(await sidebar.evaluate(element => element.scrollTop)).toBe(0);
+  expect(await page.evaluate(() => window.scrollY)).toBe(0);
+
+  await list.evaluate(element => { element.scrollTop = element.scrollHeight; });
+  await hoverVisibleList();
+  await page.mouse.wheel(0, 200);
+  await expect.poll(() => sidebar.evaluate(element => element.scrollTop)).toBeGreaterThan(0);
+  expect(await page.evaluate(() => window.scrollY)).toBe(0);
+
+  await sidebar.evaluate(element => { element.scrollTop = element.scrollHeight; });
+  await hoverVisibleList();
+  const ofpTop = await page.locator('#ofp-table').evaluate(element => element.getBoundingClientRect().top);
+  await page.mouse.wheel(0, 350);
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+  expect(await page.locator('#ofp-table').evaluate(element => element.getBoundingClientRect().top)).toBeLessThan(ofpTop);
+  expect(await list.evaluate(element => element.scrollTop)).toBeGreaterThan(0);
+});
+
 test('a route-line click stays open when the popup fits without moving the map', async ({page, context}) => {
   await page.setViewportSize({width: 1280, height: 1100});
   const store = new FlightPlanStore(2500);

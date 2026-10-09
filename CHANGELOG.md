@@ -4,6 +4,7 @@ This file records significant Flightplanner updates, formulas, source assumption
 
 ## Unreleased — 2026-10-09, waypoint editing and readability
 
+- Sidebar scrolling continues to the page/OFP once the nested waypoint list and sidebar reach their vertical edge, without moving the mouse out of the sidebar. Horizontal scroll containment remains in place.
 - Follow-up: waypoint edits preserve the list/sidebar scroll position; deletion focuses the next remove button for continued keyboard editing. A bottom resize handle supports mouse/touch and keyboard height changes, remembered independently of saved plans and Undo/Redo. Route options now open on click instead of mouse release, and route clicks no longer also append an unwanted point through the background map handler.
 - Leg distance now rounds down below 0.3 fractional NM and up at/above it. ACC distance and route total sum the displayed whole-NM legs: 5.7 + 7.2 displays 6 + 7 = 13 NM. Exact navigation, performance and fuel calculations remain unchanged. This replaces the previous upward-only leg and half-NM accumulated-distance display.
 - Numbered waypoint handles support mouse/touch reordering, insertion indicators, edge scrolling and one-action Undo/Redo; arrow buttons remain available. Reordering keeps unaffected leg inputs, refreshes changed endpoint elevations and clears fetched forecasts.

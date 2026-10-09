@@ -98,7 +98,7 @@ body.map-overlay-open { overflow: hidden; }
   font-weight: 800;
 }
 
-/* Desktop workspace height is user adjustable. The sidebar is the single vertical scroll container. */
+/* Desktop workspace height is adjustable. Scroll the sidebar, then the page at its edge. */
 .workspace {
   height: var(--workspace-height, 680px);
   min-height: 480px;
@@ -110,7 +110,8 @@ body.map-overlay-open { overflow: hidden; }
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  overscroll-behavior: contain;
+  overscroll-behavior-x: contain;
+  overscroll-behavior-y: auto;
   scrollbar-gutter: stable;
   scrollbar-width: thin;
   padding-right: 3px;

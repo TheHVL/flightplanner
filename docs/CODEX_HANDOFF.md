@@ -12,9 +12,9 @@ Updated: **2026-10-09**. This is a repository handoff, not an instruction to imp
 | Purpose | Intuitive Norwegian VFR student planning, primarily C182T; OFP and draft-route comparison |
 | Stack | TypeScript, Vite, Leaflet, WMM2025 magnetic variation, proj4, GeoTIFF; static GitHub Pages |
 | Storage | Browser-local working route/settings and named plans, JSON export/import; no server-side plan account |
-| Feature checkpoints | PR [#59](https://github.com/TheHVL/flightplanner/pull/59), merge `1c6d16c5e527b561992dbcd891d4a87e22000f4c`; waypoint editing/readability release `77f41e0`; sidebar/map-click follow-up described below |
+| Feature checkpoints | PR [#59](https://github.com/TheHVL/flightplanner/pull/59), merge `1c6d16c5e527b561992dbcd891d4a87e22000f4c`; waypoint editing/readability `77f41e0`; sidebar/map-click fixes `a396403`; sidebar-to-page scrolling follow-up described below |
 | Original handoff snapshot | `f4307bd` on `main`, after two automated AIP refreshes following PR #59; subsequent docs/data commits do not change application behavior |
-| User-requested release | Distance display, waypoint drag/insertion, airport-sector colors and readability changes published as `77f41e0`, followed by automated AIP refresh `a7aa42c`. Its CI and Pages deployment succeeded. Follow-up fixes below are based on `a7aa42c`; verify their current Git and Pages status separately from local evidence |
+| User-requested releases | Distance display, waypoint editing/colors/readability published as `77f41e0`; sidebar/map-click fixes as `a396403`, followed by automated AIP refresh `37f0bca`. CI and Pages deployment succeeded for both releases. The scrolling follow-up below is based on `37f0bca`; verify its current Git and Pages status separately from local evidence |
 
 Codex can work on this existing repository and existing Pages hosting. No repository ownership migration or AI feature in the planner is necessary. Root `AGENTS.md` is the concise entry point; this file holds detailed context so permanent instructions stay manageable. The user requested this handoff to carry progress, plans and preferences into future development sessions.
 
@@ -28,6 +28,7 @@ The generator is a **draft comparison tool**, not a complete operational route s
 - Keep the interface intuitive for someone who has never seen it. Sidebar sequence: Build route → Prepare legs → Weather & fuel → Review OFP. Use collapsed advanced sections rather than displaying every dense panel at once.
 - Airports are sorted by ICAO; reporting points are grouped by airport. Sidebar width is draggable. Dropdown text must fit and labels should be plain language, without development-stage terms such as “Phase 4”.
 - Keep waypoint-list/sidebar scroll position during editing, including deletion. The list's bottom resize handle supports mouse/touch and keyboard height adjustment, with double-click reset. Remember the height as an optional UI preference, separate from plan data and history.
+- With the pointer over the sidebar, vertical scrolling should continue to the page/OFP once the nested list and sidebar reach their edge. Keep native scrolling while either still has room to scroll.
 - Map-click/marker-drag snapping to airports and reporting points is supported. Do not restore floating snap-point name tags; the user finds them cluttered and reads names on the ICAO map.
 - OFP has one selected frequency for each leg. Suggested services and channel choices belong in the sidebar. Make uncertain/overlapping coverage explicit and leave selection to the pilot.
 - Departure time, ETO, ATO and actual fuel are filled in flight. Do not make them required OFP planning inputs. Intended departure **UTC date/time for weather retrieval** is a separate necessary input.
@@ -128,6 +129,13 @@ User-facing phase labels and future-QNH promises were removed; CSS renamed to pe
 CI now includes source lint, unit tests, TypeScript/build, Chromium smoke tests and axe checks. Production builds inject a CSP meta tag with explicit current provider allowances, Leaflet inline styles and GeoTIFF worker/WASM allowances. A meta CSP cannot enforce `frame-ancestors`; static hosting remains relevant when changing security policy.
 
 ## 5. Verification and open findings
+
+### Sidebar-to-page scrolling, 2026-10-09
+
+- Removed vertical overscroll containment from the desktop sidebar so scrolling continues naturally to the document/OFP at its edge. Horizontal containment stays in place; no JavaScript wheel interception or changes to list sizing, editing or planning calculations.
+- A real-wheel browser regression reproduced the trapped scroll before the fix. It now verifies that the waypoint list scrolls first, then the sidebar, then the document moves toward the OFP with the pointer still over the list.
+- Fresh local checks under Node **22.23.3**: **274 unit tests across 54 files**, lint and TypeScript/Vite build passed; **13/13 pinned-Chromium browser checks passed**, no skips or retries. These results were recorded before publication; inspect Git/Actions for current release status.
+- The preceding `a396403` release passed [CI](https://github.com/TheHVL/flightplanner/actions/runs/37986762632) and [Pages deployment](https://github.com/TheHVL/flightplanner/actions/runs/37986762636). Direct live-site requests remain blocked by this environment's network policy. Generator routing and terrain findings below remain unresolved.
 
 ### Sidebar and route-click follow-up, 2026-10-09
 
