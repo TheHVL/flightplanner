@@ -2,6 +2,12 @@
 
 This file records significant Flightplanner updates, formulas, source assumptions, limitations and implementation decisions. New updates are added at the top.
 
+## 2026-10-10, shelve automatic route planning
+
+- Removed the Route Generator from the released navigation at the user's request. Former generator bookmarks redirect to manual planning without loading the generator UI/routing entrypoint. Manual route editing, terrain/reporting-point tools, calculations and saved-plan compatibility remain available.
+- Preserved the complete pre-shelving project under Git tag `backup/route-generator-2026-10-10`, plus the original entrypoint and [restoration guide](archive/route-generator/README.md). Generator source, focused tests and diagnostics remain in the repository. Generator development is on hold until explicitly requested again.
+- Updated browser coverage to verify manual accessibility and that old bookmarks preserve the working route. Legacy transfer failures now direct users to manual planning.
+
 ## 2026-10-10, generator diagnosis and known sea surfaces
 
 - Corrected a false missing-height warning when Kartverket explicitly classifies a point as sea surface (`Havflate`) but has no seabed height. Retains N50 classification-only provenance; unknown land/lake heights, unclassified depths and malformed responses remain unknown. Existing terrain/MAX/restriction/profile transfer blocks are unchanged.

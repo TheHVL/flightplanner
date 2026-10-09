@@ -1,5 +1,7 @@
 # ENDU–ENTC generator diagnosis, 2026-10-10
 
+**Historical evidence:** after this investigation, the user chose to shelve the generator because its route suggestions were not useful. See the [backup guide](../archive/route-generator/README.md). The command below still exercises the retained source; the released `generator.html` now redirects to manual planning.
+
 The current-source run produces four drafts, all blocked by terrain/profile margins on the plotted terminal paths. One missing-height warning was a parser error for an explicitly classified sea surface; correcting it does **not** make any draft transferable. Airport joins and curved chart tracks still need source review.
 
 ## Reproduce

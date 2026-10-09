@@ -15,7 +15,9 @@ export default defineConfig({
     return [{ tag: 'meta', attrs: { 'http-equiv': 'Content-Security-Policy', content: contentSecurityPolicy }, injectTo: 'head-prepend' }];
   } }],
   base: '/flightplanner/',
-  build: { rollupOptions: { input: { manual: resolve('index.html'), generator: resolve('generator.html') } } },
+  // Keep the former generator URL as a redirect for existing bookmarks.
+  // Its archived application entrypoint is not part of the published build.
+  build: { rollupOptions: { input: { manual: resolve('index.html'), legacyGenerator: resolve('generator.html') } } },
   server: {
     port: 5173,
   },

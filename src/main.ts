@@ -71,7 +71,6 @@ root.innerHTML = `
           <div class="brand-subtitle">VFR · NORWAY · TRAINING</div>
         </div>
       </div>
-      <nav class="planner-page-nav" aria-label="Planner pages"><a href="./" aria-current="page">Manual planner</a><a href="generator.html">Route Generator</a></nav>
       <div class="phase-chip"><span></span> VFR FLIGHT PLANNING</div>
     </header>
 

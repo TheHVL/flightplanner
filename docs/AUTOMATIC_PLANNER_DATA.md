@@ -1,5 +1,7 @@
 # Route Generator and automatic planner data
 
+**Historical implementation notes:** the user shelved the generator on **2026-10-10** because its suggestions were not useful. It is no longer available in the released interface; `generator.html` redirects to the manual planner. Source/tests remain preserved, with a complete [backup and restoration guide](../archive/route-generator/README.md). The generator workflow below describes the retained implementation, not a current product offering. Manual terrain, reporting-point and airspace tools remain available.
+
 The **Route Generator** is a separate page at `generator.html`, with its own form, map and temporary plan state. Airport selection covers current AIP mainland aerodromes at or north of Trondheim (ENVA included), ordered by ICAO. Published terminal procedure coverage remains partial, with reviewed segments initially available for ENDU and ENTC and unresolved ENSR procedures. It generates route drafts for comparison and later editing in Manual Planner. It is not a complete operational route solver: published chart bends, airport joins, obstacles, restriction activation and NOTAM are not fully encoded.
 
 ## Using the separate page

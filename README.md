@@ -3,11 +3,10 @@
 Browser-based VFR planning for Norwegian flight training, primarily using the Cessna 182T.
 
 - [Manual Planner](https://thehvl.github.io/flightplanner/)
-- [Route Generator](https://thehvl.github.io/flightplanner/generator.html), a separate page for comparing draft routes
 
 Development continuity: [Codex handoff, status and proposed roadmap](docs/CODEX_HANDOFF.md), with concise repository instructions in [AGENTS.md](AGENTS.md).
 
-> Training and planning aid. Check the aircraft POH/AFM, current official AIP, NOTAM, weather briefing, mass and balance, operational procedures and applicable requirements. A modeled route or absence of warnings does not establish operational suitability. Each page requires acknowledgement before use.
+> Training and planning aid. Check the aircraft POH/AFM, current official AIP, NOTAM, weather briefing, mass and balance, operational procedures and applicable requirements. A modeled route or absence of warnings does not establish operational suitability. The planner requires acknowledgement before use.
 
 ## Manual planning workflow
 
@@ -32,7 +31,7 @@ The working plan is autosaved locally. Named plans can be saved, loaded and expo
 - Great-circle distance and initial true track, wind triangle, WCA, headings, groundspeed, and WMM2025 magnetic variation with manual overrides.
 - One draggable shaping bend per leg. It changes flown distance, time and fuel without adding an OFP fix; TT/MT/MH still use the direct waypoint-to-waypoint course. Add an actual waypoint when you want a separate navigation leg.
 - Airport-to-airport route sectors use different line colors through their intermediate waypoints. The next color starts on departure from the next identified airport, including return visits. **Airport routes** on the manual map lists the sectors; red/amber overlays still identify review findings.
-- The manual and generator maps draw densified great-circle sections matching route distance and terrain sampling. Terrain cross-sections follow the local path tangent; this does not change OFP tracks or headings.
+- The map draws densified great-circle sections matching route distance and terrain sampling. Terrain cross-sections follow the local path tangent; this does not change OFP tracks or headings.
 - Optional ±1 NM MSA inspection corridor, including shaped legs. Lateral terrain offsets use WGS84 ellipsoidal distances with a 1 cm inset for API coordinate rounding. Terrain is point-sampled, so peaks between probes and obstacles remain outside the check. MSA is entered by the pilot; PL below entered MSA is highlighted.
 - Optional C182T zero-wind glide and coarse coastline screening. The Figure 3-1 approximation is height above the assumed landing surface divided by 700, bounded at 14,000 ft. It assumes a sea-level shoreline and does not establish terrain clearance or a suitable landing site. The bundled Natural Earth 1:10m coastline can omit small islands and fine shoreline detail.
 
@@ -44,7 +43,7 @@ Patterns can only be assigned to identified airport waypoints. **Airport + patte
 
 ## Aircraft and fuel assumptions
 
-**Aircraft & defaults → Cruise power & aircraft defaults** contains an explicit **School C182T preset** button. The Route Generator has its own explicit preset option. Applying it changes the current planning assumptions; loading an existing plan preserves that plan's settings until the preset is applied.
+**Aircraft & defaults → Cruise power & aircraft defaults** contains an explicit **School C182T preset** button. Applying it changes the current planning assumptions; loading an existing plan preserves that plan's settings until the preset is applied.
 
 | Item | School preset |
 | --- | --- |
@@ -117,13 +116,11 @@ Per-leg ATS/Polaris suggestions use published coverage and modeled altitude when
 
 AIP refreshes do not ingest NOTAM, restriction activation or AIP SUP. AIP publication and ICAO basemap editions are separate. See [AIP data lifecycle and coverage](docs/AIP_DATA.md).
 
-## Separate Route Generator
+## Shelved Route Generator
 
-Choose departure, destination, up to four ordered airport visits, patterns, lesson duration and preferred altitude. Airport selection currently covers mainland AIP aerodromes at or north of Trondheim, including ENVA. Preferred altitude starts at 2,500 ft. Terrain search normally fetches 100 m samples and retains the highest of four per 200 m search cell, with coarser resolution for larger itineraries. Every draft and its map preview show the resolution and warn that peaks may be higher. This is not a maximum of the native 1 m terrain model. It compares up to three drafts using reviewed terminal point sequences and a free Kartverket terrain graph between airports; there is no manually maintained airport-to-airport route table or AI service.
+The user shelved automatic route planning on **2026-10-10** because its route suggestions were not useful. The released interface now focuses on manual planning. Former `generator.html` bookmarks redirect to the manual planner, preserving browser-local plans.
 
-The search uses coarse route-window terrain rasters, conservative restrictions avoidance and subsequent sampled terrain/profile checks. Missing verified restriction coverage, terrain coverage or detected blocking conflicts prevent transfer. Charted MAX limits constrain terminal levels; raising cruise altitude cannot override them. Airport joins, full curved chart geometry, obstacles, NOTAM/activation, finer terrain peaks and operational route suitability remain incomplete. A usable route may exist outside the bounded search. Generator calculations use still air; fresh weather is fetched in Manual Planner after transfer.
-
-Generation and preview keep manual planning separate. **Use this route in Manual Planner** requires acknowledgement that the draft is a starting point for chart review, not a cleared route, and explicitly transfers it, preserving recovery of the preceding working plan. It does not invent MSA, selected frequencies or forecast winds. See [automatic planner data and limitations](docs/AUTOMATIC_PLANNER_DATA.md) for search resolutions, coverage, source checks and remaining work.
+The complete pre-shelving source is preserved by Git tag `backup/route-generator-2026-10-10`; generator implementation, tests and diagnostics remain in the repository. The generator UI/routing entrypoint is excluded from the production build. See the [backup and restoration instructions](archive/route-generator/README.md), [historical implementation notes](docs/AUTOMATIC_PLANNER_DATA.md) and [last diagnostic](docs/GENERATOR_ENDU_ENTC_DIAGNOSTIC.md). Reactivation requires a new user decision.
 
 ## Development and deployment
 
@@ -139,7 +136,7 @@ npx playwright install chromium
 npm run test:e2e
 ```
 
-Vite builds both `index.html` and `generator.html`. GitHub Actions lints, unit-tests, builds and runs Chromium workflow and automated accessibility checks; the Pages workflow refreshes aviation data, tests, builds and deploys main. Failed upstream refreshes retain the verified snapshot with visible status rather than replacing it with partial data.
+Vite builds the manual planner (`index.html`) and the script-free redirect at `generator.html`; the archived generator entrypoint is not published. GitHub Actions lints, unit-tests, builds and runs Chromium workflow and automated accessibility checks, including old-bookmark redirection with working-plan preservation. Retained generator unit tests still run. The Pages workflow refreshes aviation data, tests, builds and deploys main. Failed upstream refreshes retain the verified snapshot with visible status rather than replacing it with partial data.
 
 To refresh the committed data manually:
 
@@ -162,7 +159,8 @@ No private API keys or credentials belong in this repository.
 | `src/performance/` and `src/fuel/` | Published performance, school preset and fuel accounting |
 | `src/weather/` | Batched forecasts, interpolation and retrieval-age checks |
 | `src/aip/` and `src/routing/` | Publication inputs, frequency/airspace/terrain checks and route search |
-| `src/generator/` | Separate generator form, draft comparison and transfer |
+| `src/generator/` | Retained generator source; legacy transfer compatibility used by the manual planner |
+| `archive/route-generator/` | Original generator entrypoint and backup/restoration instructions |
 | `src/map/` | Leaflet overlays and chart handling |
 | `src/presentation/` | Display rounding and actionable notices |
 | `scripts/` and `public/` | Importers, reviewed manifests and deployable source snapshots |

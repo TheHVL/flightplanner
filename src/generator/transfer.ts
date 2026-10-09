@@ -20,7 +20,7 @@ export function importGeneratedRoute(token: string | null, session: Pick<Storage
   local: Pick<Storage, 'getItem' | 'setItem'>, store: FlightPlanStore, shapes: RouteShapeController, now = Date.now()): boolean {
   if (!token) return false;
   const raw = session.getItem(TRANSFER_KEY);
-  if (!raw) throw new Error('The generated draft is no longer available. Return to Route Generator.');
+  if (!raw) throw new Error('The generated draft is no longer available. Continue planning manually. Your manual plan was kept.');
   let value: { schemaVersion?: number; token?: string; createdAt?: number; plan?: unknown };
   try { value = JSON.parse(raw); } catch { throw new Error('The generated draft could not be read. Your manual plan was kept.'); }
   if (!value || value.schemaVersion !== 1 || value.token !== token || typeof value.createdAt !== 'number' || !Number.isFinite(value.createdAt) || value.createdAt > now + 5000 || now - value.createdAt > MAX_AGE_MS) throw new Error('This generated transfer is invalid or expired. Your manual plan was kept.');
