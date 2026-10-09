@@ -15,6 +15,8 @@ export interface TerrainHeight {
   elevationFt: number;
   terrain: string;
   dataset: string;
+  /** Explicit N50 sea classification, without a usable height/depth dataset. */
+  surfaceOnly?: true;
 }
 export interface TerrainReview {
   probes: TerrainProbe[];
@@ -50,12 +52,18 @@ export function buildTerrainProbes(legs: RouteLeg[], altitudeAt: (leg: RouteLeg,
 
 /** Match by coordinates: the service response need not preserve request order. */
 export function parseTerrainHeights(value: unknown, points: Coordinate[]): Array<TerrainHeight | null> {
-  const data = value as { koordsys?: number; punkter?: Array<{ x?: number; y?: number; z?: number | null; terreng?: string; datakilde?: string }> };
+  const data = value as { koordsys?: number; punkter?: Array<{ x?: number; y?: number; z?: number | null; terreng?: string | null; datakilde?: string | null }> };
   if (!data || data.koordsys !== 4258 || !Array.isArray(data.punkter)) throw new Error('Kartverket returned an invalid height response.');
   return points.map(point => {
     const matches = data.punkter!.filter(p => Number.isFinite(p.x) && Number.isFinite(p.y) && Math.abs(p.x! - point.lon) < 0.000001 && Math.abs(p.y! - point.lat) < 0.000001);
     if (matches.length !== 1) return null;
     const p = matches[0];
+    // /punkt classifies surfaces using N50 independently of height coverage.
+    // A known sea surface is at 0 m even when its seabed depth is unavailable.
+    // Do not extend this to lakes, unclassified points or malformed heights.
+    if (p.terreng === 'Havflate' && (p.z == null || Number.isFinite(p.z) && p.z! >= -12000 && p.z! <= 9000)) {
+      if (p.z == null || !p.datakilde) return { elevationFt: 0, terrain: p.terreng, dataset: 'N50 surface classification', surfaceOnly: true };
+    }
     if (!p.datakilde || !Number.isFinite(p.z) || p.z! < -12000 || p.z! > 9000) return null;
     // The live API may omit the N50 surface classification even for valid DTM
     // heights. Accept known height datasets there, never unclassified sea depth.

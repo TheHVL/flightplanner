@@ -1,6 +1,6 @@
 # Flightplanner — Codex project handoff
 
-Updated: **2026-10-09**. This is a repository handoff, not an instruction to implement every proposed item. Read the root [AGENTS.md](../AGENTS.md), then inspect current code, git status and newer commits before starting work. Later explicit user instructions take precedence over this historical checkpoint.
+Updated: **2026-10-10**. This is a repository handoff, not an instruction to implement every proposed item. Read the root [AGENTS.md](../AGENTS.md), then inspect current code, git status and newer commits before starting work. Later explicit user instructions take precedence over this historical checkpoint.
 
 ## 1. Project and checkpoint
 
@@ -14,7 +14,7 @@ Updated: **2026-10-09**. This is a repository handoff, not an instruction to imp
 | Storage | Browser-local working route/settings and named plans, JSON export/import; no server-side plan account |
 | Feature checkpoints | PR [#59](https://github.com/TheHVL/flightplanner/pull/59), merge `1c6d16c5e527b561992dbcd891d4a87e22000f4c`; waypoint editing/readability `77f41e0`; sidebar/map-click fixes `a396403`; sidebar-to-page scrolling follow-up described below |
 | Original handoff snapshot | `f4307bd` on `main`, after two automated AIP refreshes following PR #59; subsequent docs/data commits do not change application behavior |
-| User-requested releases | Distance display, waypoint editing/colors/readability published as `77f41e0`; sidebar/map-click fixes as `a396403`, followed by automated AIP refresh `37f0bca`. CI and Pages deployment succeeded for both releases. The scrolling follow-up below is based on `37f0bca`; verify its current Git and Pages status separately from local evidence |
+| User-requested releases | Distance/editing/readability `77f41e0`, sidebar/map-click fixes `a396403`, and sidebar-to-page scrolling `43b398e`: CI and Pages succeeded. Latest starting data checkpoint `a0bccc5`. Generator diagnosis/sea-surface correction described below; inspect Git/Actions for its publication status |
 
 Codex can work on this existing repository and existing Pages hosting. No repository ownership migration or AI feature in the planner is necessary. Root `AGENTS.md` is the concise entry point; this file holds detailed context so permanent instructions stay manageable. The user requested this handoff to carry progress, plans and preferences into future development sessions.
 
@@ -130,6 +130,15 @@ CI now includes source lint, unit tests, TypeScript/build, Chromium smoke tests 
 
 ## 5. Verification and open findings
 
+### Generator diagnosis and sea-surface correction, 2026-10-10
+
+- Completed the user-selected ENDU–ENTC diagnosis against current sources. [Full evidence and reproduction command](GENERATOR_ENDU_ENTC_DIAGNOSTIC.md) retain terminal sequences, modeled levels, controlling point coordinates/raster sections, published ceilings, source checksums and remaining limitations. `scripts/diagnose-generator.mjs` runs the actual pipeline for an arbitrary airport pair, captures provider responses and explicitly labels replay; no airport-pair route is hardcoded.
+- Current AIP edition 2026-09-03 and ENDU/ENTC VAC hashes were independently verified. Baseline and subsequent fresh runs each fetched four WCS tiles and 34 point-height batches, all HTTP 200, with no raster gaps or failed batches. All four drafts still fail terrain margins on the represented terminal geometry. The best-ranked ANSNES–RYA leg includes returned terrain about 2911 ft against MAX 2500. Profile calculations succeeded; missing/unknown modeled altitude and restrictions did not cause these particular blocks.
+- The single missing point at 69.61477714 N, 18.82201554 E was explicitly classified `Havflate`, with no seabed height/dataset. Official Kartverket documentation distinguishes N50 surface classification from height/depth coverage. The parser now retains a 0 m sea-surface reference with explicit classification-only provenance. Missing land/lake heights, unclassified depths and malformed/unmatched/duplicate responses remain unknown.
+- Identical-response replay removes one missing-height notice from each of the two affected drafts, preserving all terrain/MAX conflicts and transfer blocks. A fresh provider run reproduced that result. The local production-preview browser, using fresh WCS/height requests through curl for the cloud proxy, displayed three blocked drafts and disabled acknowledgement/transfer. Direct proxy Chromium access was rejected; map tiles had local certificate failures. This is application/data integration evidence, not live Pages/native-browser connectivity proof.
+- Fresh Node **22.23.3** checks: **276 unit tests / 54 files**, lint, TypeScript/Vite build and **13/13 pinned-Chromium regressions**, no skips/retries. Focused tests cover the actual missing-seabed response and unchanged unknown/malformed terrain handling.
+- **Routing usability remains unresolved.** Point-to-point terminal chords and generic airport joins do not establish the curved published procedures. Next proposed work is source-reviewed directional tracks/joins, starting with conflicting ENDU departures and ENTC arrivals, followed by a fresh comparison. Do not raise MAX limits or reduce the 1 NM / 500 ft reference to obtain a green draft.
+
 ### Sidebar-to-page scrolling, 2026-10-09
 
 - Removed vertical overscroll containment from the desktop sidebar so scrolling continues naturally to the document/OFP at its edge. Horizontal containment stays in place; no JavaScript wheel interception or changes to list sizing, editing or planning calculations.
@@ -151,7 +160,7 @@ CI now includes source lint, unit tests, TypeScript/build, Chromium smoke tests 
 - Fresh local verification under Node **22.23.3**: **274 unit tests across 54 files**, source lint and TypeScript/Vite build passed. Tests include the 6 + 7 = 13 NM example and a case where adding displayed legs differs from rounding the exact total, exact calculation inputs, atomic reorder/undo, preserved blanks and wind on insertion, airport provenance/endpoints, bend preservation and sector boundaries.
 - **9/9 Chromium browser checks passed**, with no skips or retries, against the local production preview: the original default/undo/autosave smoke check, both axe checks, mouse reorder/undo/reload, route-line insertion, sector colors/narrow-screen readability, whole-NM OFP accounting, actual touch dragging, and line shaping followed by insertion/bend preservation/undo.
 - Playwright's pinned Chromium **145.0.7632.6** is now downloadable in this environment. The earlier onboarding system-Chromium run found contrast/link failures; fixes cover sidebar annotations, empty OFP text and Leaflet attribution links. These local results do not claim a new GitHub CI run or Pages deployment.
-- The blocked live ENDU–ENTC routing diagnosis remains outstanding; these UI changes do not establish live terrain coverage or a usable itinerary.
+- These UI changes did not establish live terrain coverage or a usable itinerary. The subsequent ENDU–ENTC diagnosis above fixes its false sea gap; terminal terrain conflicts remain unresolved.
 
 The following are **historical results for the feature checkpoint**, not fresh tests performed by writing this handoff:
 
@@ -161,15 +170,15 @@ The following are **historical results for the feature checkpoint**, not fresh t
 - PR #58 geodesy regression: 1255 probes on ENDU→ENTC, ENTC→ENSR and a bent ENDU→ENTC route remained within 1852 m of the modeled route. This verified probe placement, not missing peaks/obstacles.
 - Live generator ENDU→ENTC, preferred 2500 ft, 45-minute lesson, no visits: real WCS loaded at 100 m source/200 m search spacing; independent review returned 1653 probes. **All drafts remained blocked** by terrain/published-MAX conflicts and one missing height. A reported controlling sample was about 2911 ft; an ANSNES→RYA MAX-2500 segment also conflicted with its modeled level. Transfer and acknowledgement stayed disabled as intended.
 
-**Routing quality is the principal unresolved practical issue.** Do not describe the last live run as a successful usable itinerary. Determine which failures reflect genuine terrain/ceiling conflicts, incomplete terminal geometry, conservative search constraints or missing-source responses. Re-run against the current AIP; old results are not a timeless fixture.
+**Routing quality is the principal unresolved practical issue.** The current-source diagnosis above isolates the false sea gap and controlling terminal terrain/ceiling conflicts; full source-reviewed tracks/joins remain missing. Do not describe any of these runs as a usable itinerary. Re-run against current AIP and terrain after geometry changes; old results are not a timeless fixture.
 
 Other remaining limitations: partial terminal chart/airport/runway geometry; coarse terrain with omitted peaks; no obstacle maxima; no live activation/NOTAM; still-air generator estimates; bounded search/shortlist may miss suitable routes; preset assumptions need confirmation; DOM coupling remains. Passing all current tests does not remove these limitations.
 
-## 6. Proposed roadmap — not yet authorized implementation
+## 6. Roadmap status and proposed next work
 
 | Priority | Proposed work | Completion evidence |
 | --- | --- | --- |
-| 1 | Diagnose the blocked ENDU–ENTC example, missing-height responses and terminal/profile conflicts | Reproducible current-source diagnostic; controlling leg/sample/limits clearly identified; focused regressions; live comparison with explanation of any remaining blocks |
+| 1 — completed 2026-10-10 | Diagnose the blocked ENDU–ENTC example and fix the source-supported missing-height error | Current-source diagnostic, verified chart hashes, controlling coordinates/limits, identical-response comparison, fresh provider rerun and focused regressions; all terrain/MAX blocks preserved. See [diagnosis](GENERATOR_ENDU_ENTC_DIAGNOSTIC.md) |
 | 2 | Expand source-reviewed terminal geometry and northern coverage, starting ENDU/ENTC then unresolved ENSR | Chart-backed directional geometry/joins/limits with checksum provenance; no invented transitions; changed publication withholds old geometry |
 | 3 | Improve dataset-driven route choice and terrain evidence | Benchmark several northern itineraries; assess valleys/coast/landmark costs and better sampling/maxima policy; visible source/resolution/unknown coverage; no reduced review threshold to force acceptance |
 | 4 | Refine the school aircraft preset | Confirm climb FF, cruise MP and descent rate; preserve explicit application, saved inputs and distinction between school/POH climb |
@@ -180,7 +189,7 @@ Other remaining limitations: partial terminal chart/airport/runway geometry; coa
 
 These priorities consolidate the discussion; they are not the missing numbered proposals from earlier chats. Do not assume old “point 1/2/3” messages define new work without their actual proposal.
 
-**Suggested first Codex task:** investigate the known generator example without changing behavior first. Record selected terminal chains, profile levels, raster/point-source coordinates, missing-response cause and blocking notices. Separate data/geometry gaps from real constraints. Propose the smallest source-backed fix, then implement within the user's chosen scope. Never bypass MAX limits, turn missing data into zero, remove the 500 ft reference or let acknowledgement override transfer blocks merely to obtain a green draft.
+**Suggested next Codex task, when chosen by the user:** review source-backed ENDU/ENTC directional tracks and airport joins against the diagnosis above. Define the chart geometry/provenance to encode, then implement within the chosen scope and compare fresh terrain/profile findings. Never bypass MAX limits, turn missing data into zero, remove the 500 ft reference or let acknowledgement override transfer blocks merely to obtain a green draft.
 
 ## 7. Code map and source documents
 
@@ -195,7 +204,7 @@ These priorities consolidate the discussion; they are not the missing numbered p
 | Weather | `src/weather/openMeteo.ts`, `forecastFreshness.ts`; `src/components/WeatherPanel.ts` |
 | AIP/frequencies | `src/aip/aerodromes.ts`, `mapPoints.ts`; `src/frequencies/catalog.ts`, `routeFrequencies.ts`, `FrequencyPlanner.ts` |
 | Routing/terrain/airspace | `src/routing/terrain.ts`, `terrainRaster.ts`, `terrainRouter.ts`, `airspace.ts`, `restrictions.ts`, `vfrInputs.ts`, `northernAirports.ts`, `issues.ts` |
-| Generator | `src/generator/candidates.ts`, `model.ts`, `review.ts`, `transfer.ts`, `GeneratorPage.ts`, `GeneratorMap.ts`, `terrainSummary.ts` |
+| Generator | `src/generator/candidates.ts`, `model.ts`, `review.ts`, `transfer.ts`, `GeneratorPage.ts`, `GeneratorMap.ts`, `terrainSummary.ts`; `scripts/diagnose-generator.mjs`, [current-source diagnosis](GENERATOR_ENDU_ENTC_DIAGNOSTIC.md) |
 | Data refresh | `scripts/update-aip-aerodromes.mjs`, `scripts/update-aip-frequencies.mjs`, `scripts/aip/verified-vfr-routes.json`; four `public/aip-*.json` snapshots/status files |
 | Verification/deployment | `package.json`, `tests/`, `e2e/`, `playwright.config.ts`, `.github/workflows/ci.yml`, `.github/workflows/pages.yml` |
 
@@ -231,4 +240,4 @@ After meaningful development, update the date, feature/data checkpoint, complete
 
 Suggested opening prompt in a new Codex session:
 
-> Read AGENTS.md and docs/CODEX_HANDOFF.md. Inspect current main and report what has changed since the checkpoint. Start by investigating the blocked ENDU–ENTC generator example and propose the smallest source-backed improvement. Preserve all settled navigation, terrain, UI and saved-plan requirements.
+> Read AGENTS.md, docs/CODEX_HANDOFF.md and docs/GENERATOR_ENDU_ENTC_DIAGNOSTIC.md. Inspect current main and report what has changed since the checkpoint. Propose the next source-reviewed terminal geometry improvement for the remaining ENDU–ENTC conflicts. Preserve all settled navigation, terrain, UI and saved-plan requirements.

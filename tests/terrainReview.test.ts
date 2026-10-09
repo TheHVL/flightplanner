@@ -32,6 +32,30 @@ describe('sampled terrain review', () => {
     expect(heights.map(h => h?.elevationFt ?? null)).toEqual([1000, 0, null, null, 1000, null]);
     expect(() => parseTerrainHeights({ koordsys: 4326, punkter: [] }, [])).toThrow();
   });
+  it('retains explicit sea-surface provenance when Kartverket has no seabed height', () => {
+    const point = { lat: 69.61477714180477, lon: 18.82201553937682 };
+    const response = { koordsys: 4258, punkter: [
+      { datakilde: null, terreng: 'Havflate', x: 18.82201554, y: 69.61477714, z: null },
+    ] };
+    expect(parseTerrainHeights(response, [point])).toEqual([
+      { elevationFt: 0, terrain: 'Havflate', dataset: 'N50 surface classification', surfaceOnly: true },
+    ]);
+    expect(parseTerrainHeights({ ...response, punkter: [...response.punkter, ...response.punkter] }, [point])).toEqual([null]);
+    expect(parseTerrainHeights(response, [{ ...point, lon: point.lon + 0.01 }])).toEqual([null]);
+  });
+  it('keeps unknown land, lakes, unclassified depths and malformed sea responses missing', () => {
+    const entries = [
+      { terreng: 'Skog', z: null, datakilde: 'dtm1' },
+      { terreng: 'Innsjø', z: null, datakilde: null },
+      { terreng: null, z: null, datakilde: null },
+      { terreng: null, z: -800, datakilde: 'dybdekurver' },
+      { terreng: 'Havflate', z: '0', datakilde: null },
+      { terreng: 'Havflate', z: 9001, datakilde: 'dtm1' },
+      { terreng: 'Havflate', z: -12001, datakilde: 'seabed' },
+    ];
+    const points = entries.map((_, i) => ({ lat: 69, lon: 18 + i }));
+    expect(parseTerrainHeights({ koordsys: 4258, punkter: entries.map((entry, i) => ({ ...entry, x: points[i].lon, y: points[i].lat })) }, points)).toEqual(entries.map(() => null));
+  });
   it('batches at most 50 points, exposes network gaps and reports low altitude margins', async () => {
     const probes: TerrainProbe[] = Array.from({ length: 105 }, (_, i) => ({ legIndex: 0, distanceNm: i / 2, offsetNm: 0, altitudeFt: i === 0 ? null : 400, lat: 69, lon: 18 + i / 1000 }));
     const fetcher = vi.fn(async (input: RequestInfo | URL) => {

@@ -2,7 +2,12 @@
 
 This file records significant Flightplanner updates, formulas, source assumptions, limitations and implementation decisions. New updates are added at the top.
 
-## Unreleased — 2026-10-09, waypoint editing and readability
+## 2026-10-10, generator diagnosis and known sea surfaces
+
+- Corrected a false missing-height warning when Kartverket explicitly classifies a point as sea surface (`Havflate`) but has no seabed height. Retains N50 classification-only provenance; unknown land/lake heights, unclassified depths and malformed responses remain unknown. Existing terrain/MAX/restriction/profile transfer blocks are unchanged.
+- Added a generic current-source generator diagnostic command with source checksums, captured responses, per-leg profiles, controlling samples and explicitly labelled replay. [ENDU–ENTC evidence](docs/GENERATOR_ENDU_ENTC_DIAGNOSTIC.md): four drafts remain blocked by terminal terrain/profile margins; reviewed curved tracks and airport joins remain the next proposed routing improvement.
+
+## 2026-10-09, waypoint editing and readability
 
 - Sidebar scrolling continues to the page/OFP once the nested waypoint list and sidebar reach their vertical edge, without moving the mouse out of the sidebar. Horizontal scroll containment remains in place.
 - Follow-up: waypoint edits preserve the list/sidebar scroll position; deletion focuses the next remove button for continued keyboard editing. A bottom resize handle supports mouse/touch and keyboard height changes, remembered independently of saved plans and Undo/Redo. Route options now open on click instead of mouse release, and route clicks no longer also append an unwanted point through the background map handler.
