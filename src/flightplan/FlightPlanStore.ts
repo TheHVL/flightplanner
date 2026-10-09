@@ -617,28 +617,34 @@ export class FlightPlanStore {
     this.emit();
   }
 
-  insertWaypointAt(index: number, coordinate: Coordinate, name?: string): Waypoint | null {
-    if (!Number.isInteger(index) || index <= 0 || index >= this.waypoints.length) return null;
+  insertWaypointAt(index: number, coordinate: Coordinate, name?: string, publishedPoint?: PublishedMapPoint): Waypoint | null {
+    if (!Number.isInteger(index) || index <= 0 || index >= this.waypoints.length || !validCoordinate(coordinate.lat, coordinate.lon)) return null;
 
     const from = this.waypoints[index - 1];
     const to = this.waypoints[index];
     const previousLegKey = this.legKey(from.id, to.id);
-    const inheritedAltitudeFt = this.plannedAltitudesFt.get(previousLegKey) ?? this.newLegAltitudeFt;
+    const inheritedAltitudeFt = this.plannedAltitudesFt.get(previousLegKey) ?? null;
     const inheritedManualWind = this.manualLegWinds.get(previousLegKey) ?? null;
 
     this.rememberUndo();
     const id = crypto.randomUUID();
-    const hasCustomName = Boolean(name?.trim());
+    const hasCustomName = Boolean(publishedPoint || name?.trim());
     const waypoint: Waypoint = {
       id,
-      name: hasCustomName ? name!.trim() : '',
-      ...coordinate,
+      name: publishedPoint?.name ?? (hasCustomName ? name!.trim() : ''),
+      lat: publishedPoint?.lat ?? coordinate.lat,
+      lon: publishedPoint?.lon ?? coordinate.lon,
+      ...(publishedPoint ? { aipId: publishedPoint.aipId, aipEffectiveDate: publishedPoint.aipEffectiveDate } : {}),
     };
 
     if (!hasCustomName) this.automaticWaypointIds.add(id);
     const nextWaypoints = [...this.waypoints];
     nextWaypoints.splice(index, 0, waypoint);
     this.waypoints = nextWaypoints;
+    if (publishedPoint?.kind === 'airport') {
+      this.verticalWaypointConstraints.set(id, { ...DEFAULT_WAYPOINT_VERTICAL_CONSTRAINT, mode: 'airport',
+        elevationFt: publishedPoint.elevationFt!, icaoCode: publishedPoint.aerodromeIcao });
+    }
     this.renumberAutomaticWaypointNames();
 
     this.plannedAltitudesFt.delete(previousLegKey);
@@ -709,16 +715,38 @@ export class FlightPlanStore {
 
   moveWaypoint(id: string, direction: -1 | 1): void {
     const index = this.waypoints.findIndex((waypoint) => waypoint.id === id);
-    const nextIndex = index + direction;
+    this.moveWaypointToIndex(id, index + direction);
+  }
 
-    if (index < 0 || nextIndex < 0 || nextIndex >= this.waypoints.length) return;
+  /** A drag/drop reorder is one undoable action, including endpoint and leg changes. */
+  moveWaypointToIndex(id: string, nextIndex: number): void {
+    const index = this.waypoints.findIndex((waypoint) => waypoint.id === id);
+    if (index < 0 || !Number.isInteger(nextIndex) || nextIndex < 0 || nextIndex >= this.waypoints.length || nextIndex === index) return;
+    const previousKeys = new Set(this.getLegs().map(leg => this.legKey(leg.from.id, leg.to.id)));
+    const previousDeparture = this.waypoints[0]?.id;
+    const previousDestination = this.waypoints.at(-1)?.id;
 
     this.rememberUndo();
     const reordered = [...this.waypoints];
-    [reordered[index], reordered[nextIndex]] = [reordered[nextIndex], reordered[index]];
+    const [waypoint] = reordered.splice(index, 1);
+    reordered.splice(nextIndex, 0, waypoint);
     this.waypoints = reordered;
     this.renumberAutomaticWaypointNames();
     this.retainCurrentLegSettings();
+    for (const leg of this.getLegs()) {
+      const key = this.legKey(leg.from.id, leg.to.id);
+      if (!previousKeys.has(key) && this.newLegAltitudeFt !== null) this.plannedAltitudesFt.set(key, this.newLegAltitudeFt);
+    }
+    for (const endpoint of ['departure', 'destination'] as const) {
+      const point = endpoint === 'departure' ? this.waypoints[0] : this.waypoints.at(-1);
+      if (!point || point.id === (endpoint === 'departure' ? previousDeparture : previousDestination)) continue;
+      const constraint = this.verticalWaypointConstraints.get(point.id);
+      const airport = this.isAirportWaypoint(point.id) ? this.airportCatalog?.aerodromes.find(a => a.icao === (point.aipId ?? constraint?.icaoCode ?? point.name.toUpperCase())) : undefined;
+      const elevationFt = this.isAirportWaypoint(point.id) ? constraint?.elevationFt ?? airport?.elevationFt ?? 0 : 0;
+      const icaoCode = this.isAirportWaypoint(point.id) ? point.aipId ?? constraint?.icaoCode ?? point.name.toUpperCase() : '';
+      this.verticalProfileSettings = { ...this.verticalProfileSettings, [`${endpoint}ElevationFt`]: elevationFt, [`${endpoint}IcaoCode`]: icaoCode };
+    }
+    this.weatherForecasts.clear();
     this.emit();
   }
 

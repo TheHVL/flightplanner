@@ -13,7 +13,7 @@ Development continuity: [Codex handoff, status and proposed roadmap](docs/CODEX_
 
 The sidebar follows four steps. Saved plans and aircraft defaults sit below them. Drag the divider beside the sidebar to adjust its width; open menus and entered values are preserved when panels update.
 
-1. **Build route:** add waypoints on the map or from the airport/reporting-point browser. Airports are ordered by ICAO and reporting points grouped by airport. Map clicks and marker drags can snap to published points without floating name labels. Reorder, rename or delete waypoints, and use undo for recent changes.
+1. **Build route:** add waypoints on the map or from the airport/reporting-point browser. Airports are ordered by ICAO and reporting points grouped by airport. Map clicks and marker drags can snap to published points without floating name labels. Drag a numbered waypoint handle with a mouse or touch to reorder it, or use its ↑ / ↓ buttons. Click a route line and choose **Add waypoint here** to insert between its endpoints, or **Prepare this leg** to edit it. Rename or delete waypoints, and use undo for recent changes.
 2. **Prepare legs:** edit each leg's PL (new legs start at 2,500 ft), manual MSA, wind backup and OFP frequency. The OFP shows one selected channel; alternatives stay in the sidebar. Enter advances through leg fields and Shift+Enter goes backwards. Altitude arrows use 100 ft increments.
 3. **Weather & fuel:** set the intended flight date/time in UTC, fetch fresh route winds, review performance assumptions and enter fuel onboard, reserve and contingency as needed.
 4. **Review OFP:** inspect the navigation log, TOC/TOD and airport/pattern settings. **Optional terrain & airspace check** starts collapsed. Use **Check terrain for this leg** beside the PL/MSA fields when reviewing a particular leg, or choose **Whole route** inside the tool. Results show sampled terrain heights and modeled altitude margins without changing your MSA. Airspace checks and map findings are separate opt-in options; detailed notices stay collapsed until opened. Red indicates a conflict; amber indicates incomplete data or a review requirement.
@@ -27,6 +27,7 @@ The working plan is autosaved locally. Named plans can be saved, loaded and expo
 - Kartverket Norgeskart and Avinor ICAO 1:500 000 layers.
 - Great-circle distance and initial true track, wind triangle, WCA, headings, groundspeed, and WMM2025 magnetic variation with manual overrides.
 - One draggable shaping bend per leg. It changes flown distance, time and fuel without adding an OFP fix; TT/MT/MH still use the direct waypoint-to-waypoint course. Add an actual waypoint when you want a separate navigation leg.
+- Airport-to-airport route sectors use different line colors through their intermediate waypoints. The next color starts on departure from the next identified airport, including return visits. **Airport routes** on the manual map lists the sectors; red/amber overlays still identify review findings.
 - The manual and generator maps draw densified great-circle sections matching route distance and terrain sampling. Terrain cross-sections follow the local path tangent; this does not change OFP tracks or headings.
 - Optional ±1 NM MSA inspection corridor, including shaped legs. Lateral terrain offsets use WGS84 ellipsoidal distances with a 1 cm inset for API coordinate rounding. Terrain is point-sampled, so peaks between probes and obstacles remain outside the check. MSA is entered by the pilot; PL below entered MSA is highlighted.
 - Optional C182T zero-wind glide and coarse coastline screening. The Figure 3-1 approximation is height above the assumed landing surface divided by 700, bounded at 14,000 ft. It assumes a sea-level shoreline and does not establish terrain clearance or a suitable landing site. The bundled Natural Earth 1:10m coastline can omit small islands and fine shoreline detail.
@@ -80,7 +81,7 @@ Reserve and contingency are allowances outside modeled trip consumption. The ori
 
 **INT fuel rounds each row upward to whole US gallons. ACC fuel adds those displayed INT values**, including pattern rows, and excludes startup/taxi/takeoff. For two exact 1.5 US gal legs, INT shows 2 and 2, and ACC shows 2 then **4**. Exact consumption remains 3 US gal for trip and remaining-fuel calculations. If an earlier row's fuel is unknown, subsequent ACC fuel remains unknown.
 
-Displayed planning times round upward to whole minutes. Individual and total route distance round upward to whole NM; accumulated distance is shown to the nearest 0.5 NM. Headings and WCA use whole degrees. Rounding does not change the navigation/performance model.
+Displayed planning times round upward to whole minutes. Leg distance rounds down when its fractional NM is below **0.3**, otherwise up. ACC distance and total add those displayed whole-NM legs, with no decimals: **5.7 → 6**, **7.2 → 7**, **ACC → 13 NM**. Exactly 0.3 rounds up; a leg shorter than 0.3 NM displays 0. Headings and WCA use whole degrees. Navigation, time, fuel and terrain calculations retain exact distances.
 
 ## Route weather
 

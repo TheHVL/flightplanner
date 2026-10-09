@@ -2,6 +2,14 @@
 
 This file records significant Flightplanner updates, formulas, source assumptions, limitations and implementation decisions. New updates are added at the top.
 
+## Unreleased — 2026-10-09, waypoint editing and readability
+
+- Leg distance now rounds down below 0.3 fractional NM and up at/above it. ACC distance and route total sum the displayed whole-NM legs: 5.7 + 7.2 displays 6 + 7 = 13 NM. Exact navigation, performance and fuel calculations remain unchanged. This replaces the previous upward-only leg and half-NM accumulated-distance display.
+- Numbered waypoint handles support mouse/touch reordering, insertion indicators, edge scrolling and one-action Undo/Redo; arrow buttons remain available. Reordering keeps unaffected leg inputs, refreshes changed endpoint elevations and clears fetched forecasts.
+- Route-line clicks offer **Add waypoint here** and **Prepare this leg**. Insertion inherits the split leg's altitude (including intentional blanks) and manual wind, clears its MSA/frequency/forecast state, retains published-point provenance when snapping, and preserves an existing bend on the appropriate split leg.
+- Manual routes and selected generator previews change color at identified airport visits, retaining each sector's color through its intermediate points and bends. The manual map has a collapsible sector legend. Red/amber review overlays retain their meaning.
+- Larger sidebar labels, controls and help text, clearer contrast, wrapped waypoint layouts and readable map/OFP annotations. Fixed low-contrast empty-table text and Leaflet attribution link styling found by browser accessibility checks.
+
 ## 2026-10-07, planning feedback and generator safeguards
 
 - Terrain search fetches twice-finer WCS samples and max-pools four per search cell, normally 100 m samples / 200 m cells. Unknown samples stay unknown. Drafts and map previews show resolution and warn of missed peaks; this does not establish native-model maxima or obstacle clearance. Transfer requires a per-draft chart-review acknowledgement and still respects every existing blocking check.

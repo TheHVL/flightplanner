@@ -1,6 +1,7 @@
-import type { Coordinate, RouteLeg } from '../types';
+import type { Coordinate, RouteLeg, Waypoint } from '../types';
+import type { PublishedMapPoint } from '../aip/mapPoints';
 import type { FlightPlanStore } from './FlightPlanStore';
-import { calculateRouteLegs, routeLegKey } from '../navigation/geodesy';
+import { calculateRouteLegs, densifyRoutePath, greatCircleDistanceNm, routeLegKey } from '../navigation/geodesy';
 
 export const ROUTE_SHAPE_CHANGED_EVENT = 'flightplanner-route-shape-changed';
 
@@ -63,6 +64,28 @@ export class RouteShapeController {
     this.immediateUndo = true;
     this.emit();
     return true;
+  }
+
+  /** Split the leg without discarding a bend on the other part of its plotted path. */
+  insertWaypointIntoLeg(fromId: string, toId: string, coordinate: Coordinate, publishedPoint?: PublishedMapPoint): Waypoint | null {
+    const legs = this.store.getLegs();
+    const leg = legs.find(item => item.from.id === fromId && item.to.id === toId);
+    const location = publishedPoint ?? coordinate;
+    if (!leg || !isValidCoordinate(location)) return null;
+    const key = routeLegKey(fromId, toId), bend = this.shapes.get(key);
+    let inserted: Waypoint | null = null;
+    this.store.runUndoableAction(() => {
+      inserted = this.store.insertWaypointAt(leg.index + 1, location, publishedPoint?.name, publishedPoint);
+      if (!inserted || !bend) return;
+      this.shapes.delete(key);
+      // A waypoint placed at the bend replaces that hidden shaping point.
+      if (greatCircleDistanceNm(location, bend) < 0.001) return;
+      const nearest = (path: Coordinate[]) => Math.min(...densifyRoutePath(path).map(point => greatCircleDistanceNm(point, location)));
+      const beforeBend = nearest([leg.from, bend]) <= nearest([bend, leg.to]);
+      const splitKey = beforeBend ? routeLegKey(inserted.id, toId) : routeLegKey(fromId, inserted.id);
+      this.shapes.set(splitKey, { ...bend });
+    });
+    return inserted;
   }
 
   clearLegShape(fromId: string, toId: string): boolean {

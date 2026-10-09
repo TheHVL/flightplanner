@@ -12,6 +12,7 @@ import './planningMenus.css';
 import './frequencies.css';
 import './planningWorkflow.css';
 import './routeIssues.css';
+import './readability.css';
 import { publishedMapPoints, type PublishedMapPoint } from './aip/mapPoints';
 import { PlanningWorkflow, planningSidebarMarkup } from './components/PlanningWorkflow';
 import { LEG_SELECTED, openLegEditor } from './components/legEditorEvents';
@@ -250,6 +251,9 @@ const mapManager = new MapManager(mapElement, {
   },
   onWaypointMoved: moveMapWaypoint,
   onRouteLegShape: (legIndex, lat, lon) => routeShapeController.setLegShape(legIndex, { lat, lon }),
+  onWaypointInserted: (fromId, toId, lat, lon, point) => {
+    routeShapeController.insertWaypointIntoLeg(fromId, toId, { lat, lon }, point);
+  },
   onLegSelected: index => { const leg = store.getLegs()[index]; if (leg) openLegEditor({ fromId: leg.from.id, toId: leg.to.id }); },
   onWaypointSelected: id => {
     const leg = store.getLegs().find(l => l.to.id === id) ?? store.getLegs().find(l => l.from.id === id);
@@ -494,7 +498,7 @@ const render = () => {
   routePanel.render();
   ofpTable.render();
   mapManager.renderMsaCorridor(legs);
-  mapManager.renderRoute(waypoints, legs, moveMapWaypoint);
+  mapManager.renderRoute(waypoints, legs, moveMapWaypoint, waypoint => store.isAirportWaypoint(waypoint.id));
   mapManager.setSelectedLeg(legEditor.getSelectedLeg());
   renderVerticalProfileMarkers();
   void renderGlideEnvelope();

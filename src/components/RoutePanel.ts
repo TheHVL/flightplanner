@@ -2,15 +2,51 @@ import { openLegEditor } from './legEditorEvents';
 import type { FlightPlanStore } from '../flightplan/FlightPlanStore';
 
 export class RoutePanel {
+  private draggedId: string | null = null;
+  private pointerDrag: { pointerId: number; handle: HTMLElement; startY: number; y: number; x: number; moved: boolean } | null = null;
+  private scrollFrame = 0;
   constructor(
     private readonly element: HTMLElement,
     private readonly store: FlightPlanStore,
   ) {
     this.element.addEventListener('click', (event) => this.handleClick(event));
     this.element.addEventListener('change', (event) => this.handleChange(event));
+    this.element.addEventListener('pointerdown', event => {
+      const handle = (event.target as HTMLElement).closest<HTMLElement>('[data-drag-waypoint]');
+      const id = handle?.closest<HTMLElement>('[data-id]')?.dataset.id;
+      if (!handle || !id || event.button !== 0) return;
+      event.preventDefault();
+      handle.focus({ preventScroll: true });
+      this.draggedId = id;
+      this.pointerDrag = { pointerId: event.pointerId, handle, startY: event.clientY, y: event.clientY, x: event.clientX, moved: false };
+      handle.setPointerCapture(event.pointerId);
+    });
+    this.element.addEventListener('pointermove', event => {
+      const drag = this.pointerDrag;
+      if (!drag || drag.pointerId !== event.pointerId) return;
+      drag.x = event.clientX; drag.y = event.clientY;
+      if (Math.abs(drag.y - drag.startY) >= 5) drag.moved = true;
+      if (!drag.moved) return;
+      event.preventDefault();
+      drag.handle.closest('.waypoint-card')?.classList.add('waypoint-dragging');
+      this.showPointerDrop();
+      if (!this.scrollFrame) this.scrollFrame = requestAnimationFrame(() => this.scrollWhileDragging());
+    });
+    this.element.addEventListener('pointerup', event => {
+      const drag = this.pointerDrag;
+      if (!drag || drag.pointerId !== event.pointerId) return;
+      const position = drag.moved ? this.pointerDropPosition() : null;
+      const id = this.draggedId;
+      this.clearDrag();
+      if (id && position) this.moveDroppedWaypoint(id, position);
+    });
+    this.element.addEventListener('pointercancel', () => this.clearDrag());
+    this.element.addEventListener('lostpointercapture', () => { if (this.pointerDrag) this.clearDrag(); });
+    this.element.addEventListener('keydown', event => { if (event.key === 'Escape') this.clearDrag(); });
   }
 
   render(): void {
+    this.clearDrag();
     const waypoints = this.store.getWaypoints();
 
     this.element.innerHTML = `
@@ -21,7 +57,8 @@ export class RoutePanel {
         </div>
         <button class="ghost-button" data-action="clear" ${waypoints.length === 0 ? 'disabled' : ''}>Clear</button>
       </div>
-      <p class="hint">Click an airport or reporting point on the map to add it, or use the list below. Nearby clicks and waypoint drops snap while Snap to AIP points is on. Click a route leg to prepare it. Drag a waypoint to move it or a blue line to shape the flown path. Ctrl+Z / Cmd+Z undoes the latest action.</p>
+      <p class="hint">Drag a numbered waypoint handle to reorder the list, or use ↑ / ↓. Click a route line to add a waypoint between its endpoints or prepare that leg. Drag a map waypoint to move it; drag a route line to shape the flown path. Ctrl+Z / Cmd+Z undoes the latest action.</p>
+      <p class="waypoint-reorder-status" role="status" aria-live="polite"></p>
       <div class="waypoint-list">
         ${waypoints.length === 0 ? '<div class="empty-state">No route yet</div>' : ''}
         ${waypoints.map((waypoint, index) => this.waypointRow(waypoint.id, waypoint.name, waypoint.lat, waypoint.lon, index, waypoints.length)).join('')}
@@ -39,8 +76,8 @@ export class RoutePanel {
   ): string {
     const role = index === 0 ? 'DEP' : index === count - 1 ? 'DEST' : `WP ${index}`;
     return `
-      <article class="waypoint-card" data-id="${id}">
-        <div class="waypoint-index">${index + 1}</div>
+      <article class="waypoint-card" data-id="${this.escape(id)}">
+        <button type="button" class="waypoint-index waypoint-drag-handle" data-drag-waypoint title="Drag to reorder; use ↑ / ↓ buttons with the keyboard" aria-label="Drag waypoint ${index + 1}, ${this.escape(name)}, to reorder">${index + 1}<span aria-hidden="true">⠿</span></button>
         <div class="waypoint-main">
           <div class="waypoint-topline">
             <span class="role-badge">${role}</span>
@@ -50,9 +87,9 @@ export class RoutePanel {
           <div class="waypoint-planning-actions">${index < count - 1 ? `<button type="button" data-action="prepare">Prepare next leg</button>` : ''}<button type="button" data-action="visit" ${count < 2 ? 'disabled title="Add a destination first"' : ''}>${this.store.isAirportWaypoint(id) ? 'Airport / pattern' : 'Waypoint settings'}</button></div>
         </div>
         <div class="waypoint-actions">
-          <button class="icon-button" data-action="up" title="Move up" ${index === 0 ? 'disabled' : ''}>↑</button>
-          <button class="icon-button" data-action="down" title="Move down" ${index === count - 1 ? 'disabled' : ''}>↓</button>
-          <button class="icon-button danger" data-action="remove" title="Remove">×</button>
+          <button class="icon-button" data-action="up" title="Move up" aria-label="Move ${this.escape(name)} up" ${index === 0 ? 'disabled' : ''}>↑</button>
+          <button class="icon-button" data-action="down" title="Move down" aria-label="Move ${this.escape(name)} down" ${index === count - 1 ? 'disabled' : ''}>↓</button>
+          <button class="icon-button danger" data-action="remove" title="Remove" aria-label="Remove ${this.escape(name)}">×</button>
         </div>
       </article>
     `;
@@ -93,6 +130,73 @@ export class RoutePanel {
     if (!id) return;
 
     this.store.updateWaypoint(id, { name: input.value.trim() || 'WP' });
+  }
+
+  private dropPosition(target: HTMLElement, clientY: number): { card: HTMLElement; after: boolean } | null {
+    const card = target.closest<HTMLElement>('.waypoint-card');
+    if (!card || !this.element.contains(card)) return null;
+    const bounds = card.getBoundingClientRect();
+    return { card, after: clientY >= bounds.top + bounds.height / 2 };
+  }
+
+  private moveDroppedWaypoint(id: string, position: { card: HTMLElement; after: boolean }): void {
+    const points = this.store.getWaypoints();
+    const from = points.findIndex(point => point.id === id);
+    const target = points.findIndex(point => point.id === position.card.dataset.id);
+    const insertion = target + Number(position.after);
+    const nextIndex = insertion - Number(from < insertion);
+    if (from < 0 || target < 0 || from === nextIndex) return;
+    const name = points[from].name;
+    this.store.moveWaypointToIndex(id, nextIndex);
+    const card = [...this.element.querySelectorAll<HTMLElement>('[data-id]')].find(item => item.dataset.id === id);
+    card?.querySelector<HTMLElement>('[data-drag-waypoint]')?.focus({ preventScroll: true });
+    const status = this.element.querySelector<HTMLElement>('.waypoint-reorder-status');
+    if (status) status.textContent = `${name} moved to position ${nextIndex + 1}.`;
+  }
+
+  private clearDropIndicators(): void {
+    for (const card of this.element.querySelectorAll('.waypoint-drop-before, .waypoint-drop-after')) card.classList.remove('waypoint-drop-before', 'waypoint-drop-after');
+  }
+
+  private clearDrag(): void {
+    const drag = this.pointerDrag;
+    this.pointerDrag = null;
+    if (drag?.handle.hasPointerCapture(drag.pointerId)) drag.handle.releasePointerCapture(drag.pointerId);
+    cancelAnimationFrame(this.scrollFrame);
+    this.scrollFrame = 0;
+    this.draggedId = null;
+    this.clearDropIndicators();
+    this.element.querySelector('.waypoint-dragging')?.classList.remove('waypoint-dragging');
+  }
+
+  private pointerDropPosition(): { card: HTMLElement; after: boolean } | null {
+    const drag = this.pointerDrag;
+    const target = drag ? document.elementFromPoint(drag.x, drag.y) as HTMLElement | null : null;
+    return target && drag ? this.dropPosition(target, drag.y) : null;
+  }
+
+  private showPointerDrop(): void {
+    this.clearDropIndicators();
+    const position = this.pointerDropPosition();
+    position?.card.classList.add(position.after ? 'waypoint-drop-after' : 'waypoint-drop-before');
+  }
+
+  private scrollWhileDragging(): void {
+    this.scrollFrame = 0;
+    const drag = this.pointerDrag;
+    if (!drag?.moved) return;
+    const list = this.element.querySelector<HTMLElement>('.waypoint-list');
+    const sidebar = this.element.closest<HTMLElement>('#planning-sidebar');
+    for (const area of [list, sidebar]) {
+      if (!area) continue;
+      const bounds = area.getBoundingClientRect();
+      if (drag.x < bounds.left || drag.x > bounds.right) continue;
+      const top = Math.max(0, bounds.top), bottom = Math.min(window.innerHeight, bounds.bottom);
+      if (drag.y >= top && drag.y < top + 28) area.scrollTop -= 10;
+      else if (drag.y <= bottom && drag.y > bottom - 28) area.scrollTop += 10;
+    }
+    this.showPointerDrop();
+    this.scrollFrame = requestAnimationFrame(() => this.scrollWhileDragging());
   }
 
   private escape(value: string): string {

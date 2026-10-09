@@ -1,6 +1,6 @@
 # Flightplanner — Codex project handoff
 
-Updated: **2026-10-08**. This is a repository handoff, not an instruction to implement every proposed item. Read the root [AGENTS.md](../AGENTS.md), then inspect current code, git status and newer commits before starting work. Later explicit user instructions take precedence over this historical checkpoint.
+Updated: **2026-10-09**. This is a repository handoff, not an instruction to implement every proposed item. Read the root [AGENTS.md](../AGENTS.md), then inspect current code, git status and newer commits before starting work. Later explicit user instructions take precedence over this historical checkpoint.
 
 ## 1. Project and checkpoint
 
@@ -13,7 +13,8 @@ Updated: **2026-10-08**. This is a repository handoff, not an instruction to imp
 | Stack | TypeScript, Vite, Leaflet, WMM2025 magnetic variation, proj4, GeoTIFF; static GitHub Pages |
 | Storage | Browser-local working route/settings and named plans, JSON export/import; no server-side plan account |
 | Latest feature checkpoint | PR [#59](https://github.com/TheHVL/flightplanner/pull/59), merge `1c6d16c5e527b561992dbcd891d4a87e22000f4c` |
-| Snapshot base for this document | `f4307bd` on `main`; two subsequent automated AIP snapshot refreshes, no additional feature implementation |
+| Original handoff snapshot | `f4307bd` on `main`, after two automated AIP refreshes following PR #59; subsequent docs/data commits do not change application behavior |
+| User-requested release | Distance display, waypoint drag/insertion, airport-sector colors and readability changes based on `d4e191c`; publication authorized on 2026-10-09. Verify current Git and Pages status separately from the local evidence below |
 
 Codex can work on this existing repository and existing Pages hosting. No repository ownership migration or AI feature in the planner is necessary. Root `AGENTS.md` is the concise entry point; this file holds detailed context so permanent instructions stay manageable. The user requested this handoff to carry progress, plans and preferences into future development sessions.
 
@@ -37,7 +38,8 @@ The generator is a **draft comparison tool**, not a complete operational route s
 - New manual legs and generator preferred PL default to **2,500 ft**; altitude arrows change by **100 ft**. Explicit saved values and intentional blanks must survive loading.
 - Adjacent leg levels may differ for climb/descent. Investigate physically modeled profile conflicts rather than requiring all levels to match. Published MAX limits cannot be bypassed by raising cruise altitude.
 - PL/elevation are pressure-altitude proxies. The user explicitly does **not** want QNH input now or later. Keep the approximation clear without promising future QNH conversion.
-- Individual and total OFP distance round upward to whole NM; accumulated distance rounds to the nearest 0.5 NM. Time rounds upward to whole minutes; angles to whole degrees. Internal values retain precision.
+- **Confirmed 2026-10-09:** leg distance rounds down when its fractional NM is below 0.3, otherwise up. ACC distance and route total add those displayed whole-NM legs, with no decimals: 5.7 → 6, 7.2 → 7, ACC → 13 NM. Exactly 0.3 rounds up. This supersedes the earlier upward-only leg and nearest-0.5-NM ACC convention. Time rounds upward to whole minutes; angles to whole degrees. Internal values retain precision.
+- Numbered waypoint handles support mouse/touch drag reordering with edge scrolling; arrow buttons remain available. Clicking a plotted leg offers insertion between its endpoints and leg preparation. Dragging the line still shapes it. Airport-to-airport sectors change map color at each identified airport visit, preserving that color through intermediate points. Sidebar controls/help should remain readable and wrap on narrow screens.
 - INT fuel rounds **each row upward** to whole US gallons. ACC adds those displayed INT values, including pattern rows and excluding startup/taxi/takeoff. Example: two exact 1.5 US gal legs display INT 2 + 2 and final ACC **4**. Exact trip/remaining-fuel consumption remains **3**. Earlier discussion was ambiguous; current implemented rule and README settle this distinction. Unknown earlier fuel makes subsequent ACC unknown.
 - Reserve and contingency are separate allowances, not extra modeled consumption. Contingency remains a pilot entry per flight.
 
@@ -126,6 +128,14 @@ CI now includes source lint, unit tests, TypeScript/build, Chromium smoke tests 
 
 ## 5. Verification and open findings
 
+### Local user-requested fixes, 2026-10-09
+
+- Changed distance presentation, waypoint drag/insertion, airport-sector coloring and sidebar readability; see the Unreleased changelog. The evidence below was recorded locally before publication; it does not establish deployment status. Existing navigation headings, fuel rules, manual MSA ownership, generator transfer blocks and storage formats are preserved.
+- Fresh local verification under Node **22.23.3**: **274 unit tests across 54 files**, source lint and TypeScript/Vite build passed. Tests include the 6 + 7 = 13 NM example and a case where adding displayed legs differs from rounding the exact total, exact calculation inputs, atomic reorder/undo, preserved blanks and wind on insertion, airport provenance/endpoints, bend preservation and sector boundaries.
+- **9/9 Chromium browser checks passed**, with no skips or retries, against the local production preview: the original default/undo/autosave smoke check, both axe checks, mouse reorder/undo/reload, route-line insertion, sector colors/narrow-screen readability, whole-NM OFP accounting, actual touch dragging, and line shaping followed by insertion/bend preservation/undo.
+- Playwright's pinned Chromium **145.0.7632.6** is now downloadable in this environment. The earlier onboarding system-Chromium run found contrast/link failures; fixes cover sidebar annotations, empty OFP text and Leaflet attribution links. These local results do not claim a new GitHub CI run or Pages deployment.
+- The blocked live ENDU–ENTC routing diagnosis remains outstanding; these UI changes do not establish live terrain coverage or a usable itinerary.
+
 The following are **historical results for the feature checkpoint**, not fresh tests performed by writing this handoff:
 
 - PR #59: **266 unit tests across 53 files**, source lint and TypeScript/Vite build passed.
@@ -161,7 +171,8 @@ These priorities consolidate the discussion; they are not the missing numbered p
 | --- | --- |
 | Entrypoints/build | `index.html`, `src/main.ts`, `generator.html`, `src/generator.ts`, `vite.config.ts` |
 | Plan/history/shape | `src/flightplan/FlightPlanStore.ts`, `RouteShapeController.ts`, `workingRoutePersistence.ts`, `savedPlans.ts`; `src/components/PlanningHistory.ts` |
-| Sidebar/OFP/persistence UX | `src/components/PlanningWorkflow.ts`, `SequentialLegPanel.ts`, `OFPTable.ts`, `RouteReviewPanel.ts`, `WorkingRouteStatus.ts`, `WorkspaceLayout.ts`, `legEditorEvents.ts`; `src/utils/panelMarkup.ts` |
+| Sidebar/OFP/persistence UX | `src/components/PlanningWorkflow.ts`, `RoutePanel.ts`, `SequentialLegPanel.ts`, `OFPTable.ts`, `RouteReviewPanel.ts`, `WorkingRouteStatus.ts`, `WorkspaceLayout.ts`, `legEditorEvents.ts`; `src/utils/panelMarkup.ts`, `src/readability.css` |
+| Map route editing/colors | `src/map/MapManager.ts`, `routeSectors.ts`; `tests/routeEditing.test.ts`, `e2e/route-editing.spec.ts` |
 | Performance/fuel/rounding | `src/performance/schoolPreset.ts`, `cruisePerformance.ts`, `climbPerformance.ts`, `airspeed.ts`; `src/fuel/fuelPlanning.ts`; `src/presentation/planningRounding.ts` |
 | Navigation/profile/MSA | `src/navigation/geodesy.ts`, `verticalProfile.ts`, `verticalConflicts.ts`, `msaCorridor.ts`, `wind.ts`, `magneticVariation.ts` |
 | Weather | `src/weather/openMeteo.ts`, `forecastFreshness.ts`; `src/components/WeatherPanel.ts` |

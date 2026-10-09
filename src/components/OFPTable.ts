@@ -9,7 +9,7 @@ import {
 import { trueToMagnetic } from '../navigation/wind';
 import {
   ceilFuelUsageGal,
-  ceilLegDistanceNm,
+  roundLegDistanceNm,
   formatPlanningMinutesLabel,
   formatPlanningTime,
 } from '../presentation/planningRounding';
@@ -63,10 +63,12 @@ export class OFPTable {
     const legs = this.store.getLegs();
     const settings = this.store.getNavigationSettings();
     const totalDistance = totalRouteDistanceNm(legs);
+    const displayedTotalDistance = legs.reduce((sum, leg) => sum + roundLegDistanceNm(leg.distanceNm), 0);
     const totalCircuitMinutes = this.store.getTotalWaypointActivityMinutes();
     const fuelPlan = calculateFuelPlanForStore(this.store);
 
     let accumulatedDistanceNm = 0;
+    let exactAccumulatedDistanceNm = 0;
     let accumulatedTimeMinutes = 0;
     let accumulatedFuelGal: number | null = 0;
     let accumulatedDisplayedFuelGal: number | null = 0;
@@ -86,13 +88,14 @@ export class OFPTable {
     if (legs.length) appendPattern(legs[0].from);
     for (const [index, leg] of legs.entries()) {
       const legPlan = fuelPlan.legs[index];
-      accumulatedDistanceNm += leg.distanceNm;
+      accumulatedDistanceNm += roundLegDistanceNm(leg.distanceNm);
+      exactAccumulatedDistanceNm += leg.distanceNm;
       accumulatedTimeMinutes += legPlan.flightTimeMin;
       accumulatedFuelGal = accumulatedFuelGal !== null && legPlan.legFuelGal !== null
         ? accumulatedFuelGal + legPlan.legFuelGal : null;
       accumulatedDisplayedFuelGal = accumulatedDisplayedFuelGal !== null && legPlan.legFuelGal !== null
         ? accumulatedDisplayedFuelGal + ceilFuelUsageGal(legPlan.legFuelGal) : null;
-      rows.push(this.legRow(leg, legPlan, settings, accumulatedDistanceNm,
+      rows.push(this.legRow(leg, legPlan, settings, accumulatedDistanceNm, exactAccumulatedDistanceNm,
         accumulatedTimeMinutes, accumulatedDisplayedFuelGal, remainingFuel(), fuelPlan.startupTaxiTakeoffGal).html);
       appendPattern(leg.to);
     }
@@ -106,7 +109,7 @@ export class OFPTable {
         </div>
         <div class="route-total">
           <span>Total route</span>
-          <strong title="Exact calculated distance: ${totalDistance.toFixed(2)} NM; total display rounds up to the next whole NM">${ceilLegDistanceNm(totalDistance)} NM</strong>
+          <strong title="Sum of displayed whole-NM leg distances. Exact calculated distance: ${totalDistance.toFixed(2)} NM">${displayedTotalDistance} NM</strong>
         </div>
       </div>
       <p class="ofp-editor-hint">Click a flight row, level or frequency to open that leg in Prepare legs.</p>
@@ -152,7 +155,7 @@ export class OFPTable {
       <div class="table-legend">
         <span><i class="dot calculated-dot"></i> Calculated</span>
         <span><i class="dot pending-dot"></i> In-flight entries</span>
-        <span>Leg DIST and total route distance round up to the next whole NM. Accumulated distance remains shown to nearest 0.5 NM · headings/WCA shown to whole degrees</span>
+        <span>Leg DIST rounds down below 0.3 fractional NM, otherwise up. ACC DIST and total add the displayed whole-NM legs. Headings/WCA use whole degrees. Calculations retain exact distances.</span>
         <span>TAS shows cruise TAS when a cruise portion exists; an all-climb/descent row shows that phase TAS. GS is whole-leg effective GS from flown distance / flight time.</span>
         <span>Select one OFP channel per leg in Prepare legs. The OFP shows only your selection; suggestions and alternatives remain in the sidebar.</span>
         <span>MSA is entered manually. Use the ±1 NM map corridor to inspect terrain/obstacles.</span>
@@ -180,6 +183,7 @@ export class OFPTable {
     legPlan: FuelLegPlan,
     settings: ReturnType<FlightPlanStore['getNavigationSettings']>,
     accumulatedDistanceNm: number,
+    exactAccumulatedDistanceNm: number,
     accumulatedTimeMinutes: number,
     accumulatedFuelGal: number | null,
     estimatedRemainingGal: number | null,
@@ -236,7 +240,7 @@ export class OFPTable {
           <td class="calculated">${this.headingLabel(magneticTrack)}</td>
           <td class="calculated" title="${escapeHtml(windTitle)}">${this.headingLabel(legPlan.windFromDeg)}/${Math.round(legPlan.windSpeedKt)}</td>
           <td class="calculated" title="Exact WCA for displayed ${legPlan.displayPhase} TAS: ${legPlan.wcaDeg.toFixed(2)}°">${this.signedDegrees(legPlan.wcaDeg)}</td>
-          <td class="calculated" title="Exact accumulated distance: ${accumulatedDistanceNm.toFixed(2)} NM">${this.distanceLabel(accumulatedDistanceNm)}</td>
+          <td class="calculated" title="Sum of displayed whole-NM leg distances. Exact accumulated distance: ${exactAccumulatedDistanceNm.toFixed(2)} NM">${accumulatedDistanceNm}</td>
           <td class="calculated" title="Accumulated route time including modeled phase time">${this.formatMinutes(accumulatedTimeMinutes)}</td>
           ${legPlan.cruiseFuelFlowGph === null
             ? '<td class="pending" title="Enter Manual cruise FF when POH performance is disabled">—</td>'
@@ -256,7 +260,7 @@ export class OFPTable {
           </td>
           <td class="calculated">${this.headingLabel(magneticHeading)}</td>
           <td class="calculated" title="${gsTitle}">${legPlan.groundSpeedKt.toFixed(0)}</td>
-          <td class="calculated" title="Exact leg distance: ${leg.distanceNm.toFixed(2)} NM; displayed leg distance is rounded upward to the next whole NM">${ceilLegDistanceNm(leg.distanceNm)}</td>
+          <td class="calculated" title="Exact leg distance: ${leg.distanceNm.toFixed(2)} NM; fractional NM below 0.3 rounds down, otherwise up">${roundLegDistanceNm(leg.distanceNm)}</td>
           <td class="calculated" title="${timeTitle}">${this.formatMinutes(legPlan.totalTimeMin)}</td>
           <td class="pending">—</td>
           <td class="pending">—</td>
@@ -350,10 +354,6 @@ export class OFPTable {
   private signedDegrees(value: number): string {
     const rounded = Math.sign(value) * Math.round(Math.abs(value));
     return `${rounded > 0 ? '+' : ''}${rounded}°`;
-  }
-
-  private distanceLabel(valueNm: number): string {
-    return (Math.round(valueNm * 2) / 2).toFixed(1);
   }
 
   private formatMinutes(minutes: number): string {

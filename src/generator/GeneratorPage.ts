@@ -9,6 +9,7 @@ import { candidateReviewBlocksTransfer, reviewCandidates, type CandidateReview }
 import { stageGeneratedRoute } from './transfer';
 import { GeneratorMap } from './GeneratorMap';
 import { terrainResolutionLabel } from './terrainSummary';
+import { roundLegDistanceNm } from '../presentation/planningRounding';
 import { northernAirports } from '../routing/northernAirports';
 import { routeIssueMarkup } from '../presentation/routeIssues';
 import { hasRestrictionCoverage } from '../routing/restrictions';
@@ -245,7 +246,7 @@ export class GeneratorPage {
       const delta = Math.round(candidate.durationDifference);
       return `<article class="panel generator-candidate ${selected ? 'is-selected' : ''}" data-candidate-id="${e(candidate.id)}">
         <button type="button" class="generator-candidate-choice" data-generator-select="${candidate.id}" aria-pressed="${selected}"><strong>${i + 1}. ${e(candidate.name)}</strong><span>${selected ? 'Selected preview' : 'Preview this draft'}</span></button>
-        <div class="generator-metrics"><span><strong>${Math.round(candidate.totalMinutes)} min</strong>incl. ${Math.round(candidate.patternMinutes)} min pattern</span><span><strong>${Math.ceil(candidate.distanceNm)} NM</strong>plotted draft</span><span><strong>${candidate.fuelGal === null ? 'Unknown fuel' : `${candidate.fuelGal.toFixed(1)} US gal`}</strong>trip estimate</span></div>
+        <div class="generator-metrics"><span><strong>${Math.round(candidate.totalMinutes)} min</strong>incl. ${Math.round(candidate.patternMinutes)} min pattern</span><span><strong title="Sum of displayed whole-NM legs; exact distance ${candidate.distanceNm.toFixed(2)} NM">${candidate.legs.reduce((sum, leg) => sum + roundLegDistanceNm(leg.distanceNm), 0)} NM</strong>plotted draft</span><span><strong>${candidate.fuelGal === null ? 'Unknown fuel' : `${candidate.fuelGal.toFixed(1)} US gal`}</strong>trip estimate</span></div>
         <p class="hint">${delta === 0 ? 'Matches the duration target after rounding.' : `${Math.abs(delta)} min ${delta > 0 ? 'above' : 'below'} your target.`} Still-air estimate.</p>
         <p class="generator-terrain-badge">${e(terrainResolutionLabel(candidate.searchTerrain))}</p>
         <p class="hint">Terrain search: ${candidate.searchTerrain.resolutionM} m grid · ${candidate.searchTerrain.highestRasterFt === null ? 'controlling transit terrain unknown' : `highest returned transit terrain ${Math.ceil(candidate.searchTerrain.highestRasterFt)} ft`}. Coarse samples can miss peaks.</p>

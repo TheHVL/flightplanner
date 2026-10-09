@@ -1,0 +1,35 @@
+/* Readable sidebar text without changing the compact printed OFP columns. */
+#planning-sidebar { font-size: 14px; line-height: 1.5; }
+#planning-sidebar :is(p, label, input, select, button, summary, small, span, em, strong, li, a) { font-size: 14px; line-height: 1.5; }
+#planning-sidebar :is(input, select) { min-height: 38px; }
+#planning-sidebar :is(.phase-disclosure > summary strong, .waypoint-name) { font-size: 16px; }
+#planning-sidebar :is(small, .coords, .nav-input-wrap em, .role-badge, .eyebrow) { font-size: 13px; }
+#planning-sidebar :is(.workflow-intro, .leg-field-guide, .workflow-title small, .coords, .nav-help, .nav-field > span, .empty-state) { color: #46566d; }
+#planning-sidebar .waypoint-card { grid-template-columns: 36px minmax(0, 1fr) 34px; gap: 9px; padding: 14px 12px; }
+#planning-sidebar .waypoint-topline { flex-wrap: wrap; gap: 3px; }
+#planning-sidebar .waypoint-name { flex: 1 1 100%; }
+#planning-sidebar .waypoint-actions { flex-direction: column; }
+#planning-sidebar .icon-button { width: 32px; height: 32px; }
+#planning-sidebar .waypoint-planning-actions button { padding: 7px 8px; }
+#planning-sidebar .waypoint-drag-handle { width: 34px; height: 48px; border: 0; border-radius: 7px; display: flex; flex-direction: column; cursor: grab; user-select: none; touch-action: none; }
+#planning-sidebar .waypoint-drag-handle span { color: #fff; line-height: 1; }
+#planning-sidebar .waypoint-drag-handle:active { cursor: grabbing; }
+.waypoint-dragging { opacity: 0.55; }
+.waypoint-drop-before { box-shadow: inset 0 3px #1f67d8; }
+.waypoint-drop-after { box-shadow: inset 0 -3px #1f67d8; }
+.waypoint-reorder-status:empty { display: none; }
+.waypoint-reorder-status { margin: 0; padding: 8px 14px; color: #245a91; }
+.route-leg-menu { display: grid; gap: 10px; font-size: 14px; }
+.route-leg-menu button { padding: 9px 12px; border: 1px solid #c9d3df; border-radius: 5px; color: #16375d; background: #f4f8fc; font: inherit; }
+.route-sector-legend { max-width: min(280px, 65vw); max-height: 150px; overflow: auto; border: 1px solid #c9d3df; border-radius: 5px; background: #fff; padding: 6px 9px; color: #243750; font-size: 13px; }
+.route-sector-legend summary { cursor: pointer; font-weight: 600; }
+.route-sector-legend details > div { display: flex; align-items: center; gap: 7px; margin-top: 6px; overflow-wrap: anywhere; }
+.route-sector-legend span { width: 22px; height: 4px; flex: 0 0 22px; }
+/* The earlier browser audit found low-contrast annotations outside the sidebar too. */
+.eyebrow, .toolbar-label, .map-note, .route-total > span, .table-legend, .ofp-touch-and-go-legend { color: #46566d; }
+.map-note, .aip-map-help, .table-legend, .brand-subtitle { font-size: 12px; line-height: 1.5; }
+.ofp-table :is(.pending, .table-empty) { color: #526176; }
+.leaflet-container .leaflet-control-attribution a { text-decoration: underline; }
+@container (max-width: 340px) {
+  #planning-sidebar :is(.nav-input-grid, .vertical-input-grid, .leg-entry-form) { grid-template-columns: minmax(0, 1fr); }
+}

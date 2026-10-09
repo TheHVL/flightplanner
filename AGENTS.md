@@ -11,7 +11,8 @@ Read [docs/CODEX_HANDOFF.md](docs/CODEX_HANDOFF.md) before substantive work. It 
 - New planned levels default to 2,500 ft, editable in 100 ft increments. Preserve restored explicit levels and blanks. PL remains a documented pressure-altitude proxy; the user does not want QNH input or promises to add it later.
 - Use “pattern” in the UI; airport-only, separate OFP row, time/fuel fields only. Preserve compatible internal `circuits` values in saved data.
 - OFP shows one selected frequency per leg; suggestions belong in the sidebar. Do not guess Polaris coverage, restriction activation or chart geometry.
-- INT fuel rounds each row up to whole US gal; ACC adds displayed INT values, including patterns. Exact trip/remaining consumption stays unrounded. Individual/total distance rounds up to whole NM; accumulated distance rounds to the nearest 0.5 NM.
+- INT fuel rounds each row up to whole US gal; ACC adds displayed INT values, including patterns. Exact trip/remaining consumption stays unrounded. Leg distance rounds down when the fractional NM is below 0.3, otherwise up. ACC distance and total sum those displayed whole-NM legs without decimals; calculation inputs stay exact.
+- Waypoints can be reordered by mouse/touch drag handles or arrow buttons. Route-line clicks offer insertion between endpoints; dragging a line still adds a hidden shaping bend. Airport-to-airport sectors have distinct map colors through intermediate points. Preserve undo, input compatibility and readable sidebar text.
 - Generator airport coverage is mainland ENVA/Trondheim and north. Preserve missing-data, restriction and profile transfer blocks. Acknowledgement never overrides them. Never turn unknown terrain into zero or offer an unchecked straight-line fallback.
 - Preserve saved-plan compatibility, manual wind backups, recovery copies and native text-input undo. Fetch new forecasts when reusing a plan; never silently reuse old forecasts or change winds on age alone.
 

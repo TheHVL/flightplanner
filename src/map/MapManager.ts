@@ -1,4 +1,5 @@
 import { escapeHtml } from '../utils/html';
+import { airportRouteSectors, type RouteSector } from './routeSectors';
 import { nearestPublishedPoint, type PublishedMapPoint } from '../aip/mapPoints';
 import L, {
   type Coords,
@@ -32,6 +33,7 @@ export interface MapManagerCallbacks {
   onMapClick(lat: number, lon: number, publishedPoint?: PublishedMapPoint): void;
   onWaypointMoved(id: string, lat: number, lon: number, publishedPoint?: PublishedMapPoint): void;
   onRouteLegShape(legIndex: number, lat: number, lon: number): void;
+  onWaypointInserted?(fromId: string, toId: string, lat: number, lon: number, publishedPoint?: PublishedMapPoint): void;
 }
 
 export interface VerticalProfileMapMarker {
@@ -151,7 +153,9 @@ export class MapManager {
   private readonly publishedPointSelected: (point: PublishedMapPoint) => void;
   private readonly resizeObserver?: ResizeObserver;
   private readonly icaoLayer: AvinorIcaoLayer;
-  private readonly routeLine: Polyline;
+  private readonly routeSectorLayer: LayerGroup;
+  private routeSectorLines: Array<{ sector: RouteSector; line: Polyline }> = [];
+  private readonly routeLegend: HTMLElement;
   private readonly routeHitLine: Polyline;
   private readonly selectedLegLine: Polyline;
   private readonly verticalProfileLayer: LayerGroup;
@@ -242,15 +246,14 @@ export class MapManager {
       )
       .addTo(this.map);
 
-    this.routeLine = L.polyline([], {
-      smoothFactor: 0,
-      color: '#2563eb',
-      weight: 4,
-      opacity: 0.9,
-      interactive: false,
-    }).addTo(this.map);
-
     this.selectedLegLine = L.polyline([], { smoothFactor: 0, color: '#e6a325', weight: 7, opacity: 0.85, interactive: false }).addTo(this.map);
+    this.routeSectorLayer = L.layerGroup().addTo(this.map);
+    this.routeLegend = L.DomUtil.create('div', 'route-sector-legend');
+    L.DomEvent.disableClickPropagation(this.routeLegend);
+    L.DomEvent.disableScrollPropagation(this.routeLegend);
+    const legend = new L.Control({ position: 'bottomleft' });
+    legend.onAdd = () => this.routeLegend;
+    legend.addTo(this.map);
     this.routeHitLine = L.polyline([], {
       smoothFactor: 0,
       color: '#2563eb',
@@ -263,7 +266,7 @@ export class MapManager {
       L.DomEvent.stop(event.originalEvent);
       if (this.suppressNextMapClick) return;
       const index = this.closestLegIndex(event.latlng);
-      if (index >= 0) callbacks.onLegSelected?.(index);
+      if (index >= 0) this.openRouteLegMenu(index, event.latlng, callbacks, event.originalEvent.altKey);
     });
     this.routeHitLine.on('mousedown', (event: LeafletMouseEvent) => {
       this.startRouteShapeDrag(event);
@@ -434,6 +437,7 @@ export class MapManager {
     waypoints: Waypoint[],
     legs: RouteLeg[],
     onMoved: MapManagerCallbacks['onWaypointMoved'],
+    isAirport: (waypoint: Waypoint) => boolean = point => /^EN[A-Z]{2}$/.test(point.aipId ?? '') && !!point.aipEffectiveDate,
   ): void {
     this.renderedWaypoints = waypoints.map((waypoint) => ({ ...waypoint }));
     this.renderedLegs = legs.map((leg) => ({
@@ -486,11 +490,18 @@ export class MapManager {
     });
 
     const routeLatLngs = this.routePathLatLngs();
-    if (!this.routeShapeDrag) this.routeLine.setLatLngs(routeLatLngs);
+    this.routeSectorLayer.clearLayers();
+    this.routeSectorLines = airportRouteSectors(this.renderedLegs, isAirport).map(sector => ({ sector,
+      line: L.polyline([], { smoothFactor: 0, color: sector.color, weight: 4, opacity: 0.95, interactive: false, className: `route-sector-line route-sector-${sector.index}` }).addTo(this.routeSectorLayer),
+    }));
+    this.updateRouteSectorPaths();
+    const legendOpen = this.routeLegend.querySelector('details')?.open ?? false;
+    this.routeLegend.hidden = this.routeSectorLines.length < 2;
+    this.routeLegend.innerHTML = `<details ${legendOpen ? 'open' : ''}><summary>Airport routes (${this.routeSectorLines.length})</summary>${this.routeSectorLines.map(({sector}) => `<div><span style="background:${sector.color}" aria-hidden="true"></span>${sector.index + 1}. ${escapeHtml(sector.legs[0].from.name)} → ${escapeHtml(sector.legs.at(-1)!.to.name)}</div>`).join('')}</details>`;
     this.routeHitLine.setLatLngs(routeLatLngs);
     this.routeHitLine.unbindTooltip();
     if (waypoints.length > 1) {
-      this.routeHitLine.bindTooltip('Click to prepare this leg. Drag to shape the flown path.', {
+      this.routeHitLine.bindTooltip('Click for leg options or to add a waypoint. Drag to shape the flown path.', {
         sticky: true,
         direction: 'top',
       });
@@ -588,7 +599,7 @@ export class MapManager {
     }
     if (!drag.moved) return;
 
-    this.routeLine.setLatLngs(this.routePathLatLngs(drag.legIndex, event.latlng));
+    this.updateRouteSectorPaths(drag.legIndex, event.latlng);
   }
 
   private finishRouteShapeDrag(event: LeafletMouseEvent, callbacks: MapManagerCallbacks): void {
@@ -608,11 +619,40 @@ export class MapManager {
     if (drag.moved) {
       callbacks.onRouteLegShape(drag.legIndex, event.latlng.lat, event.latlng.lng);
     } else {
-      this.routeLine.setLatLngs(this.routePathLatLngs());
-      callbacks.onLegSelected?.(drag.legIndex);
+      this.updateRouteSectorPaths();
+      this.openRouteLegMenu(drag.legIndex, event.latlng, callbacks, event.originalEvent.altKey);
       this.suppressNextMapClick = true;
     }
     L.DomEvent.stop(event.originalEvent);
+  }
+
+  private updateRouteSectorPaths(overrideLegIndex?: number, overridePoint?: L.LatLng): void {
+    for (const { sector, line } of this.routeSectorLines) {
+      const points = sector.legs.flatMap(leg => densifyRoutePath(leg.index === overrideLegIndex && overridePoint
+        ? [leg.from, { lat: overridePoint.lat, lon: overridePoint.lng }, leg.to] : routeLegPath(leg)));
+      line.setLatLngs(points.map(point => [point.lat, point.lon] as [number, number]));
+    }
+  }
+
+  private openRouteLegMenu(index: number, location: L.LatLng, callbacks: MapManagerCallbacks, bypassSnap = false): void {
+    const leg = this.renderedLegs.find(item => item.index === index);
+    if (!leg) return;
+    const content = L.DomUtil.create('div', 'route-leg-menu');
+    content.innerHTML = `<strong>${escapeHtml(leg.from.name)} → ${escapeHtml(leg.to.name)}</strong><button type="button" data-route-prepare>Prepare this leg</button>${callbacks.onWaypointInserted ? '<button type="button" data-route-insert>Add waypoint here</button>' : ''}`;
+    L.DomEvent.disableClickPropagation(content);
+    const popup = L.popup().setLatLng(location).setContent(content).openOn(this.map);
+    content.querySelector('[data-route-prepare]')?.addEventListener('click', () => {
+      this.map.closePopup(popup);
+      const current = this.renderedLegs.find(item => item.from.id === leg.from.id && item.to.id === leg.to.id);
+      if (current) callbacks.onLegSelected?.(current.index);
+    });
+    content.querySelector('[data-route-insert]')?.addEventListener('click', () => {
+      this.map.closePopup(popup);
+      const current = this.renderedLegs.find(item => item.from.id === leg.from.id && item.to.id === leg.to.id);
+      if (!current) return;
+      const point = this.snapPoint(location, bypassSnap);
+      callbacks.onWaypointInserted?.(current.from.id, current.to.id, point?.lat ?? location.lat, point?.lon ?? location.lng, point);
+    });
   }
 
   private routePathLatLngs(overrideLegIndex?: number, overridePoint?: L.LatLng): L.LatLng[] {

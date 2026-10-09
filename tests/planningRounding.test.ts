@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   ceilFuelUsageGal,
-  ceilLegDistanceNm,
+  roundLegDistanceNm,
   ceilPlanningMinutes,
   formatPlanningTime,
 } from '../src/presentation/planningRounding';
@@ -22,17 +22,17 @@ describe('planning display rounding', () => {
     expect(ceilFuelUsageGal(1.6)).toBe(2);
   });
 
-  it('rounds individual OFP leg distance upward to the nearest whole NM', () => {
-    expect(ceilLegDistanceNm(0)).toBe(0);
-    expect(ceilLegDistanceNm(12)).toBe(12);
-    expect(ceilLegDistanceNm(12.01)).toBe(13);
-    expect(ceilLegDistanceNm(12.5)).toBe(13);
-    expect(ceilLegDistanceNm(12.99)).toBe(13);
+  it('rounds fractional NM below 0.3 down and 0.3 or above up', () => {
+    for (const [exact, displayed] of [[0,0], [0.29,0], [0.3,1], [12,12], [12.01,12], [12.299,12], [12.3,13], [12.5,13], [12.99,13], [5.7,6], [7.2,7]]) {
+      expect(roundLegDistanceNm(exact)).toBe(displayed);
+    }
+    for (const invalid of [-1, NaN, Infinity]) expect(() => roundLegDistanceNm(invalid)).toThrow();
   });
 
   it('does not bump values that only differ from an integer by floating-point noise', () => {
     expect(ceilPlanningMinutes(6.000000000000001)).toBe(6);
     expect(ceilFuelUsageGal(2.000000000000001)).toBe(2);
-    expect(ceilLegDistanceNm(12.000000000000001)).toBe(12);
+    expect(roundLegDistanceNm(12.000000000000001)).toBe(12);
+    expect(roundLegDistanceNm(12.3 - Number.EPSILON * 12)).toBe(13);
   });
 });
