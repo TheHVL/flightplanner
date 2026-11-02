@@ -1,6 +1,5 @@
 {
-  "state": "failed",
-  "attemptedAt": "2026-11-01T11:16:03.132Z",
-  "effectiveDate": "2026-09-03",
-  "error": "Command failed: curl --silent --show-error --location --fail --max-time 25 --retry 2 --output /tmp/flightplanner-source-bR27i9/source --write-out %{http_code} %{url_effective} https://nedlasting.geonorge.no/geonorge/Tjenestefeed.xml\ncurl: (28) Connection timed out after 25002 milliseconds\ncurl: (28) Connection timed out after 25002 milliseconds\ncurl: (28) Connection timed out after 25002 milliseconds\n"
+  "state": "success",
+  "attemptedAt": "2026-11-02T12:21:13.115Z",
+  "effectiveDate": "2026-09-03"
 }
