@@ -25,6 +25,8 @@ export interface FuelPlanningSettings {
   climbPerformanceMode: ClimbPerformanceMode;
   climbFuelFlowGph: number | null;
   descentFuelFlowGph: number | null;
+  /** Missing on legacy plans: preserve their entered/blank manual descent FF. */
+  descentFuelFlowMode?: 'manual' | 'cruise';
   circuitFuelFlowGph: number | null;
   totalFuelOnboardGal: number | null;
   reserveGal?: number;
@@ -137,6 +139,7 @@ export const DEFAULT_FUEL_PLANNING_SETTINGS: FuelPlanningSettings = {
   climbPerformanceMode: 'poh-normal-90',
   climbFuelFlowGph: null,
   descentFuelFlowGph: null,
+  descentFuelFlowMode: 'manual',
   circuitFuelFlowGph: null,
   totalFuelOnboardGal: null,
   reserveGal: 12,
@@ -318,9 +321,11 @@ export function calculateRouteFuelPlan(input: RouteFuelPlanInput): RouteFuelPlan
         : phase.pohClimbFuelComplete
           ? phase.pohClimbFuelGal
           : phaseFuel(phase.climbTimeMin, fuelSettings.climbFuelFlowGph);
+    const descentFuelFlowGph = fuelSettings.descentFuelFlowMode === 'cruise'
+      ? cruiseFuelFlowGph : fuelSettings.descentFuelFlowGph;
     const descentFuelGal = profilesOverlap || climbPerformanceIncomplete
       ? null
-      : phaseFuel(phase.descentTimeMin, fuelSettings.descentFuelFlowGph);
+      : phaseFuel(phase.descentTimeMin, descentFuelFlowGph);
     const legFuelGal = profilesOverlap || climbPerformanceIncomplete || performanceError !== null
       ? null
       : sumIfKnown([cruiseFuelGal, climbFuelGal, descentFuelGal]);
@@ -328,7 +333,7 @@ export function calculateRouteFuelPlan(input: RouteFuelPlanInput): RouteFuelPlan
     const missingPhases: string[] = [];
     if (cruiseTimeMin > EPSILON && cruiseFuelFlowGph === null) missingPhases.push('cruise FF');
     if (phase.climbTimeMin > EPSILON && !phase.pohClimbFuelComplete && fuelSettings.climbFuelFlowGph === null) missingPhases.push('climb FF');
-    if (phase.descentTimeMin > EPSILON && fuelSettings.descentFuelFlowGph === null) missingPhases.push('descent FF');
+    if (phase.descentTimeMin > EPSILON && descentFuelFlowGph === null) missingPhases.push(fuelSettings.descentFuelFlowMode === 'cruise' ? 'cruise FF for descent' : 'descent FF');
     const phaseWarning = profilesOverlap
       ? 'Vertical profiles overlap, so phase-aware climb/descent fuel is unavailable.'
       : climbPerformanceIncomplete
@@ -573,6 +578,7 @@ function sanitizeSettings(settings: FuelPlanningSettings): FuelPlanningSettings 
     climbPerformanceMode: sanitizeClimbPerformanceMode(settings.climbPerformanceMode),
     climbFuelFlowGph: nullableBoundedNumber(settings.climbFuelFlowGph, 0, 40),
     descentFuelFlowGph: nullableBoundedNumber(settings.descentFuelFlowGph, 0, 40),
+    descentFuelFlowMode: settings.descentFuelFlowMode === 'cruise' ? 'cruise' : 'manual',
     circuitFuelFlowGph: nullableBoundedNumber(settings.circuitFuelFlowGph, 0, 40),
     totalFuelOnboardGal: nullableBoundedNumber(settings.totalFuelOnboardGal, 0, 100),
     reserveGal: boundedNumber(settings.reserveGal ?? 12, 0, 100, 12),

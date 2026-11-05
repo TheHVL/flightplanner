@@ -29,6 +29,7 @@ The working plan is autosaved locally. Named plans can be saved, loaded and expo
 
 - Kartverket Norgeskart and Avinor ICAO 1:500 000 layers.
 - Great-circle distance and initial true track, wind triangle, WCA, headings, groundspeed, and WMM2025 magnetic variation with manual overrides.
+- Displayed MH adds the displayed MT and signed WCA, wrapping at north: 301° + (−1°) = 300°, 224° + (−1°) = 223°. Underlying wind calculations retain their precision. Saving a new or changed wind in **Prepare legs** enables per-leg winds; a fetched forecast still takes priority over its manual backup. The toggle can deliberately return the route to global winds.
 - One draggable shaping bend per leg. It changes flown distance, time and fuel without adding an OFP fix; TT/MT/MH still use the direct waypoint-to-waypoint course. Add an actual waypoint when you want a separate navigation leg.
 - Airport-to-airport route sectors use different line colors through their intermediate waypoints. The next color starts on departure from the next identified airport, including return visits. **Airport routes** on the manual map lists the sectors; red/amber overlays still identify review findings.
 - The map draws densified great-circle sections matching route distance and terrain sampling. Terrain cross-sections follow the local path tangent; this does not change OFP tracks or headings.
@@ -43,20 +44,22 @@ Patterns can only be assigned to identified airport waypoints. **Airport + patte
 
 ## Aircraft and fuel assumptions
 
-**Aircraft & defaults → Cruise power & aircraft defaults** contains an explicit **School C182T preset** button. Applying it changes the current planning assumptions; loading an existing plan preserves that plan's settings until the preset is applied.
+**Aircraft & defaults → Cruise power & aircraft defaults** and **Weather & fuel** contain an explicit **Apply school C182T preset** button. Applying it changes the current planning assumptions; loading an existing plan preserves that plan's settings until the preset is applied.
 
 | Item | School preset |
 | --- | --- |
 | Cruise | 2200 RPM / 20 inHg, using the POH cruise table |
 | Climb | 90 KIAS, manual 500 ft/min; 2400 RPM / 23 inHg reference |
-| Climb fuel flow | Must be entered; not yet confirmed |
-| Descent | Cruise TAS, manual 700 ft/min, 10 US gal/h; approximately 18 inHg reference |
+| Climb fuel flow | 12 US gal/h, confirmed by the user |
+| Descent | Cruise TAS and calculated cruise fuel flow for each leg; editable 500 ft/min default; approximately 18 inHg reference |
 | Pattern | 12 US gal/h |
 | Startup/taxi/takeoff | 2 US gal |
 | Reserve | 12 US gal |
 | Contingency | Enter per flight; no automatic policy |
 
-The selected 500 ft/min climb is within the supplied 500–1000 ft/min range. Climb IAS is converted approximately to TAS using density at the mean phase altitude, treating IAS as EAS. This approximation omits instrument/compressibility corrections and is not a replacement for aircraft performance verification. The school 23 inHg climb is distinct from the POH full-throttle climb profiles.
+The selected 500 ft/min climb is a convenient editable planning reference; 90 KIAS does not imply a particular climb rate. Climb IAS is converted approximately to TAS using density at the mean phase altitude, treating IAS as EAS. This approximation omits instrument/compressibility corrections and is not a replacement for aircraft performance verification. The school 23 inHg climb is distinct from the POH full-throttle climb profiles.
+
+The school preset links descent fuel to each leg's calculated cruise FF, so altitude, temperature and cruise-power changes update descent consumption too. **Descent fuel flow source** can instead use an entered manual descent FF; switching modes retains that value. Legacy saved plans without a source selection keep their entered or blank manual descent FF.
 
 ### Published performance models
 
@@ -82,9 +85,11 @@ remaining fuel = onboard − startup/taxi/takeoff − exact accumulated consumpt
 
 Reserve and contingency are allowances outside modeled trip consumption. The original OFP template's 1.7 US gal ground allowance remains the generic editable default; the school preset applies 2 US gal.
 
+Trip fuel is calculated automatically. **Fuel onboard is optional and only needed for estimated remaining fuel**, not OFP INT/ACC or trip consumption. Missing flows for phases actually flown and invalid profiles still withhold affected fuel values; they are not replaced with zero.
+
 **INT fuel rounds each row upward to whole US gallons. ACC fuel adds those displayed INT values**, including pattern rows, and excludes startup/taxi/takeoff. For two exact 1.5 US gal legs, INT shows 2 and 2, and ACC shows 2 then **4**. Exact consumption remains 3 US gal for trip and remaining-fuel calculations. If an earlier row's fuel is unknown, subsequent ACC fuel remains unknown.
 
-Displayed planning times round upward to whole minutes. Leg distance rounds down when its fractional NM is below **0.3**, otherwise up. ACC distance and total add those displayed whole-NM legs, with no decimals: **5.7 → 6**, **7.2 → 7**, **ACC → 13 NM**. Exactly 0.3 rounds up; a leg shorter than 0.3 NM displays 0. Headings and WCA use whole degrees. Navigation, time, fuel and terrain calculations retain exact distances.
+INT planning times round each row upward to whole minutes. **ACC TIME, Planned time and the sidebar summary add those displayed INT times**, including patterns: **4 + 10 + 7 = 21 minutes**. Leg distance rounds down when its fractional NM is below **0.3**, otherwise up. ACC distance and total add those displayed whole-NM legs, with no decimals: **5.7 → 6**, **7.2 → 7**, **ACC → 13 NM**. Exactly 0.3 rounds up; a leg shorter than 0.3 NM displays 0. Headings and WCA use whole degrees. Navigation, profile and fuel calculations retain exact distances/times; display rounding does not change modeled fuel consumption.
 
 ## Route weather
 

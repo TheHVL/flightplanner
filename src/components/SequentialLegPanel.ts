@@ -28,6 +28,7 @@ export class SequentialLegPanel {
       </form>
       <button type="button" class="ghost-button" data-leg-terrain>Check terrain for this leg</button>
       <label class="nav-toggle"><input type="checkbox" data-leg-use-winds /><span>Use per-leg winds (forecast first, manual backup second)</span></label>
+      <p class="hint">Saving a new or changed manual wind enables per-leg winds. A fetched forecast for this leg still takes priority.</p>
       <p data-leg-status role="status" aria-live="polite"></p>
       <section data-leg-frequency></section>
       <details class="menu-subsection" data-leg-visit><summary data-leg-visit-title>Airport / pattern at waypoint</summary><section data-waypoint-visit></section></details>`;

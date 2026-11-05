@@ -567,6 +567,10 @@ export class FlightPlanStore {
 
     this.rememberUndo();
     this.manualLegWinds.set(key, next);
+    // A newly entered/changed wind is an explicit request to use per-leg winds.
+    // Keep activation in the same undo step; unchanged backups never reactivate
+    // a mode the pilot subsequently disabled. Fetched forecasts retain priority.
+    this.weatherSettings = { ...this.weatherSettings, useForecastWinds: true };
     this.emit();
   }
 

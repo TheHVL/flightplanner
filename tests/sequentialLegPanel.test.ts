@@ -42,6 +42,7 @@ describe('sequential leg preparation', () => {
     expect(store.getPlannedAltitudeFt(first.from.id,first.to.id)).toBe(3500);
     expect(store.getManualMsaFt(first.from.id,first.to.id)).toBe(3000);
     expect(store.getManualLegWind(first.from.id,first.to.id)).toEqual({windFromDeg:0,windSpeedKt:20});
+    expect(store.getWeatherSettings().useForecastWinds).toBe(true);
   });
   it('does not advance a row with incomplete or out-of-range wind', () => {
     fields()[2].value = '180';

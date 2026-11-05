@@ -21,6 +21,29 @@ function twoPointRoute(distanceDegrees = 1): { store: FlightPlanStore; fromId: s
 }
 
 describe('phase-aware fuel planning', () => {
+  it('links descent FF to each leg cruise performance and updates it when power changes', () => {
+    const { store, fromId, toId } = twoPointRoute(1);
+    const c = store.addWaypoint({ lat: 62, lon: 10 }, 'C');
+    store.setPlannedAltitudeFt(fromId, toId, 4000);
+    store.setPlannedAltitudeFt(toId, c.id, 2000);
+    store.updateVerticalProfileSettings({ departureElevationFt: 4000, destinationElevationFt: 0, descentRateFpm: 500 });
+    store.updatePerformanceSettings({ oatC: 7, rpm: 2300, manifoldPressureInHg: 22, usePohPerformance: true });
+    const settings = fuelSettings({ descentFuelFlowMode: 'cruise', descentFuelFlowGph: 8 });
+    const plan = calculateFuelPlanForStore(store, settings);
+    expect(plan.legs[0].cruiseFuelFlowGph).not.toBe(plan.legs[1].cruiseFuelFlowGph);
+    for (const leg of plan.legs) {
+      expect(leg.descentTimeMin).toBeGreaterThan(0);
+      expect(leg.descentFuelGal).toBeCloseTo(leg.descentTimeMin * leg.cruiseFuelFlowGph! / 60, 8);
+    }
+    expect(plan.tripFuelGal).toBeGreaterThan(0);
+    expect(plan.landingFuelGal).toBeNull();
+    store.updatePerformanceSettings({ manifoldPressureInHg: 23 });
+    const higherPower = calculateFuelPlanForStore(store, settings);
+    higherPower.legs.forEach((leg, i) => {
+      expect(leg.descentFuelGal).toBeGreaterThan(plan.legs[i].descentFuelGal!);
+      expect(leg.descentFuelGal).toBeCloseTo(leg.descentTimeMin * leg.cruiseFuelFlowGph! / 60, 8);
+    });
+  });
   it('uses leg PL and POH Figure 5-9 cruise fuel flow for level flight', () => {
     const { store, fromId, toId } = twoPointRoute();
     store.setPlannedAltitudeFt(fromId, toId, 4000);

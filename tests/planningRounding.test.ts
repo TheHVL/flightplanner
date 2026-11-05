@@ -4,9 +4,22 @@ import {
   roundLegDistanceNm,
   ceilPlanningMinutes,
   formatPlanningTime,
+  roundPlanningHeading,
+  roundPlanningWca,
+  sumDisplayedPlanningMinutes,
 } from '../src/presentation/planningRounding';
 
 describe('planning display rounding', () => {
+  it('sums displayed whole-minute rows and wraps headings after adding signed WCA', () => {
+    expect(sumDisplayedPlanningMinutes([3.1, 9.1, 6.1])).toBe(21);
+    expect(sumDisplayedPlanningMinutes([7.5, 7.5])).toBe(16);
+    expect(sumDisplayedPlanningMinutes([])).toBe(0);
+    expect(roundPlanningHeading(0 + roundPlanningWca(-1))).toBe(359);
+    expect(roundPlanningHeading(359 + roundPlanningWca(2))).toBe(1);
+    expect(roundPlanningHeading(359.8)).toBe(0);
+    expect(roundPlanningWca(-0.5)).toBe(-1);
+    expect(Object.is(roundPlanningWca(-0.1), -0)).toBe(false);
+  });
   it('rounds calculated time upward to the nearest whole minute', () => {
     expect(ceilPlanningMinutes(0)).toBe(0);
     expect(ceilPlanningMinutes(5)).toBe(5);

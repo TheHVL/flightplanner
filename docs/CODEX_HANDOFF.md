@@ -1,6 +1,6 @@
 # Flightplanner — Codex project handoff
 
-Updated: **2026-10-10**. This is a repository handoff, not an instruction to implement every proposed item. Read the root [AGENTS.md](../AGENTS.md), then inspect current code, git status and newer commits before starting work. Later explicit user instructions take precedence over this historical checkpoint.
+Updated: **2026-11-05**. This is a repository handoff, not an instruction to implement every proposed item. Read the root [AGENTS.md](../AGENTS.md), then inspect current code, git status and newer commits before starting work. Later explicit user instructions take precedence over this historical checkpoint.
 
 ## 1. Project and checkpoint
 
@@ -14,7 +14,7 @@ Updated: **2026-10-10**. This is a repository handoff, not an instruction to imp
 | Storage | Browser-local working route/settings and named plans, JSON export/import; no server-side plan account |
 | Feature checkpoints | PR [#59](https://github.com/TheHVL/flightplanner/pull/59), merge `1c6d16c5e527b561992dbcd891d4a87e22000f4c`; waypoint editing/readability `77f41e0`; sidebar/map-click fixes `a396403`; sidebar-to-page scrolling follow-up described below |
 | Original handoff snapshot | `f4307bd` on `main`, after two automated AIP refreshes following PR #59; subsequent docs/data commits do not change application behavior |
-| User-requested releases | Distance/editing/readability `77f41e0`, sidebar/map-click fixes `a396403`, scrolling `43b398e` and generator diagnosis/sea correction `ae4a057`: CI and Pages succeeded. Latest starting data checkpoint `bf365e3`. Subsequent user decision shelves the generator; see verification below and inspect Git/Actions for current publication status |
+| User-requested releases | Distance/editing/readability `77f41e0`, sidebar/map-click fixes `a396403`, scrolling `43b398e`, generator diagnosis/sea correction `ae4a057` and shelving `be46380` were published. November OFP fixes are described below; inspect Git/Actions for current publication status. This work started from data checkpoint `bd49bba` |
 | Generator backup | Annotated tag `backup/route-generator-2026-10-10` preserves full pre-shelving project at `bf365e3b5ee87e7fb852d7ac57c7a2b2b7469c57`; original entrypoint in `archive/route-generator/`, implementation/tests retained |
 
 Codex can work on this existing repository and existing Pages hosting. No repository ownership migration or AI feature in the planner is necessary. Root `AGENTS.md` is the concise entry point; this file holds detailed context so permanent instructions stay manageable. The user requested this handoff to carry progress, plans and preferences into future development sessions.
@@ -38,6 +38,8 @@ Codex can work on this existing repository and existing Pages hosting. No reposi
 ### Navigation, altitude and fuel
 
 - **Direct named-waypoint course controls TT and MT, and the wind triangle controls the corresponding heading.** A hidden shaping bend changes flown distance, duration and fuel, and the drawn/sampled route, but does not create a separate OFP navigation leg. Never change TT/MT/MH to track the bend. A pilot wanting another navigation leg adds an actual waypoint.
+- **Confirmed 2026-11-05:** displayed MH adds displayed whole-degree MT and signed WCA, wrapping at north: 301 − 1 = 300; 224 − 1 = 223. Retain exact wind-triangle results for calculations; do not round the underlying navigation model to match the display.
+- **Confirmed 2026-11-05:** round INT time up per flight/pattern row, then sum those displayed minutes for ACC time, Planned time and sidebar summaries. 4 + 10 + 7 accumulates 4, 14, 21. Profile geometry, forecast timing and actual fuel consumption retain unrounded times.
 - New manual legs default to **2,500 ft**; altitude arrows change by **100 ft**. Explicit saved values and intentional blanks must survive loading. The retained generator source keeps its existing default.
 - Adjacent leg levels may differ for climb/descent. Investigate physically modeled profile conflicts rather than requiring all levels to match. Published MAX limits cannot be bypassed by raising cruise altitude.
 - PL/elevation are pressure-altitude proxies. The user explicitly does **not** want QNH input now or later. Keep the approximation clear without promising future QNH conversion.
@@ -45,6 +47,7 @@ Codex can work on this existing repository and existing Pages hosting. No reposi
 - Numbered waypoint handles support mouse/touch drag reordering with edge scrolling; arrow buttons remain available. Clicking a plotted leg offers insertion between its endpoints and leg preparation. Dragging the line still shapes it. Airport-to-airport sectors change map color at each identified airport visit, preserving that color through intermediate points. Sidebar controls/help should remain readable and wrap on narrow screens.
 - INT fuel rounds **each row upward** to whole US gallons. ACC adds those displayed INT values, including pattern rows and excluding startup/taxi/takeoff. Example: two exact 1.5 US gal legs display INT 2 + 2 and final ACC **4**. Exact trip/remaining-fuel consumption remains **3**. Earlier discussion was ambiguous; current implemented rule and README settle this distinction. Unknown earlier fuel makes subsequent ACC unknown.
 - Reserve and contingency are separate allowances, not extra modeled consumption. Contingency remains a pilot entry per flight.
+- Trip fuel is calculated, not an input. Onboard fuel is only needed for estimated remaining fuel, not INT/ACC consumption. Required phase flows and profile validity still determine whether a fuel value is known.
 
 ### Terrain, coverage and cost
 
@@ -56,17 +59,17 @@ Codex can work on this existing repository and existing Pages hosting. No reposi
 
 ## 3. Aircraft preset: supplied facts versus assumptions
 
-The school preset is explicitly applied. Loading an existing plan retains its settings until the pilot chooses to apply the preset. Do not invent the missing climb fuel flow.
+The school preset is explicitly applied. Loading an existing plan retains its settings until the pilot chooses to apply the preset. The user confirmed climb FF and corrected the descent assumptions in the conversation after shelving; implementation was aligned on 2026-11-05.
 
 | Parameter | Current setting / origin |
 | --- | --- |
 | Normal cruise RPM | **2200**, supplied by user |
 | Cruise manifold pressure | **20 inHg**, current implementation assumption; user did not explicitly confirm this |
 | Normal climb | **90 KIAS, 2400 RPM, 23 inHg**, supplied by user |
-| Climb rate | User reported **500–1000 ft/min**; app uses **500 ft/min** as a planning choice within that range |
-| School climb fuel flow | **Unconfirmed**; remains blank, so manual school climb cannot produce a complete trip-fuel result |
-| Descent | Cruise TAS, about **18 inHg**, **10 US gal/h**, supplied by user |
-| Descent rate | **700 ft/min**, implementation assumption; not explicitly supplied by user |
+| Climb rate | **500 ft/min**, an editable convenient planning reference; 90 KIAS does not determine the actual climb rate |
+| School climb fuel flow | **12 US gal/h**, confirmed by user and set by the explicit preset |
+| Descent | **Cruise TAS and calculated cruise FF for each leg**; about **18 inHg** remains the earlier power reference. This supersedes fixed 10 US gal/h |
+| Descent rate | **500 ft/min** standard, editable for a faster descent; supersedes the previous 700 ft/min assumption |
 | Pattern fuel flow | **12 US gal/h**, supplied by user |
 | Startup/taxi/takeoff | **2 US gal**, supplied school setting; generic original OFP default remains 1.7 US gal |
 | Reserve | **12 US gal**, user described as standard one-hour reserve |
@@ -81,7 +84,7 @@ Performance sources already modeled:
 
 The user supplied `01-Cruise-performance.pdf` and `02-OFP-v4.2.pdf` during earlier work. They are not versioned source PDFs in the repository; a new session may need them from the user before independently reviewing table transcription or template changes. Source attribution and implemented tables are in the code. Do not make transient workspace paths a dependency or publish supplied PDFs without authorization.
 
-Information to obtain when refining the preset: normal-climb fuel flow at the stated 90 KIAS/2400 RPM/23 inHg, confirmation of cruise MP, and whether 700 ft/min is the intended descent planning rate. Implement other independent tasks without blocking on these optional refinements.
+Climb FF and the descent rate/flow above are now settled; do not ask for them again. Cruise MP remains the earlier 20 inHg implementation assumption. Descent FF source can be calculated cruise or entered manual. Legacy saved plans without `descentFuelFlowMode` preserve their manual values/blanks; selecting a source retains the numeric backup. Applying the school preset opts into linked cruise FF and the confirmed climb/rate defaults while preserving route, onboard fuel and flight contingency.
 
 ## 4. What is implemented
 
@@ -100,6 +103,8 @@ Open-Meteo route forecasts batch up to 50 leg midpoint coordinates per request, 
 Source, valid time, retrieval time and **Best Match** selection are stored. Actual underlying model name/run timestamp are **unknown**, not fabricated. Retrieval age is not model-run age; `generationtime_ms` is response-generation duration. A two-hour review reminder appears while open/after returning to the tab; it is an app reminder, not a validity guarantee. Age never silently changes winds.
 
 Outside available forecast altitude coverage, the nearest level is used with `altitudeClamped`/sampled altitude and visible Weather/OFP notices when active. With per-leg route winds enabled, priority is forecast → manual leg backup → global manual wind. Saved forecasts are deliberately not restored on reuse; fetch for the new date/time. Route/profile/date/time changes cancel stale async results.
+
+Saving a new/changed manual wind in Prepare legs enables per-leg winds in the same Undo step; the user confirmed this was the failing input path. Resaving an unchanged backup does not reactivate a mode deliberately disabled later. Forecast priority is unchanged; editing its manual backup does not silently replace the fetched forecast.
 
 ### AIP and frequencies
 
@@ -132,6 +137,15 @@ User-facing phase labels and future-QNH promises were removed; CSS renamed to pe
 CI now includes source lint, unit tests, TypeScript/build, Chromium smoke tests and axe checks. Production builds inject a CSP meta tag with explicit current provider allowances, Leaflet inline styles and GeoTIFF worker/WASM allowances. A meta CSP cannot enforce `frame-ancestors`; static hosting remains relevant when changing security policy.
 
 ## 5. Verification and open findings
+
+### OFP headings, displayed time sums and wind/fuel inputs, 2026-11-05
+
+- Reproduced both heading rounding failures and the 4 + 10 + 7 minute accumulation mismatch before changing the code. Display MH now composes the visible MT/WCA fields. ACC and total time add the displayed INT flight/pattern rows, including fractional and departure patterns. Added Planned time beside route distance and aligned the sidebar review summary.
+- Reproduced Prepare legs saving a wind without activating per-leg winds. New/changed wind entries now enable the mode atomically with Undo; source priority and deliberately disabled unchanged backups remain intact. Browser checks confirm wind changes MH/GS and survives reload.
+- Fuel consumption was already independent of onboard amount; missing school phase inputs were a real gap. The explicit school preset now provides climb 12 US gal/h, descent 500 ft/min and per-leg cruise FF for descent. Added a source selector and preset action in Weather & fuel; onboard/trip guidance and conditional-flow placeholders explain what is actually needed. Unknown phases and invalid profiles remain blocked rather than guessed.
+- New optional descent source survives plan save/load/export; old manual descent FF values and blanks retain their meaning. School-climb IAS remains separate from its editable planning rate and POH full-throttle climb remains a distinct model. Generator stays shelved with its backup intact.
+- Fresh Node **22.23.4** checks: **284 unit tests / 55 files** (two local workers), lint and TypeScript/Vite build; **16/16 pinned-Chromium browser checks**, no skips/retries. New regressions exercise both reported MH examples, whole-minute totals, manual-wind activation/reload, school fuel with onboard blank, linked descent FF following power/altitude, faster editable descent and legacy saved fuel settings. Existing tests for the retired generator retain their checks; two tests containing two 10-second generation waits now have matching 25-second overall bounds. The real-wheel regression now waits for Chromium to commit its scroll hit-test region and passed three additional consecutive runs.
+- Results above were recorded before publication; inspect current Git/Actions for CI and Pages release status. These calculation/display checks do not establish operational route suitability or independently reverify the original POH PDF transcription.
 
 ### Shelve the generator with a restorable backup, 2026-10-10
 
@@ -193,7 +207,8 @@ Other remaining limitations: partial terminal chart/airport/runway geometry; coa
 | Completed 2026-10-10 | Shelve the generator and preserve its code backup | Manual-only navigation, old-URL redirect, excluded generator entrypoint, annotated source snapshot and documented restoration |
 | On hold | Expand source-reviewed generator terminal geometry and northern coverage | Requires a new user decision; chart-backed directional geometry/joins/limits with checksum provenance |
 | On hold | Improve dataset-driven automatic route choice | Requires a new user decision and meaningful pilot-reviewed route-quality benchmarks; no reduced terrain reference to force acceptance |
-| Proposed 1 | Refine the manual school aircraft preset | Confirm climb FF, cruise MP and descent rate; preserve explicit application, saved inputs and distinction between school/POH climb |
+| Completed 2026-11-05 | Correct OFP display sums/manual-wind activation and align confirmed school fuel/rate settings | Reported headings/time cases, fuel independent of onboard, source-linked descent, saved-plan compatibility and browser regressions; see verification above |
+| Proposed 1 | Independently verify a representative manual OFP against school references | User-selected route/levels and independent navigation/performance worksheet; original POH PDFs required for table-transcription comparison. Preserve explicit presets and school/POH distinction |
 | Proposed 2 | Test first-time-user manual workflow and polish targeted menus/warnings | Observe a short planning task; fix concrete discoverability/overflow/keyboard issues without adding dense panels |
 | Proposed 3 | Incrementally decouple state, effects and DOM rendering | Small modules and behavioral regressions; evaluate a lightweight reactive approach only where it fixes demonstrated desynchronization; avoid a wholesale rewrite |
 | Later | More precise manual airspace/terrain assistance, authoritative activation/obstacles/NOTAM | Verified source availability/permissions, explicit unknowns and bounded behavior; keep cost constraints and no-QNH decision |

@@ -6,10 +6,25 @@
  * OFP and planning summaries: time rounds upward to the next whole minute,
  * fuel used rounds upward to the next whole US gallon. Leg distance rounds
  * down when its fractional part is below 0.3 NM, otherwise up. ACC and total
- * distance add these displayed whole-NM leg values.
+ * distance add these displayed whole-NM leg values. ACC/total time adds
+ * displayed whole-minute rows. Displayed MH adds displayed MT and WCA.
  */
 
 const ROUNDING_EPSILON = 1e-9;
+
+export function roundPlanningHeading(degrees: number): number {
+  if (!Number.isFinite(degrees)) throw new Error('Heading must be finite.');
+  return ((Math.round(degrees) % 360) + 360) % 360;
+}
+
+export function roundPlanningWca(degrees: number): number {
+  if (!Number.isFinite(degrees)) throw new Error('Wind correction must be finite.');
+  return Math.sign(degrees) * Math.round(Math.abs(degrees)) || 0;
+}
+
+export function sumDisplayedPlanningMinutes(minutes: readonly number[]): number {
+  return minutes.reduce((sum, value) => sum + ceilPlanningMinutes(value), 0);
+}
 
 export function ceilPlanningMinutes(minutes: number): number {
   if (!Number.isFinite(minutes) || minutes < 0) {

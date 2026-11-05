@@ -21,8 +21,8 @@ it('applies school settings explicitly and preserves route, onboard fuel and per
   applySchoolPreset(store);
   expect(store.getWaypoints()).toEqual(points);
   expect(store.getPerformanceSettings()).toMatchObject({rpm: 2200, manifoldPressureInHg: 20});
-  expect(store.getVerticalProfileSettings()).toMatchObject({climbRateFpm: 500, climbGroundSpeedKt: 90, climbSpeedMode: 'ias', descentRateFpm: 700, descentSpeedMode: 'cruise'});
-  expect(getFuelPlanningSettings()).toMatchObject({climbPerformanceMode: 'manual', climbFuelFlowGph: null, descentFuelFlowGph: 10, circuitFuelFlowGph: 12, startupTaxiTakeoffGal: 2, reserveGal: 12, totalFuelOnboardGal: 60, contingencyGal: 3});
+  expect(store.getVerticalProfileSettings()).toMatchObject({climbRateFpm: 500, climbGroundSpeedKt: 90, climbSpeedMode: 'ias', descentRateFpm: 500, descentSpeedMode: 'cruise'});
+  expect(getFuelPlanningSettings()).toMatchObject({climbPerformanceMode: 'manual', climbFuelFlowGph: 12, descentFuelFlowMode: 'cruise', circuitFuelFlowGph: 12, startupTaxiTakeoffGal: 2, reserveGal: 12, totalFuelOnboardGal: 60, contingencyGal: 3});
 });
 it('density correction keeps IAS distinct from TAS and rejects invalid conditions', () => {
   expect(approximateTasFromIas(90, 0, 15)).toBeCloseTo(90, 8);
@@ -37,17 +37,25 @@ it('uses confirmed rates, density-corrected climb IAS and changing cruise TAS fo
   const descent = fuel.verticalProfile!.events.find(e => e.type === 'TOD')!;
   expect(climb.timeMin).toBe(6);
   expect(climb.phaseTasKt).toBeGreaterThan(90);
-  expect(descent.timeMin).toBeCloseTo(3000 / 700, 8);
+  expect(descent.timeMin).toBe(6);
+  expect(fuel.legs[0].climbFuelGal).toBeCloseTo(1.2, 8); // 6 min × 12 GPH / 60.
+  expect(fuel.legs[0].descentFuelGal).toBeCloseTo(fuel.legs[0].cruiseFuelFlowGph! / 10, 8);
   expect(descent.phaseTasKt).toBeCloseTo(fuel.legs[0].cruiseTasKt, 8);
   store.updatePerformanceSettings({manifoldPressureInHg: 22});
   fuel = calculateFuelPlanForStore(store);
   const faster = fuel.verticalProfile!.events.find(e => e.type === 'TOD')!;
   expect(faster.phaseTasKt).toBeGreaterThan(descent.phaseTasKt);
   expect(faster.routeDistanceNm).toBeLessThan(descent.routeDistanceNm);
+  store.updateVerticalProfileSettings({descentRateFpm: 1000});
+  const steeper = calculateFuelPlanForStore(store);
+  expect(steeper.legs[0].descentTimeMin).toBeCloseTo(3, 8);
+  expect(steeper.legs[0].descentFuelGal).toBeCloseTo(steeper.legs[0].cruiseFuelFlowGph! / 20, 8);
+  expect(steeper.legs[0].climbTimeMin).toBeCloseTo(6, 8);
 });
-it('withholds trip fuel until climb FF is confirmed and keeps reserve outside trip fuel', () => {
+it('supplies confirmed school phase fuel without onboard fuel and keeps reserve outside trip fuel', () => {
   const store = route(); applySchoolPreset(store);
-  expect(calculateFuelPlanForStore(store).tripFuelGal).toBeNull();
+  expect(calculateFuelPlanForStore(store).tripFuelGal).toBeGreaterThan(0);
+  expect(calculateFuelPlanForStore(store).landingFuelGal).toBeNull();
   saveFuelPlanningSettings({...getFuelPlanningSettings(), climbFuelFlowGph: 14});
   const fuel = calculateFuelPlanForStore(store);
   expect(fuel.tripFuelGal).toBeCloseTo(fuel.enrouteFuelGal! + 2, 8);
@@ -71,7 +79,15 @@ it('round-trips school speed modes and fuel policy and accepts legacy plans with
   delete legacy.flightPlan.verticalProfileSettings.climbSpeedMode;
   delete legacy.flightPlan.verticalProfileSettings.descentSpeedMode;
   delete legacy.fuelSettings.reserveGal; delete legacy.fuelSettings.contingencyGal;
+  delete legacy.fuelSettings.descentFuelFlowMode;
+  legacy.fuelSettings.descentFuelFlowGph = 8;
   expect(parsePlanFile(JSON.stringify(legacy)).flightPlan.verticalProfileSettings.descentSpeedMode).toBeUndefined();
+  new SavedPlanRepository(localStorage).load(legacy, restored, new RouteShapeController(restored));
+  expect(getFuelPlanningSettings()).toMatchObject({descentFuelFlowMode: 'manual', descentFuelFlowGph: 8});
+  const legacyFuel = calculateFuelPlanForStore(restored);
+  expect(legacyFuel.legs[0].descentFuelGal).toBeCloseTo(8 * legacyFuel.legs[0].descentTimeMin / 60, 8);
+  const invalidFuel = structuredClone(saved); invalidFuel.fuelSettings.descentFuelFlowMode = 'invalid' as never;
+  expect(() => parsePlanFile(JSON.stringify(invalidFuel))).toThrow();
   const invalid = structuredClone(saved); invalid.flightPlan.verticalProfileSettings.descentSpeedMode = 'invalid' as never;
   expect(parseWorkingDraftState(invalid.flightPlan)).toBeNull();
 });
@@ -83,7 +99,9 @@ it('manual preset button updates the visible fuel panel and retains editable con
   new PerformancePanel(fuel, store, 'fuel').render();
   settings.querySelector<HTMLButtonElement>('[data-school-preset]')!.click();
   expect(fuel.querySelector<HTMLInputElement>('[data-fuel-field="startupTaxiTakeoffGal"]')!.value).toBe('2');
-  expect(fuel.querySelector<HTMLInputElement>('[data-fuel-field="descentFuelFlowGph"]')!.value).toBe('10');
+  expect(fuel.querySelector<HTMLInputElement>('[data-fuel-field="climbFuelFlowGph"]')!.value).toBe('12');
+  expect(fuel.querySelector<HTMLSelectElement>('[data-descent-fuel-mode]')!.value).toBe('cruise');
+  expect(fuel.querySelector<HTMLInputElement>('[data-fuel-field="descentFuelFlowGph"]')!.disabled).toBe(true);
   expect(fuel.querySelector<HTMLInputElement>('[data-fuel-field="circuitFuelFlowGph"]')!.value).toBe('12');
   expect(fuel.querySelector<HTMLInputElement>('[data-fuel-field="contingencyGal"]')!.value).toBe('');
 });

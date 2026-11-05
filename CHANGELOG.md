@@ -2,6 +2,14 @@
 
 This file records significant Flightplanner updates, formulas, source assumptions, limitations and implementation decisions. New updates are added at the top.
 
+## 2026-11-05, consistent OFP arithmetic and manual wind/fuel inputs
+
+- Displayed MH now adds displayed MT and signed WCA, wrapping at north. Reproduced and corrected the 301°/−1° and 224°/−1° cases; exact wind-triangle results remain available to calculations and tooltips.
+- ACC time, the new Planned time total and sidebar review summary sum individually rounded INT flight/pattern times. The displayed 4 + 10 + 7 minute example now accumulates 4, 14, 21. Fractional pattern durations are rounded per row. Exact profile geometry, wind timing and fuel consumption remain unrounded.
+- New/changed manual winds saved in Prepare legs enable per-leg winds atomically with the edit/Undo. Fetched forecasts retain priority, and unchanged backups do not reactivate a deliberately disabled mode.
+- Aligned the explicitly applied school preset with the user's confirmed climb flow of 12 US gal/h, editable 500 ft/min descent default and calculated cruise FF for descent. The 90 KIAS / 2400 RPM / 23 inHg climb retains an editable 500 ft/min planning reference. Added descent FF source selection with saved-plan compatibility; old manual values/blanks remain intact on load.
+- Clarified that trip fuel is calculated and fuel onboard is only needed for remaining fuel. Added the school preset action in Weather & fuel and verified INT/ACC consumption with onboard/contingency blank. Missing required phase flows and profile conflicts remain incomplete.
+
 ## 2026-10-10, shelve automatic route planning
 
 - Removed the Route Generator from the released navigation at the user's request. Former generator bookmarks redirect to manual planning without loading the generator UI/routing entrypoint. Manual route editing, terrain/reporting-point tools, calculations and saved-plan compatibility remain available.

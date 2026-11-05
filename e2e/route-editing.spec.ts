@@ -95,7 +95,7 @@ test('OFP displays whole-NM leg distances and adds them for ACC and total', asyn
   await expect(rows.nth(0).locator('td').nth(17)).toHaveText('6');
   await expect(rows.nth(1).locator('td').nth(17)).toHaveText('7');
   await expect(rows.nth(1).locator('td').nth(7)).toHaveText('13');
-  await expect(page.locator('.route-total strong')).toHaveText('13 NM');
+  await expect(page.locator('[data-ofp-total-distance]')).toHaveText('13 NM');
 });
 
 test('deleting waypoints keeps the list and sidebar at their editing position', async ({page}) => {
@@ -179,6 +179,10 @@ test('scrolling over the waypoint list continues through the sidebar to the OFP 
     const bottom = Math.min(listBounds!.y + listBounds!.height, sidebarBounds!.y + sidebarBounds!.height, 1100);
     expect(bottom).toBeGreaterThan(top);
     await page.mouse.move(listBounds!.x + listBounds!.width / 2, (top + bottom) / 2);
+    // Unlike locator.hover(), this deliberately does not scroll the list into
+    // view. Let Chromium commit the hit-test region after closing the warning
+    // or programmatically moving a nested scroller before sending real wheel input.
+    await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
   };
   await hoverVisibleList();
   await page.mouse.wheel(0, 200);

@@ -7,6 +7,19 @@ beforeEach(() => {
 });
 
 describe('manual per-leg wind backup', () => {
+  it('activates a changed manual wind in the same undo step and leaves deliberately disabled unchanged backups alone', () => {
+    const store = new FlightPlanStore();
+    const a = store.addWaypoint({ lat: 69, lon: 18 }, 'A'), b = store.addWaypoint({ lat: 69.5, lon: 19 }, 'B');
+    const before = store.exportWorkingDraftState();
+    store.setManualLegWind(a.id, b.id, { windFromDeg: 270, windSpeedKt: 20 });
+    expect(store.getWeatherSettings().useForecastWinds).toBe(true);
+    store.undoLastAction();
+    expect(store.exportWorkingDraftState()).toEqual(before);
+    store.redoLastAction();
+    store.updateWeatherSettings({ useForecastWinds: false });
+    store.setManualLegWind(a.id, b.id, { windFromDeg: 270, windSpeedKt: 20 });
+    expect(store.getWeatherSettings().useForecastWinds).toBe(false);
+  });
   it('stores a manual wind without pretending it is a fetched forecast', () => {
     const store = new FlightPlanStore();
     const a = store.addWaypoint({ lat: 69, lon: 18 }, 'A');

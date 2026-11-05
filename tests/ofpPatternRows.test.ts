@@ -54,7 +54,7 @@ describe('OFP pattern accounting and layout', () => {
       expect(pattern.cells[index].textContent).toBe('');
     }
     expect(outbound.cells[18].textContent).toBe(formatPlanningTime(plan.legs[1].flightTimeMin));
-    expect(outbound.cells[8].textContent).toBe(formatPlanningTime(plan.legs.reduce((sum, leg) => sum + leg.flightTimeMin, 10)));
+    expect(outbound.cells[8].textContent).toBe('0:42'); // Displayed 16 + 10 pattern + 16.
     expect(outbound.cells[11].textContent).toBe(String(plan.legs.reduce((sum, leg) => sum + ceilFuelUsageGal(leg.legFuelGal!), 2)));
     expect(outbound.cells[22].textContent).toBe(plan.landingFuelGal!.toFixed(1));
   });

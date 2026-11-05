@@ -170,6 +170,7 @@ function validFuelSettings(value: unknown): value is FuelPlanningSettings {
       !['manual', 'poh-max-rate', 'poh-normal-90'].includes(String(value.climbPerformanceMode))) return false;
   if (value.reserveGal !== undefined && !inRange(value.reserveGal, 0, 100)) return false;
   if (value.contingencyGal !== undefined && value.contingencyGal !== null && !inRange(value.contingencyGal, 0, 100)) return false;
+  if (value.descentFuelFlowMode !== undefined && value.descentFuelFlowMode !== 'manual' && value.descentFuelFlowMode !== 'cruise') return false;
   return ['manualCruiseFuelFlowGph', 'climbFuelFlowGph', 'descentFuelFlowGph', 'circuitFuelFlowGph', 'totalFuelOnboardGal']
     .every((key) => value[key] === null || inRange(value[key], 0, key === 'totalFuelOnboardGal' ? 100 : 40));
 }

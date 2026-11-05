@@ -9,6 +9,10 @@ import {
 import { trueToMagnetic } from '../navigation/wind';
 import {
   ceilFuelUsageGal,
+  ceilPlanningMinutes,
+  roundPlanningHeading,
+  roundPlanningWca,
+  sumDisplayedPlanningMinutes,
   roundLegDistanceNm,
   formatPlanningMinutesLabel,
   formatPlanningTime,
@@ -66,6 +70,7 @@ export class OFPTable {
     const displayedTotalDistance = legs.reduce((sum, leg) => sum + roundLegDistanceNm(leg.distanceNm), 0);
     const totalCircuitMinutes = this.store.getTotalWaypointActivityMinutes();
     const fuelPlan = calculateFuelPlanForStore(this.store);
+    const displayedPatternMinutes = sumDisplayedPlanningMinutes(fuelPlan.patterns.map(pattern => pattern.timeMin));
 
     let accumulatedDistanceNm = 0;
     let exactAccumulatedDistanceNm = 0;
@@ -79,7 +84,7 @@ export class OFPTable {
     const appendPattern = (waypoint: ReturnType<FlightPlanStore['getWaypoints']>[number]) => {
       const pattern = fuelPlan.patterns.find(p => p.waypointId === waypoint.id);
       if (!pattern) return;
-      accumulatedTimeMinutes += pattern.timeMin;
+      accumulatedTimeMinutes += ceilPlanningMinutes(pattern.timeMin);
       accumulatedFuelGal = accumulatedFuelGal !== null && pattern.fuelGal !== null ? accumulatedFuelGal + pattern.fuelGal : null;
       accumulatedDisplayedFuelGal = accumulatedDisplayedFuelGal !== null && pattern.fuelGal !== null
         ? accumulatedDisplayedFuelGal + ceilFuelUsageGal(pattern.fuelGal) : null;
@@ -90,7 +95,7 @@ export class OFPTable {
       const legPlan = fuelPlan.legs[index];
       accumulatedDistanceNm += roundLegDistanceNm(leg.distanceNm);
       exactAccumulatedDistanceNm += leg.distanceNm;
-      accumulatedTimeMinutes += legPlan.flightTimeMin;
+      accumulatedTimeMinutes += ceilPlanningMinutes(legPlan.flightTimeMin);
       accumulatedFuelGal = accumulatedFuelGal !== null && legPlan.legFuelGal !== null
         ? accumulatedFuelGal + legPlan.legFuelGal : null;
       accumulatedDisplayedFuelGal = accumulatedDisplayedFuelGal !== null && legPlan.legFuelGal !== null
@@ -109,7 +114,11 @@ export class OFPTable {
         </div>
         <div class="route-total">
           <span>Total route</span>
-          <strong title="Sum of displayed whole-NM leg distances. Exact calculated distance: ${totalDistance.toFixed(2)} NM">${displayedTotalDistance} NM</strong>
+          <strong data-ofp-total-distance title="Sum of displayed whole-NM leg distances. Exact calculated distance: ${totalDistance.toFixed(2)} NM">${displayedTotalDistance} NM</strong>
+        </div>
+        <div class="route-total">
+          <span>Planned time</span>
+          <strong data-ofp-total-time title="Sum of displayed INT flight and pattern times">${this.formatMinutes(accumulatedTimeMinutes)}</strong>
         </div>
       </div>
       <p class="ofp-editor-hint">Click a flight row, level or frequency to open that leg in Prepare legs.</p>
@@ -137,7 +146,7 @@ export class OFPTable {
             <tr class="ofp-subhead-row">
               <th>DIR/VEL</th><th>WCA</th>
               <th title="Accumulated route distance from departure">DIST</th>
-              <th title="Accumulated route time including modeled climb/descent and planned pattern time">TIME</th>
+              <th title="Sum of displayed INT flight and pattern times">TIME</th>
               <th title="Cruise fuel flow in US gallons per hour for this leg">FF<br><span class="ofp-unit">GPH</span></th>
               <th title="Phase-aware fuel used on this leg">INT<br><span class="ofp-unit">GAL</span></th>
               <th title="Accumulated enroute fuel used, excluding startup/taxi/takeoff allowance">ACC<br><span class="ofp-unit">GAL</span></th>
@@ -161,9 +170,9 @@ export class OFPTable {
         <span>MSA is entered manually. Use the ±1 NM map corridor to inspect terrain/obstacles.</span>
         <span class="msa-legend-warning">PL below entered MSA is highlighted.</span>
         <span>Fuel INT/ACC uses modeled cruise, climb and descent phases; pattern fuel appears on its own row where the required fuel-flow inputs are available.</span>
-        <span>Displayed planning time rounds up to whole minutes. INT fuel rounds each row up to whole US gallons; ACC fuel sums those displayed INT entries, including pattern rows. Startup is separate. Trip and remaining fuel use unrounded consumption.</span>
+        <span>INT time rounds each row up to whole minutes. ACC time and planned time add those displayed INT times, including patterns. MH adds displayed MT and WCA, wrapping at north. INT fuel rounds each row up to whole US gallons; ACC fuel sums those displayed INT entries, including pattern rows. Startup is separate. Trip and remaining fuel use unrounded consumption. Fuel onboard is only needed for remaining fuel.</span>
         <span class="ofp-touch-and-go-legend"><i></i> Solid line = airport boundary after any pattern row and start of the next OFP sector.</span>
-        ${totalCircuitMinutes > 0 ? `<span>Pattern time: +${this.formatActivityMinutes(totalCircuitMinutes)} in ACC TIME${fuelPlan.circuitFuelGal === null ? '; enter Pattern FF to include its fuel' : `; ${ceilFuelUsageGal(fuelPlan.circuitFuelGal)} gal included` }.</span>` : ''}
+        ${totalCircuitMinutes > 0 ? `<span>Pattern time: +${this.formatActivityMinutes(displayedPatternMinutes)} in ACC TIME${fuelPlan.circuitFuelGal === null ? '; enter Pattern FF to include its fuel' : `; ${ceilFuelUsageGal(fuelPlan.circuitFuelGal)} gal included` }.</span>` : ''}
       </div>
     `;
     this.refreshForecastWarning();
@@ -201,8 +210,9 @@ export class OFPTable {
         ? automaticVariationForLeg(leg).variationDegEast
         : settings.variationDegEast;
       const variationDegEast = roundVariationDeg(rawVariationDegEast);
-      const magneticTrack = trueToMagnetic(leg.trueTrackDeg, variationDegEast);
-      const magneticHeading = trueToMagnetic(legPlan.trueHeadingDeg, variationDegEast);
+      const magneticTrack = roundPlanningHeading(trueToMagnetic(leg.trueTrackDeg, variationDegEast));
+      const magneticHeading = roundPlanningHeading(magneticTrack + roundPlanningWca(legPlan.wcaDeg));
+      const exactMagneticHeading = trueToMagnetic(legPlan.trueHeadingDeg, variationDegEast);
       const variationLabel = `${Math.abs(variationDegEast)}°${variationDegEast >= 0 ? 'E' : 'W'}`;
       const plannedAltitudeFt = this.store.getPlannedAltitudeFt(leg.from.id, leg.to.id);
       const manualMsaFt = this.store.getManualMsaFt(leg.from.id, leg.to.id);
@@ -241,7 +251,7 @@ export class OFPTable {
           <td class="calculated" title="${escapeHtml(windTitle)}">${this.headingLabel(legPlan.windFromDeg)}/${Math.round(legPlan.windSpeedKt)}</td>
           <td class="calculated" title="Exact WCA for displayed ${legPlan.displayPhase} TAS: ${legPlan.wcaDeg.toFixed(2)}°">${this.signedDegrees(legPlan.wcaDeg)}</td>
           <td class="calculated" title="Sum of displayed whole-NM leg distances. Exact accumulated distance: ${exactAccumulatedDistanceNm.toFixed(2)} NM">${accumulatedDistanceNm}</td>
-          <td class="calculated" title="Accumulated route time including modeled phase time">${this.formatMinutes(accumulatedTimeMinutes)}</td>
+          <td class="calculated" title="Sum of displayed INT flight and pattern times">${this.formatMinutes(accumulatedTimeMinutes)}</td>
           ${legPlan.cruiseFuelFlowGph === null
             ? '<td class="pending" title="Enter Manual cruise FF when POH performance is disabled">—</td>'
             : `<td class="calculated" title="Cruise fuel flow. ${performanceTitle}">${legPlan.cruiseFuelFlowGph.toFixed(1)}</td>`}
@@ -258,7 +268,7 @@ export class OFPTable {
           <td class="editable-cell ${belowMsa ? 'pl-warning-cell' : ''}">
             <button type="button" class="ofp-altitude-input ofp-edit-link" data-editor-field="pl" aria-label="Edit planned altitude ${escapeHtml(leg.from.name)} to ${escapeHtml(leg.to.name)}" title="${altitudeWarning}">${plannedAltitudeFt ?? 'Add'}</button>
           </td>
-          <td class="calculated">${this.headingLabel(magneticHeading)}</td>
+          <td class="calculated" title="Displayed MT + displayed WCA. Unrounded calculated MH: ${exactMagneticHeading.toFixed(2)}°">${this.headingLabel(magneticHeading)}</td>
           <td class="calculated" title="${gsTitle}">${legPlan.groundSpeedKt.toFixed(0)}</td>
           <td class="calculated" title="Exact leg distance: ${leg.distanceNm.toFixed(2)} NM; fractional NM below 0.3 rounds down, otherwise up">${roundLegDistanceNm(leg.distanceNm)}</td>
           <td class="calculated" title="${timeTitle}">${this.formatMinutes(legPlan.totalTimeMin)}</td>
@@ -319,7 +329,7 @@ export class OFPTable {
       ? `<td class="pending" title="${escapeHtml(title)}">—</td>`
       : `<td class="calculated" title="${escapeHtml(title)}">${ceilFuelUsageGal(value)}</td>`;
     cells[0] = `<td><strong>${escapeHtml(name)}</strong><small class="ofp-pattern-label">Pattern × ${pattern.patternCount}</small></td>`;
-    cells[8] = `<td class="calculated" title="Accumulated flight and pattern time">${this.formatMinutes(totalMinutes)}</td>`;
+    cells[8] = `<td class="calculated" title="Sum of displayed INT flight and pattern times">${this.formatMinutes(totalMinutes)}</td>`;
     cells[9] = pattern.fuelFlowGph === null ? '<td class="pending" title="Enter Pattern FF in Cruise performance &amp; fuel">—</td>' : `<td class="calculated" title="Pattern fuel flow in US gallons per hour">${pattern.fuelFlowGph.toFixed(1)}</td>`;
     cells[10] = fuelCell(pattern.fuelGal, pattern.fuelGal === null ? 'Enter Pattern FF to include pattern fuel.' : `Pattern fuel ${pattern.fuelGal.toFixed(2)} gal = ${pattern.patternCount} × ${pattern.minutesPerPattern} min × ${pattern.fuelFlowGph} GPH / 60.`);
     cells[11] = fuelCell(accumulatedFuel, 'Sum of displayed rounded INT fuel entries, including patterns; excluding startup/taxi/takeoff. Trip and remaining fuel use unrounded consumption.');
@@ -330,11 +340,11 @@ export class OFPTable {
 
   private phaseTimeTitle(leg: FuelLegPlan): string {
     const parts = [
-      `cruise ${this.formatMinutes(leg.cruiseTimeMin)}`,
-      leg.climbTimeMin > 0 ? `climb ${this.formatMinutes(leg.climbTimeMin)} at ${leg.climbTasKt?.toFixed(0) ?? '—'} KTAS` : '',
-      leg.descentTimeMin > 0 ? `descent ${this.formatMinutes(leg.descentTimeMin)} at ${leg.descentTasKt?.toFixed(0) ?? '—'} KTAS` : '',
+      `cruise ${leg.cruiseTimeMin.toFixed(2)} min`,
+      leg.climbTimeMin > 0 ? `climb ${leg.climbTimeMin.toFixed(2)} min at ${leg.climbTasKt?.toFixed(0) ?? '—'} KTAS` : '',
+      leg.descentTimeMin > 0 ? `descent ${leg.descentTimeMin.toFixed(2)} min at ${leg.descentTasKt?.toFixed(0) ?? '—'} KTAS` : '',
     ].filter(Boolean);
-    return `Phase-aware leg time: ${parts.join(', ')}.`;
+    return `Calculated leg time ${leg.flightTimeMin.toFixed(2)} min: ${parts.join(', ')}. INT rounds the leg total up to whole minutes.`;
   }
 
   private phaseFuelTitle(leg: FuelLegPlan): string {
@@ -347,12 +357,12 @@ export class OFPTable {
   }
 
   private headingLabel(value: number): string {
-    const rounded = ((Math.round(value) % 360) + 360) % 360;
+    const rounded = roundPlanningHeading(value);
     return `${String(rounded).padStart(3, '0')}°`;
   }
 
   private signedDegrees(value: number): string {
-    const rounded = Math.sign(value) * Math.round(Math.abs(value));
+    const rounded = roundPlanningWca(value);
     return `${rounded > 0 ? '+' : ''}${rounded}°`;
   }
 

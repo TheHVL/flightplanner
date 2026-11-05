@@ -21,9 +21,12 @@ export class PerformancePanel {
     this.element.addEventListener('click', event => {
       if (!(event.target as HTMLElement).closest('[data-school-preset]')) return;
       try { applySchoolPreset(this.store); this.render(); }
-      catch { this.element.querySelector('[data-preset-status]')!.textContent = 'Could not save the preset in this browser. Your aircraft settings have been kept.'; }
+      catch { this.element.querySelectorAll('[data-preset-status]').forEach(node => node.textContent = 'Could not save the preset in this browser. Your aircraft settings have been kept.'); }
     });
     this.element.addEventListener('input', (event) => this.handleInput(event));
+    this.element.addEventListener('change', event => {
+      if ((event.target as HTMLElement).matches('[data-descent-fuel-mode]')) this.handleInput(event);
+    });
     this.store.subscribe(() => this.refreshFuelResult());
     if (typeof window !== 'undefined') {
       window.addEventListener(FUEL_SETTINGS_CHANGED_EVENT, () => this.syncFuelSettings());
@@ -64,7 +67,9 @@ export class PerformancePanel {
           <p class="eyebrow">FUEL · PHASE-AWARE</p>
           <h3>Trip fuel planning</h3>
         </div>
-        <p class="hint fuel-hint">Enter fuel onboard and the flows required for your flight. POH modes supply cruise and climb fuel automatically.</p>
+        <p class="hint fuel-hint">Trip fuel and OFP INT/ACC fuel are calculated from performance and phase fuel flows. Fuel onboard is optional and only needed for remaining fuel. POH modes supply cruise and climb fuel automatically.</p>
+        <button type="button" class="ghost-button" data-school-preset>Apply school C182T preset</button>
+        <p class="hint" data-preset-status role="status">Sets climb to 12 US gal/h and descent to cruise fuel flow. Existing saved settings change only when you apply it.</p>
         <h3 class="menu-group-title">Fuel onboard &amp; ground allowance</h3>
         <div class="nav-input-grid fuel-grid">
           ${this.fuelNumberField('startupTaxiTakeoffGal', 'Start/taxi/takeoff', fuelSettings.startupTaxiTakeoffGal, 'gal', 0.1, 0, 20, false)}
@@ -76,11 +81,16 @@ export class PerformancePanel {
           ${this.fuelNumberField('contingencyGal', 'Contingency', fuelSettings.contingencyGal ?? null, 'gal', 0.1, 0, 100)}
         </div><p class="menu-note">The school preset holds 12 US gal in reserve. Choose contingency for this flight; no automatic percentage is assumed. Alternate and extra fuel need separate review.</p>
         <h3 class="menu-group-title">Manual fuel flows</h3>
-        <p class="menu-note">Cruise and climb flows apply in manual modes. Descent and pattern flows are needed when those phases are planned.</p>
+        <p class="menu-note">Only flows for phases actually flown are required. Cruise and climb flows below apply in manual modes. Pattern flow is needed only for planned patterns.</p>
+        <label>Descent fuel flow<select data-descent-fuel-mode aria-label="Descent fuel flow source">
+          <option value="manual" ${fuelSettings.descentFuelFlowMode !== 'cruise' ? 'selected' : ''}>Entered descent FF</option>
+          <option value="cruise" ${fuelSettings.descentFuelFlowMode === 'cruise' ? 'selected' : ''}>Use calculated cruise FF for each leg</option>
+        </select></label>
+        <p class="menu-note">Cruise FF follows each leg's level, temperature and cruise power. The entered descent FF below is retained for manual mode.</p>
         <div class="nav-input-grid fuel-grid">
           ${this.fuelNumberField('manualCruiseFuelFlowGph', 'Manual cruise FF', fuelSettings.manualCruiseFuelFlowGph, 'GPH', 0.1, 0, 40)}
           ${this.fuelNumberField('climbFuelFlowGph', 'Manual climb FF', fuelSettings.climbFuelFlowGph, 'GPH', 0.1, 0, 40)}
-          ${this.fuelNumberField('descentFuelFlowGph', 'Descent FF', fuelSettings.descentFuelFlowGph, 'GPH', 0.1, 0, 40)}
+          ${this.fuelNumberField('descentFuelFlowGph', 'Entered descent FF', fuelSettings.descentFuelFlowGph, 'GPH', 0.1, 0, 40)}
           ${this.fuelNumberField('circuitFuelFlowGph', 'Pattern FF', fuelSettings.circuitFuelFlowGph, 'GPH', 0.1, 0, 40)}
         </div>
         <div id="fuel-result" class="fuel-result"></div>
@@ -96,7 +106,7 @@ export class PerformancePanel {
       this.element.querySelector('h3')!.textContent = 'Trip fuel';
     }
     this.refreshResult();
-    this.refreshFuelResult();
+    this.syncFuelSettings();
   }
 
   private numberField(
@@ -140,7 +150,7 @@ export class PerformancePanel {
             step="${step}"
             min="${min}"
             max="${max}"
-            ${nullable ? 'placeholder="optional"' : ''}
+            ${nullable ? `placeholder="${['manualCruiseFuelFlowGph', 'climbFuelFlowGph', 'descentFuelFlowGph', 'circuitFuelFlowGph'].includes(field) ? 'when needed' : 'optional'}"` : ''}
           />
           <em>${unit}</em>
         </div>
@@ -149,10 +159,15 @@ export class PerformancePanel {
   }
 
   private handleInput(event: Event): void {
-    const input = event.target as HTMLInputElement;
+    const input = event.target as HTMLInputElement | HTMLSelectElement;
+    if (input.matches('[data-descent-fuel-mode]')) {
+      const current = getFuelPlanningSettings(), mode = input.value === 'cruise' ? 'cruise' : 'manual';
+      if (current.descentFuelFlowMode !== mode) saveFuelPlanningSettings({ ...current, descentFuelFlowMode: mode });
+      return;
+    }
     const booleanField = input.dataset.performanceBoolean as keyof PerformanceSettings | undefined;
     if (booleanField) {
-      this.store.updatePerformanceSettings({ [booleanField]: input.checked });
+      this.store.updatePerformanceSettings({ [booleanField]: (input as HTMLInputElement).checked });
       this.refreshResult();
       this.refreshFuelResult();
       return;
@@ -185,8 +200,11 @@ export class PerformancePanel {
 
   private syncFuelSettings(): void {
     const settings = getFuelPlanningSettings();
+    const source = this.element.querySelector<HTMLSelectElement>('[data-descent-fuel-mode]');
+    if (source) source.value = settings.descentFuelFlowMode === 'cruise' ? 'cruise' : 'manual';
     for (const input of this.element.querySelectorAll<HTMLInputElement>('[data-fuel-field]')) {
       if (document.activeElement !== input) input.value = String(settings[input.dataset.fuelField as keyof FuelPlanningSettings] ?? '');
+      if (input.dataset.fuelField === 'descentFuelFlowGph') input.disabled = settings.descentFuelFlowMode === 'cruise';
     }
     this.refreshFuelResult();
   }

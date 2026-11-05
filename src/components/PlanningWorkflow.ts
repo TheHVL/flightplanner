@@ -1,6 +1,6 @@
 import type { FlightPlanStore } from '../flightplan/FlightPlanStore';
-import { FUEL_SETTINGS_CHANGED_EVENT, getFuelPlanningSettings } from '../fuel/fuelPlanning';
-import { totalRouteDistanceNm } from '../navigation/geodesy';
+import { calculateFuelPlanForStore, FUEL_SETTINGS_CHANGED_EVENT, getFuelPlanningSettings } from '../fuel/fuelPlanning';
+import { formatPlanningMinutesLabel, roundLegDistanceNm, sumDisplayedPlanningMinutes } from '../presentation/planningRounding';
 
 const step = (key: string, number: number, title: string, content: string, open = false) => `
   <details class="phase-disclosure workflow-step" data-panel-key="${key}" ${open ? 'open' : ''}>
@@ -38,11 +38,16 @@ export class PlanningWorkflow {
     const weather = this.store.getWeatherSettings();
     const forecasts = this.store.getWeatherForecasts().length;
     const manual = this.store.getManualLegWinds().length;
+    let plannedTime = 'Time needs review';
+    try {
+      const plan = calculateFuelPlanForStore(this.store);
+      if (plan.legs.every(leg => !leg.performanceError)) plannedTime = `${formatPlanningMinutesLabel(sumDisplayedPlanningMinutes([...plan.legs.map(leg => leg.flightTimeMin), ...plan.patterns.map(pattern => pattern.timeMin)]))} planned`;
+    } catch { /* Invalid wind/performance must not interrupt other sidebar updates. */ }
     const summaries: Record<string, string> = {
       route: points.length ? `${points[0].name} → ${points.at(-1)!.name} · ${points.length} waypoints` : 'Add your departure airport to start',
       'leg-entry': legs.length ? `${legs.length} legs · ${missingPl ? `${missingPl} missing PL` : 'PL entered'} · ${missingMsa ? `${missingMsa} missing MSA` : 'MSA entered'} · ${channels}/${legs.length} channels` : 'Add at least two waypoints',
-      conditions: `${weather.useForecastWinds ? forecasts ? `${forecasts} forecast legs` : manual ? `${manual} manual wind legs` : 'Global wind' : 'Global wind'} · ${fuel.totalFuelOnboardGal === null ? 'Enter fuel onboard' : `${fuel.totalFuelOnboardGal} gal onboard`}`,
-      vertical: legs.length ? `${Math.ceil(totalRouteDistanceNm(legs))} NM · ${this.store.getTotalWaypointActivityMinutes()} min pattern` : 'Your navigation log appears below',
+      conditions: `${weather.useForecastWinds ? forecasts ? `${forecasts} forecast legs` : manual ? `${manual} manual wind legs` : 'Global wind' : 'Global wind'} · ${fuel.totalFuelOnboardGal === null ? 'Fuel onboard optional' : `${fuel.totalFuelOnboardGal} gal onboard`}`,
+      vertical: legs.length ? `${legs.reduce((sum, leg) => sum + roundLegDistanceNm(leg.distanceNm), 0)} NM · ${plannedTime}` : 'Your navigation log appears below',
       settings: `C182T · ${aircraft.usePohPerformance ? `${aircraft.rpm} RPM · ${aircraft.manifoldPressureInHg} inHg` : 'Manual performance'}`,
     };
     for (const node of this.element.querySelectorAll<HTMLElement>('[data-workflow-summary]')) node.textContent = summaries[node.dataset.workflowSummary!] ?? '';
