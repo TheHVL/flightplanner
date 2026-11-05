@@ -243,19 +243,20 @@ export class PerformancePanel {
         return;
       }
 
-      const usageMetric = (label: string, value: number | null) => `
+      const incompleteProfile = plan.verticalProfile?.profilesOverlap ? 'PROFILE CONFLICT' : 'NEEDS INPUT';
+      const usageMetric = (label: string, value: number | null, incomplete = 'NEEDS INPUT') => `
         <div class="fuel-metric">
           <span>${label}</span>
-          <strong>${value === null ? 'NEEDS INPUT' : `${ceilFuelUsageGal(value)} GAL`}</strong>
+          <strong>${value === null ? incomplete : `${ceilFuelUsageGal(value)} GAL`}</strong>
         </div>
       `;
       const remainingMetric = (label: string, value: number | null) => `
         <div class="fuel-metric">
           <span>${label}</span>
-          <strong>${value === null ? 'NEEDS INPUT' : `${value.toFixed(1)} GAL`}</strong>
+          <strong>${value === null ? incompleteProfile : `${value.toFixed(1)} GAL`}</strong>
         </div>
       `;
-      const landing = plan.totalFuelOnboardGal === null
+      const landing = plan.totalFuelOnboardGal === null && !plan.verticalProfile?.profilesOverlap
         ? '<div class="fuel-metric"><span>Est. landing fuel</span><strong>ENTER ONBOARD</strong></div>'
         : remainingMetric('Est. landing fuel', plan.landingFuelGal);
       const warningHtml = plan.warnings.length > 0
@@ -263,16 +264,16 @@ export class PerformancePanel {
         : '';
 
       resultElement.innerHTML = `
-        ${usageMetric('Cruise', plan.cruiseFuelGal)}
-        ${usageMetric('Climb', plan.climbFuelGal)}
-        ${usageMetric('Descent', plan.descentFuelGal)}
+        ${usageMetric('Cruise', plan.cruiseFuelGal, incompleteProfile)}
+        ${usageMetric('Climb', plan.climbFuelGal, incompleteProfile)}
+        ${usageMetric('Descent', plan.descentFuelGal, incompleteProfile)}
         ${usageMetric('Pattern', plan.circuitFuelGal)}
         ${usageMetric('Start/taxi/takeoff', plan.startupTaxiTakeoffGal)}
-        <div class="fuel-metric fuel-metric--total"><span>Trip fuel</span><strong>${plan.tripFuelGal === null ? 'NEEDS INPUT' : `${ceilFuelUsageGal(plan.tripFuelGal)} GAL`}</strong></div>
+        <div class="fuel-metric fuel-metric--total"><span>Trip fuel</span><strong>${plan.tripFuelGal === null ? incompleteProfile : `${ceilFuelUsageGal(plan.tripFuelGal)} GAL`}</strong></div>
         ${usageMetric('Reserve', plan.reserveGal ?? 12)}
-        ${usageMetric('Trip + reserve', plan.tripPlusReserveGal)}
+        ${usageMetric('Trip + reserve', plan.tripPlusReserveGal, incompleteProfile)}
         ${usageMetric('Contingency', plan.contingencyGal ?? null)}
-        ${plan.contingencyGal !== null && plan.contingencyGal !== undefined ? usageMetric('Trip + reserve + contingency', plan.tripReserveContingencyGal) : '<p class="menu-note">Enter contingency, including zero if appropriate for this flight, to complete this subtotal.</p>'}
+        ${plan.contingencyGal !== null && plan.contingencyGal !== undefined ? usageMetric('Trip + reserve + contingency', plan.tripReserveContingencyGal, incompleteProfile) : '<p class="menu-note">Enter contingency, including zero if appropriate for this flight, to complete this subtotal.</p>'}
         ${landing}
         ${warningHtml}
       `;

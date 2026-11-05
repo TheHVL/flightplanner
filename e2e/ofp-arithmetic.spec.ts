@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { FlightPlanStore } from '../src/flightplan/FlightPlanStore';
 import { DEFAULT_FUEL_PLANNING_SETTINGS } from '../src/fuel/fuelPlanning';
+import { overlappingProfileRoute } from '../tests/helpers/overlappingProfile';
 
 async function load(page: Page, store: FlightPlanStore) {
   await page.goto('./');
@@ -19,6 +20,25 @@ function levelStore() {
   return store;
 }
 const cells = async (page: Page, index: number) => page.locator('#ofp-table tbody tr').evaluateAll((rows, cell) => rows.map(row => (row as HTMLTableRowElement).cells[cell].textContent), index);
+
+test('an overlapping profile keeps independent leg fuel visible and marks dependent totals incomplete', async ({ page }) => {
+  const { store, fuelSettings } = overlappingProfileRoute();
+  await load(page, store);
+  await page.evaluate(fuel => localStorage.setItem('flightplanner-fuel-settings-v1', JSON.stringify(fuel)), fuelSettings);
+  await page.reload();
+  await page.getByRole('button', { name: 'I understand and want to continue' }).click();
+  expect(await cells(page, 10)).toEqual(['4', '—', '—', '—', '4']);
+  expect(await cells(page, 11)).toEqual(['4', '—', '—', '—', '—']);
+  expect(await cells(page, 18)).toEqual(['0:16', '—', '—', '—', '0:16']);
+  await expect(page.locator('[data-ofp-total-time]')).toHaveText('—');
+  await expect(page.locator('[data-ofp-profile-warning]')).toContainText('WP2 → WP3');
+  await expect(page.locator('[data-workflow-summary="vertical"]')).toContainText('Time needs review');
+  await page.locator('[data-panel-key="conditions"] > summary').click();
+  await expect(page.locator('.fuel-metric--total strong')).toHaveText('PROFILE CONFLICT');
+  await page.locator('[data-fuel-field="totalFuelOnboardGal"]').fill('60');
+  await expect(page.locator('.fuel-metric--total strong')).toHaveText('PROFILE CONFLICT');
+  expect(await cells(page, 10)).toEqual(['4', '—', '—', '—', '4']);
+});
 
 test('ACC and summary add visible INT times; Prepare legs winds activate, affect MH/GS and survive reload', async ({ page }) => {
   const store = levelStore();

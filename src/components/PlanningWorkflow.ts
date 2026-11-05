@@ -41,7 +41,7 @@ export class PlanningWorkflow {
     let plannedTime = 'Time needs review';
     try {
       const plan = calculateFuelPlanForStore(this.store);
-      if (plan.legs.every(leg => !leg.performanceError)) plannedTime = `${formatPlanningMinutesLabel(sumDisplayedPlanningMinutes([...plan.legs.map(leg => leg.flightTimeMin), ...plan.patterns.map(pattern => pattern.timeMin)]))} planned`;
+      if (plan.legs.every(leg => !leg.performanceError && !leg.profileConflict)) plannedTime = `${formatPlanningMinutesLabel(sumDisplayedPlanningMinutes([...plan.legs.map(leg => leg.flightTimeMin), ...plan.patterns.map(pattern => pattern.timeMin)]))} planned`;
     } catch { /* Invalid wind/performance must not interrupt other sidebar updates. */ }
     const summaries: Record<string, string> = {
       route: points.length ? `${points[0].name} → ${points.at(-1)!.name} · ${points.length} waypoints` : 'Add your departure airport to start',

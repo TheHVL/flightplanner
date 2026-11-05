@@ -2,6 +2,12 @@
 
 This file records significant Flightplanner updates, formulas, source assumptions, limitations and implementation decisions. New updates are added at the top.
 
+## 2026-11-05, localize fuel/time gaps from profile overlaps
+
+- Following the user's diagnosis, corrected a route-wide fuel lock: one TOC/TOD overlap no longer blanks otherwise independent flight-leg INT values. Every leg touched by either conflicting transition remains incomplete, including portions outside the actual overlap slice.
+- ACC time/fuel and remaining fuel stay unknown after the first gap; trip and planned-time totals remain incomplete. Pattern INT allowances remain available where inputs are known. Affected rows no longer display an unchecked level-flight time/GS estimate as a complete result.
+- Added an OFP notice naming affected legs and **PROFILE CONFLICT** fuel totals, so entering onboard fuel is not presented as the solution. Existing levels, rates and stops are not silently changed, and generator/profile blocking rules remain intact. Valid totals return after the profile is corrected.
+
 ## 2026-11-05, consistent OFP arithmetic and manual wind/fuel inputs
 
 - Displayed MH now adds displayed MT and signed WCA, wrapping at north. Reproduced and corrected the 301°/−1° and 224°/−1° cases; exact wind-triangle results remain available to calculations and tooltips.

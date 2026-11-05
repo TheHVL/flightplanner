@@ -48,6 +48,7 @@ Codex can work on this existing repository and existing Pages hosting. No reposi
 - INT fuel rounds **each row upward** to whole US gallons. ACC adds those displayed INT values, including pattern rows and excluding startup/taxi/takeoff. Example: two exact 1.5 US gal legs display INT 2 + 2 and final ACC **4**. Exact trip/remaining-fuel consumption remains **3**. Earlier discussion was ambiguous; current implemented rule and README settle this distinction. Unknown earlier fuel makes subsequent ACC unknown.
 - Reserve and contingency are separate allowances, not extra modeled consumption. Contingency remains a pilot entry per flight.
 - Trip fuel is calculated, not an input. Onboard fuel is only needed for estimated remaining fuel, not INT/ACC consumption. Required phase flows and profile validity still determine whether a fuel value is known.
+- The user clarified that TOC/TOD overlap caused their missing fuel. Retain INT values for independent legs, but invalidate every leg touched by either conflicting transition, not just the overlap slice. ACC/remaining values stay unknown after the first gap and full trip/time totals remain incomplete. Keep the profile conflict visible; never silently change requested levels/rates/stops or substitute unchecked level-flight consumption.
 
 ### Terrain, coverage and cost
 
@@ -137,6 +138,14 @@ User-facing phase labels and future-QNH promises were removed; CSS renamed to pe
 CI now includes source lint, unit tests, TypeScript/build, Chromium smoke tests and axe checks. Production builds inject a CSP meta tag with explicit current provider allowances, Leaflet inline styles and GeoTIFF worker/WASM allowances. A meta CSP cannot enforce `frame-ancestors`; static hosting remains relevant when changing security policy.
 
 ## 5. Verification and open findings
+
+### Profile-overlap fuel follow-up, 2026-11-05
+
+- After `d089c0f` (successful CI/Pages), the user identified TOC/TOD overlap as the cause of missing fuel. Confirmed that the previous route-wide `profilesOverlap` guard suppressed all flight-leg fuel, including otherwise independent legs. Earlier guidance about school phase inputs did not address this case.
+- Conflict event IDs now identify the complete conflicting transition footprints. Only intersecting legs receive `profileConflict` and unknown consumption; independent INT values before/after them remain computable. Full trip totals remain blocked by the original profile flag. No profile solver, levels, rates, airport stops or generator transfer rules were relaxed.
+- The OFP highlights/names affected legs and withholds their flight time and effective GS as well as fuel. ACC time/fuel and remaining fuel stay unknown after the first missing row, including on later valid/pattern rows. Planned time/sidebar summary remain incomplete. The fuel panel says **PROFILE CONFLICT**, rather than implying that entering onboard fuel will fix it.
+- Fresh Node **22.23.4** verification: **287 unit tests / 56 files** (two workers), lint/build, **17/17 pinned-Chromium browser checks**, no skips/retries. Synthetic coverage includes independent legs on both sides of two conflicting airport transitions, their full incoming/outgoing footprints, known pattern allowances, unknown accumulations, an onboard edit that cannot bypass the conflict, and automatic restoration of totals after a deliberate profile correction.
+- These are local production-preview/regression results before publication; inspect current Actions for release status. The user's particular route/levels have not yet been supplied, so this does not identify whether their specific overlap is a modeling error or an unachievable requested profile. Original school settings and saved-plan compatibility remain preserved.
 
 ### OFP headings, displayed time sums and wind/fuel inputs, 2026-11-05
 

@@ -74,7 +74,7 @@ export class OFPTable {
 
     let accumulatedDistanceNm = 0;
     let exactAccumulatedDistanceNm = 0;
-    let accumulatedTimeMinutes = 0;
+    let accumulatedTimeMinutes: number | null = 0;
     let accumulatedFuelGal: number | null = 0;
     let accumulatedDisplayedFuelGal: number | null = 0;
 
@@ -84,7 +84,7 @@ export class OFPTable {
     const appendPattern = (waypoint: ReturnType<FlightPlanStore['getWaypoints']>[number]) => {
       const pattern = fuelPlan.patterns.find(p => p.waypointId === waypoint.id);
       if (!pattern) return;
-      accumulatedTimeMinutes += ceilPlanningMinutes(pattern.timeMin);
+      if (accumulatedTimeMinutes !== null) accumulatedTimeMinutes += ceilPlanningMinutes(pattern.timeMin);
       accumulatedFuelGal = accumulatedFuelGal !== null && pattern.fuelGal !== null ? accumulatedFuelGal + pattern.fuelGal : null;
       accumulatedDisplayedFuelGal = accumulatedDisplayedFuelGal !== null && pattern.fuelGal !== null
         ? accumulatedDisplayedFuelGal + ceilFuelUsageGal(pattern.fuelGal) : null;
@@ -95,7 +95,8 @@ export class OFPTable {
       const legPlan = fuelPlan.legs[index];
       accumulatedDistanceNm += roundLegDistanceNm(leg.distanceNm);
       exactAccumulatedDistanceNm += leg.distanceNm;
-      accumulatedTimeMinutes += ceilPlanningMinutes(legPlan.flightTimeMin);
+      accumulatedTimeMinutes = accumulatedTimeMinutes !== null && !legPlan.profileConflict
+        ? accumulatedTimeMinutes + ceilPlanningMinutes(legPlan.flightTimeMin) : null;
       accumulatedFuelGal = accumulatedFuelGal !== null && legPlan.legFuelGal !== null
         ? accumulatedFuelGal + legPlan.legFuelGal : null;
       accumulatedDisplayedFuelGal = accumulatedDisplayedFuelGal !== null && legPlan.legFuelGal !== null
@@ -105,8 +106,10 @@ export class OFPTable {
       appendPattern(leg.to);
     }
 
+    const affectedLegs = legs.filter((_, index) => fuelPlan.legs[index].profileConflict).map(leg => `${leg.from.name} → ${leg.to.name}`);
     this.element.innerHTML = `
       <div class="weather-status weather-freshness-warning" data-ofp-weather-warning role="status" aria-live="polite" hidden></div>
+      ${affectedLegs.length ? `<p class="fuel-warning" data-ofp-profile-warning role="status">Climb/descent overlap affects ${escapeHtml(affectedLegs.join('; '))}. These legs have no reliable time or fuel. Other INT entries remain available; ACC after a gap and trip totals remain incomplete. Review these planned levels and the climb/descent settings.</p>` : ''}
       <div class="ofp-heading">
         <div>
           <p class="eyebrow">OPERATIONAL FLIGHT PLAN</p>
@@ -193,7 +196,7 @@ export class OFPTable {
     settings: ReturnType<FlightPlanStore['getNavigationSettings']>,
     accumulatedDistanceNm: number,
     exactAccumulatedDistanceNm: number,
-    accumulatedTimeMinutes: number,
+    accumulatedTimeMinutes: number | null,
     accumulatedFuelGal: number | null,
     estimatedRemainingGal: number | null,
     startupTaxiTakeoffGal: number,
@@ -233,16 +236,16 @@ export class OFPTable {
       const timeTitle = this.phaseTimeTitle(legPlan);
       const fuelTitle = this.phaseFuelTitle(legPlan);
       const accumulatedFuelTitle = accumulatedFuelGal === null
-        ? 'Accumulated fuel is incomplete because one or more required phase fuel-flow inputs are missing.'
+        ? 'Accumulated fuel is incomplete because an earlier fuel input or climb/descent profile is unresolved.'
         : `Sum of displayed rounded INT fuel entries: ${accumulatedFuelGal} gal. Startup/taxi/takeoff allowance of ${startupTaxiTakeoffGal.toFixed(1)} gal is tracked separately. Trip and remaining fuel use unrounded consumption.`;
       const remainingTitle = estimatedRemainingGal === null
-        ? 'Enter Fuel onboard and all required phase fuel flows to calculate estimated fuel remaining.'
+        ? 'Remaining fuel needs fuel onboard and known consumption for every preceding row. Resolve missing phase flows or profile conflicts.'
         : `Estimated fuel remaining after this leg, including subtraction of ${startupTaxiTakeoffGal.toFixed(1)} gal startup/taxi/takeoff allowance.`;
       const gsTitle = `Effective whole-leg GS ${legPlan.groundSpeedKt.toFixed(1)} kt = ${leg.distanceNm.toFixed(2)} NM / ${legPlan.flightTimeMin.toFixed(2)} min of flying time. Pattern time is not included in GS. Cruise-only GS is ${legPlan.cruiseGroundSpeedKt.toFixed(1)} kt.`;
 
       return {
         html: `
-        <tr class="${[belowMsa ? 'ofp-row-warning' : '', boundaryClass, this.selectedLeg === `${leg.from.id}->${leg.to.id}` ? 'ofp-row-selected' : ''].filter(Boolean).join(' ')}" data-leg-from="${leg.from.id}" data-leg-to="${leg.to.id}">
+        <tr class="${[belowMsa || legPlan.profileConflict ? 'ofp-row-warning' : '', boundaryClass, this.selectedLeg === `${leg.from.id}->${leg.to.id}` ? 'ofp-row-selected' : ''].filter(Boolean).join(' ')}" data-leg-from="${leg.from.id}" data-leg-to="${leg.to.id}">
           <td><button type="button" class="ofp-leg-link" aria-label="Prepare leg ${escapeHtml(leg.from.name)} to ${escapeHtml(leg.to.name)}">${escapeHtml(leg.from.name)}</button></td>
           <td class="calculated" title="${tasTitle}">${legPlan.tasKt.toFixed(0)}</td>
           <td class="calculated">${this.headingLabel(leg.trueTrackDeg)}</td>
@@ -251,7 +254,7 @@ export class OFPTable {
           <td class="calculated" title="${escapeHtml(windTitle)}">${this.headingLabel(legPlan.windFromDeg)}/${Math.round(legPlan.windSpeedKt)}</td>
           <td class="calculated" title="Exact WCA for displayed ${legPlan.displayPhase} TAS: ${legPlan.wcaDeg.toFixed(2)}°">${this.signedDegrees(legPlan.wcaDeg)}</td>
           <td class="calculated" title="Sum of displayed whole-NM leg distances. Exact accumulated distance: ${exactAccumulatedDistanceNm.toFixed(2)} NM">${accumulatedDistanceNm}</td>
-          <td class="calculated" title="Sum of displayed INT flight and pattern times">${this.formatMinutes(accumulatedTimeMinutes)}</td>
+          <td class="${accumulatedTimeMinutes === null ? 'pending' : 'calculated'}" title="Sum of displayed INT flight and pattern times; unavailable after an unresolved profile">${this.formatMinutes(accumulatedTimeMinutes)}</td>
           ${legPlan.cruiseFuelFlowGph === null
             ? '<td class="pending" title="Enter Manual cruise FF when POH performance is disabled">—</td>'
             : `<td class="calculated" title="Cruise fuel flow. ${performanceTitle}">${legPlan.cruiseFuelFlowGph.toFixed(1)}</td>`}
@@ -269,9 +272,9 @@ export class OFPTable {
             <button type="button" class="ofp-altitude-input ofp-edit-link" data-editor-field="pl" aria-label="Edit planned altitude ${escapeHtml(leg.from.name)} to ${escapeHtml(leg.to.name)}" title="${altitudeWarning}">${plannedAltitudeFt ?? 'Add'}</button>
           </td>
           <td class="calculated" title="Displayed MT + displayed WCA. Unrounded calculated MH: ${exactMagneticHeading.toFixed(2)}°">${this.headingLabel(magneticHeading)}</td>
-          <td class="calculated" title="${gsTitle}">${legPlan.groundSpeedKt.toFixed(0)}</td>
+          <td class="${legPlan.profileConflict ? 'pending' : 'calculated'}" title="${legPlan.profileConflict ? timeTitle : gsTitle}">${legPlan.profileConflict ? '—' : legPlan.groundSpeedKt.toFixed(0)}</td>
           <td class="calculated" title="Exact leg distance: ${leg.distanceNm.toFixed(2)} NM; fractional NM below 0.3 rounds down, otherwise up">${roundLegDistanceNm(leg.distanceNm)}</td>
-          <td class="calculated" title="${timeTitle}">${this.formatMinutes(legPlan.totalTimeMin)}</td>
+          <td class="${legPlan.profileConflict ? 'pending' : 'calculated'}" title="${timeTitle}">${this.formatMinutes(legPlan.profileConflict ? null : legPlan.totalTimeMin)}</td>
           <td class="pending">—</td>
           <td class="pending">—</td>
           <td class="pending">—</td>
@@ -323,13 +326,13 @@ export class OFPTable {
     return `<td class="ofp-frequency-cell">${selected ? `<strong>${escapeHtml(selected)}</strong>` : '<span class="pending">—</span>'}<button type="button" class="ofp-frequency-link" data-frequency-open-from="${escapeHtml(leg.from.id)}" data-frequency-open-to="${escapeHtml(leg.to.id)}" aria-label="${selected ? 'Edit' : 'Select'} frequency ${escapeHtml(leg.from.name)} to ${escapeHtml(leg.to.name)}">${selected ? 'Edit' : 'Select'}</button></td>`;
   }
 
-  private patternRow(name: string, pattern: PatternFuelPlan, totalMinutes: number, accumulatedFuel: number | null, remaining: number | null): string {
+  private patternRow(name: string, pattern: PatternFuelPlan, totalMinutes: number | null, accumulatedFuel: number | null, remaining: number | null): string {
     const cells = Array.from({ length: 25 }, () => '<td class="pattern-blank"></td>');
     const fuelCell = (value: number | null, title: string) => value === null
       ? `<td class="pending" title="${escapeHtml(title)}">—</td>`
       : `<td class="calculated" title="${escapeHtml(title)}">${ceilFuelUsageGal(value)}</td>`;
     cells[0] = `<td><strong>${escapeHtml(name)}</strong><small class="ofp-pattern-label">Pattern × ${pattern.patternCount}</small></td>`;
-    cells[8] = `<td class="calculated" title="Sum of displayed INT flight and pattern times">${this.formatMinutes(totalMinutes)}</td>`;
+    cells[8] = `<td class="${totalMinutes === null ? 'pending' : 'calculated'}" title="Sum of displayed INT flight and pattern times; unavailable after an unresolved profile">${this.formatMinutes(totalMinutes)}</td>`;
     cells[9] = pattern.fuelFlowGph === null ? '<td class="pending" title="Enter Pattern FF in Cruise performance &amp; fuel">—</td>' : `<td class="calculated" title="Pattern fuel flow in US gallons per hour">${pattern.fuelFlowGph.toFixed(1)}</td>`;
     cells[10] = fuelCell(pattern.fuelGal, pattern.fuelGal === null ? 'Enter Pattern FF to include pattern fuel.' : `Pattern fuel ${pattern.fuelGal.toFixed(2)} gal = ${pattern.patternCount} × ${pattern.minutesPerPattern} min × ${pattern.fuelFlowGph} GPH / 60.`);
     cells[11] = fuelCell(accumulatedFuel, 'Sum of displayed rounded INT fuel entries, including patterns; excluding startup/taxi/takeoff. Trip and remaining fuel use unrounded consumption.');
@@ -339,6 +342,7 @@ export class OFPTable {
   }
 
   private phaseTimeTitle(leg: FuelLegPlan): string {
+    if (leg.profileConflict) return leg.phaseWarning!;
     const parts = [
       `cruise ${leg.cruiseTimeMin.toFixed(2)} min`,
       leg.climbTimeMin > 0 ? `climb ${leg.climbTimeMin.toFixed(2)} min at ${leg.climbTasKt?.toFixed(0) ?? '—'} KTAS` : '',
@@ -366,8 +370,8 @@ export class OFPTable {
     return `${rounded > 0 ? '+' : ''}${rounded}°`;
   }
 
-  private formatMinutes(minutes: number): string {
-    return formatPlanningTime(minutes);
+  private formatMinutes(minutes: number | null): string {
+    return minutes === null ? '—' : formatPlanningTime(minutes);
   }
 
   private formatActivityMinutes(minutes: number): string {

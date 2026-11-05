@@ -14,6 +14,7 @@ import {
   type RouteVerticalProfileResult,
 } from '../navigation/verticalProfile';
 import { calculateCruisePerformance } from '../performance/cruisePerformance';
+import { calculateVerticalProfileConflicts } from '../navigation/verticalConflicts';
 
 export const FUEL_SETTINGS_CHANGED_EVENT = 'flightplanner-fuel-settings-changed';
 const STORAGE_KEY = 'flightplanner-fuel-settings-v1';
@@ -68,6 +69,8 @@ export interface FuelLegPlan {
   legFuelGal: number | null;
   performanceError: string | null;
   phaseWarning: string | null;
+  /** A conflicting transition affects this leg. Its phase time/GS are not valid totals. */
+  profileConflict: boolean;
 }
 
 export interface PatternFuelPlan {
@@ -112,6 +115,7 @@ interface RouteFuelPlanInput {
 }
 
 interface VerticalSegment {
+  eventId: string;
   phase: 'climb' | 'descent';
   startNm: number;
   endNm: number;
@@ -240,14 +244,20 @@ export function calculateRouteFuelPlan(input: RouteFuelPlanInput): RouteFuelPlan
   if (patterns.some(pattern => pattern.fuelGal === null)) warnings.push('Enter Pattern FF to include the planned pattern fuel.');
   const profilesOverlap = verticalProfile?.profilesOverlap ?? false;
   const climbPerformanceIncomplete = verticalProfile?.climbPerformanceIncomplete ?? false;
-  const phaseModelAvailable = verticalProfile !== null && !profilesOverlap && !climbPerformanceIncomplete;
+  const phaseModelAvailable = verticalProfile !== null && !climbPerformanceIncomplete;
   if (profilesOverlap) {
-    warnings.push('Vertical profiles overlap, so climb/descent fuel and complete trip-fuel totals are withheld until the profile is resolved.');
+    warnings.push('Climb/descent profiles overlap. Affected transitions have no reliable flight time or fuel; valid legs keep their INT values. ACC past the first gap and complete trip totals remain unavailable until the profile is corrected.');
   }
   if (climbPerformanceIncomplete) {
     warnings.push('Selected POH climb data does not cover one or more requested climbs, so complete trip-fuel totals are withheld.');
   }
   const segments = phaseModelAvailable ? verticalSegments(verticalProfile!, legs) : [];
+  const conflicts = verticalProfile ? calculateVerticalProfileConflicts(verticalProfile) : [];
+  const conflictingEvents = new Set(conflicts.flatMap(conflict => [conflict.firstEvent.id, conflict.secondEvent.id]));
+  // The whole transition is unresolved, not only the slice where the phases
+  // overlap. Do not claim a valid phase total on an adjacent leg containing
+  // the beginning/end of either conflicting climb or descent.
+  const conflictingSegments = segments.filter(segment => conflictingEvents.has(segment.eventId));
   const cumulativeDistances = cumulativeLegDistances(legs);
 
   const legPlans = legs.map((leg, index): FuelLegPlan => {
@@ -296,7 +306,9 @@ export function calculateRouteFuelPlan(input: RouteFuelPlanInput): RouteFuelPlan
 
     const legStartNm = cumulativeDistances[index];
     const legEndNm = cumulativeDistances[index + 1];
-    const phase: LegVerticalPhase = phaseModelAvailable
+    const profileConflict = profilesOverlap && (conflictingSegments.length === 0 || conflictingSegments.some(segment =>
+      Math.min(legEndNm, segment.endNm) - Math.max(legStartNm, segment.startNm) > EPSILON));
+    const phase: LegVerticalPhase = phaseModelAvailable && !profileConflict
       ? phaseForLeg(segments, legStartNm, legEndNm, leg, windFromDeg, windSpeedKt)
       : {
           climbDistanceNm: 0,
@@ -313,8 +325,8 @@ export function calculateRouteFuelPlan(input: RouteFuelPlanInput): RouteFuelPlan
     const flightTimeMin = cruiseTimeMin + phase.climbTimeMin + phase.descentTimeMin;
     const totalTimeMin = flightTimeMin;
 
-    const cruiseFuelGal = phaseFuel(cruiseTimeMin, cruiseFuelFlowGph);
-    const climbFuelGal = profilesOverlap || climbPerformanceIncomplete
+    const cruiseFuelGal = profileConflict ? null : phaseFuel(cruiseTimeMin, cruiseFuelFlowGph);
+    const climbFuelGal = profileConflict || climbPerformanceIncomplete
       ? null
       : phase.climbTimeMin <= EPSILON
         ? 0
@@ -323,10 +335,10 @@ export function calculateRouteFuelPlan(input: RouteFuelPlanInput): RouteFuelPlan
           : phaseFuel(phase.climbTimeMin, fuelSettings.climbFuelFlowGph);
     const descentFuelFlowGph = fuelSettings.descentFuelFlowMode === 'cruise'
       ? cruiseFuelFlowGph : fuelSettings.descentFuelFlowGph;
-    const descentFuelGal = profilesOverlap || climbPerformanceIncomplete
+    const descentFuelGal = profileConflict || climbPerformanceIncomplete
       ? null
       : phaseFuel(phase.descentTimeMin, descentFuelFlowGph);
-    const legFuelGal = profilesOverlap || climbPerformanceIncomplete || performanceError !== null
+    const legFuelGal = profileConflict || climbPerformanceIncomplete || performanceError !== null
       ? null
       : sumIfKnown([cruiseFuelGal, climbFuelGal, descentFuelGal]);
 
@@ -334,8 +346,8 @@ export function calculateRouteFuelPlan(input: RouteFuelPlanInput): RouteFuelPlan
     if (cruiseTimeMin > EPSILON && cruiseFuelFlowGph === null) missingPhases.push('cruise FF');
     if (phase.climbTimeMin > EPSILON && !phase.pohClimbFuelComplete && fuelSettings.climbFuelFlowGph === null) missingPhases.push('climb FF');
     if (phase.descentTimeMin > EPSILON && descentFuelFlowGph === null) missingPhases.push(fuelSettings.descentFuelFlowMode === 'cruise' ? 'cruise FF for descent' : 'descent FF');
-    const phaseWarning = profilesOverlap
-      ? 'Vertical profiles overlap, so phase-aware climb/descent fuel is unavailable.'
+    const phaseWarning = profileConflict
+      ? 'Climb/descent transitions overlap on or across this leg. Correct the planned levels, rates or route before calculating its flight time and fuel.'
       : climbPerformanceIncomplete
         ? 'Selected POH climb profile does not cover the requested climb.'
         : missingPhases.length > 0
@@ -397,6 +409,7 @@ export function calculateRouteFuelPlan(input: RouteFuelPlanInput): RouteFuelPlan
       legFuelGal,
       performanceError,
       phaseWarning,
+      profileConflict,
     };
   });
 
@@ -480,6 +493,7 @@ function segmentFromEvent(event: RouteVerticalEvent, routeDistanceNm: number): V
   const endNm = Math.max(0, Math.min(routeDistanceNm, rawEndNm));
   if (endNm - startNm <= EPSILON) return null;
   return {
+    eventId: event.id,
     phase: event.type === 'TOC' ? 'climb' : 'descent',
     startNm,
     endNm,
