@@ -5,8 +5,8 @@
   "issueUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/html/index-en-GB.html",
   "publicationDate": null,
   "nextEffectiveDate": null,
-  "generatedAt": "2026-11-07T11:01:58.847Z",
-  "checkedAt": "2026-11-07T11:01:58.847Z",
+  "generatedAt": "2026-11-08T11:15:29.770Z",
+  "checkedAt": "2026-11-08T11:15:29.770Z",
   "aerodromes": [
     {
       "icao": "ENAL",
@@ -5763,6 +5763,15 @@
       "remarks": ""
     },
     {
+      "id": "ENDU:SAFT",
+      "name": "SAFT",
+      "aerodromeIcao": "ENDU",
+      "lat": 68.96416666666667,
+      "lon": 18.68,
+      "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623256.pdf",
+      "remarks": ""
+    },
+    {
       "id": "ENDU:SARA",
       "name": "SARA",
       "aerodromeIcao": "ENDU",
@@ -5840,15 +5849,6 @@
       "aerodromeIcao": "ENDU",
       "lat": 69.03305555555555,
       "lon": 18.53666666666667,
-      "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623256.pdf",
-      "remarks": ""
-    },
-    {
-      "id": "ENDU:SAFT",
-      "name": "SAFT",
-      "aerodromeIcao": "ENDU",
-      "lat": 68.96416666666667,
-      "lon": 18.68,
       "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623256.pdf",
       "remarks": ""
     },
@@ -5988,6 +5988,24 @@
       "remarks": ""
     },
     {
+      "id": "ENGK:MJÅVATN",
+      "name": "MJÅVATN",
+      "aerodromeIcao": "ENGK",
+      "lat": 58.53722222222222,
+      "lon": 8.496388888888887,
+      "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623258.pdf",
+      "remarks": ""
+    },
+    {
+      "id": "ENGK:NESVERK",
+      "name": "NESVERK",
+      "aerodromeIcao": "ENGK",
+      "lat": 58.62638888888889,
+      "lon": 8.849166666666667,
+      "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623258.pdf",
+      "remarks": ""
+    },
+    {
       "id": "ENGK:RYKENE",
       "name": "RYKENE",
       "aerodromeIcao": "ENGK",
@@ -6002,24 +6020,6 @@
       "aerodromeIcao": "ENGK",
       "lat": 58.49166666666667,
       "lon": 8.747499999999999,
-      "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623258.pdf",
-      "remarks": ""
-    },
-    {
-      "id": "ENGK:NESVERK",
-      "name": "NESVERK",
-      "aerodromeIcao": "ENGK",
-      "lat": 58.62638888888889,
-      "lon": 8.849166666666667,
-      "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623258.pdf",
-      "remarks": ""
-    },
-    {
-      "id": "ENGK:MJÅVATN",
-      "name": "MJÅVATN",
-      "aerodromeIcao": "ENGK",
-      "lat": 58.53722222222222,
-      "lon": 8.496388888888887,
       "sourceUrl": "https://aim-prod.avinor.no/no/AIP/View/Index/155/2026-09-03-AIRAC/graphics/623258.pdf",
       "remarks": ""
     },
