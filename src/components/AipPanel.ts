@@ -9,7 +9,7 @@ export class AipPanel {
   private selectedIcao = '';
   private selectedPoints: string[] = [];
   private expandedAirports = new Set<string>();
-  constructor(private readonly element: HTMLElement, private readonly store: FlightPlanStore, private readonly onCatalogLoaded?: (catalog: AipAerodromeCatalog) => void, private readonly onCatalogError?: () => void) {
+  constructor(private readonly element: HTMLElement, private readonly store: FlightPlanStore, private readonly onCatalogLoaded?: (catalog: AipAerodromeCatalog) => void, private readonly onCatalogError?: () => void, private readonly onAirportAdded?: (waypointId: string) => void) {
     this.element.innerHTML = `<h2>Airports &amp; reporting points</h2><div data-aip-status role="status">Loading Avinor catalog…</div>
       <button type="button" data-aip-reload>Check deployed data</button>
       <label>Search airports or reporting points<input type="search" data-aip-search placeholder="ENDU, Tromsø, point name…" /></label>
@@ -99,6 +99,8 @@ export class AipPanel {
   private addAirport(ad: AipAerodrome): void {
     if (ad.lat === null || ad.lon === null) return;
     this.store.appendAipWaypoints([{ name: ad.icao, lat: ad.lat, lon: ad.lon, aipId: ad.icao, aipEffectiveDate: this.catalog!.effectiveDate, elevationFt: ad.elevationFt }]);
+    const added = this.store.getWaypoints().at(-1);
+    if (added) this.onAirportAdded?.(added.id);
   }
   private appendPoints(ids: string[]): void {
     const points = ids.map(id => this.catalog?.reportingPoints?.find(point => point.id === id));

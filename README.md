@@ -38,9 +38,13 @@ The working plan is autosaved locally. Named plans can be saved, loaded and expo
 
 ### Vertical profile and patterns
 
+Adding an airport opens a prompt for **Land**, **Touch-and-go** or **Patterns**, including when inserting between waypoints or dragging a waypoint onto an airport. The first airport offers **Depart** or **Patterns** before departure. Choose the pattern count and minutes directly in the prompt. Click an existing airport waypoint on the map to change the choice. **Not now** or Escape keeps the waypoint without changing its activity. Saved plans and Undo/Redo preserve choices without reopening the prompt.
+
 At an ordinary waypoint, an increase in outbound PL starts climbing after the waypoint; a decrease is reached before the waypoint. Transitions can span multiple legs. Airport/T&G behavior descends to field elevation and climbs again on departure. Unachievable or overlapping transitions produce diagnostics rather than an invented complete fuel result.
 
-Patterns can only be assigned to identified airport waypoints. **Airport + pattern** adds a count and minutes per pattern. The OFP places a separate pattern row after arrival and before the solid airport separator. That row shows fuel flow, INT fuel, ACC fuel, intermediate time and total time; navigation/wind columns remain blank. Patterns are a time/fuel allowance, not a simulated rectangular flight path. The nominal pattern-height reference is 1000 ft AGL and does not override charted route ceilings.
+Land and touch-and-go choices are saved separately but share the existing field-elevation profile; no ground time is added. Add the next waypoint to model departure after a touch-and-go.
+
+Patterns can only be assigned to identified airport waypoints, using the prompt or **Airport + pattern** in the sidebar. The OFP places a separate pattern row after arrival and before the solid airport separator; departure patterns precede the first leg. That row shows fuel flow, INT fuel, ACC fuel, intermediate time and total time; navigation/wind columns remain blank. Patterns are a time/fuel allowance, not a simulated rectangular flight path. The nominal pattern-height reference is 1000 ft AGL and does not override charted route ceilings.
 
 ## Aircraft and fuel assumptions
 

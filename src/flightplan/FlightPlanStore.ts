@@ -63,6 +63,8 @@ export type WaypointVerticalMode = 'auto' | 'airport' | 'circuits' | 'none';
 
 export interface WaypointVerticalConstraint {
   mode: WaypointVerticalMode;
+  /** Distinguishes airport-stop intent without changing the shared field-elevation profile. */
+  airportActivity?: 'land' | 'touch-and-go';
   elevationFt: number | null;
   icaoCode: string;
   circuitCount: number;
@@ -452,6 +454,7 @@ export class FlightPlanStore {
     };
 
     if (!['auto', 'airport', 'circuits', 'none'].includes(next.mode)) return;
+    if (next.airportActivity !== undefined && next.airportActivity !== 'land' && next.airportActivity !== 'touch-and-go') return;
     if (next.mode === 'circuits' && !this.isAirportWaypoint(waypointId)) return;
     if (next.elevationFt !== null && (!Number.isFinite(next.elevationFt) || next.elevationFt < 0 || next.elevationFt > 20000)) return;
     if (!Number.isFinite(next.circuitCount) || next.circuitCount < 1 || next.circuitCount > 20) return;
@@ -992,8 +995,10 @@ function parseWaypointVerticalConstraint(value: unknown): WaypointVerticalConstr
   if (value.elevationFt !== null && !finiteInRange(value.elevationFt, 0, 20000)) return null;
   if (typeof value.icaoCode !== 'string') return null;
   if (!finiteInRange(value.circuitCount, 1, 20) || !finiteInRange(value.minutesPerCircuit, 1, 30)) return null;
+  if (value.airportActivity !== undefined && value.airportActivity !== 'land' && value.airportActivity !== 'touch-and-go') return null;
   return {
     mode: value.mode as WaypointVerticalMode,
+    ...(value.airportActivity === undefined ? {} : { airportActivity: value.airportActivity }),
     elevationFt: value.elevationFt as number | null,
     icaoCode: normalizeIcao(value.icaoCode),
     circuitCount: value.circuitCount as number,

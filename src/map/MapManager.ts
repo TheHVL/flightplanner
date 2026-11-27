@@ -334,6 +334,10 @@ export class MapManager {
       }).addTo(this.publishedPointLayer);
       marker.getElement()?.setAttribute('aria-label', label);
       marker.on('click', event => { L.DomEvent.stop(event.originalEvent); this.publishedPointSelected(point); });
+      marker.on('keydown', event => {
+        const key = event.originalEvent as KeyboardEvent;
+        if (key.key === 'Enter' || key.key === ' ') { L.DomEvent.stop(key); this.publishedPointSelected(point); }
+      });
     }
   }
 
@@ -470,6 +474,10 @@ export class MapManager {
         }).addTo(this.map);
 
         marker.on('click', event => { L.DomEvent.stop(event.originalEvent); this.waypointSelected(waypoint.id); });
+        marker.on('keydown', event => {
+          const key = event.originalEvent as KeyboardEvent;
+          if (key.key === 'Enter' || key.key === ' ') { L.DomEvent.stop(key); this.waypointSelected(waypoint.id); }
+        });
         marker.on('dragend', () => {
           const position = marker?.getLatLng();
           if (position) {

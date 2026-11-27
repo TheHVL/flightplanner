@@ -13,6 +13,8 @@ import './frequencies.css';
 import './planningWorkflow.css';
 import './routeIssues.css';
 import './readability.css';
+import './airportActivity.css';
+import { AirportActivityPrompt } from './components/AirportActivityPrompt';
 import { publishedMapPoints, type PublishedMapPoint } from './aip/mapPoints';
 import { PlanningWorkflow, planningSidebarMarkup } from './components/PlanningWorkflow';
 import { LEG_SELECTED, openLegEditor } from './components/legEditorEvents';
@@ -189,7 +191,11 @@ warningAck.addEventListener('click', () => {
 window.setTimeout(() => warningAck.focus(), 0);
 
 const store = new FlightPlanStore(2500);
-const moveMapWaypoint = (id: string, lat: number, lon: number, point?: PublishedMapPoint) => store.updateWaypoint(id, { lat, lon }, point);
+const moveMapWaypoint = (id: string, lat: number, lon: number, point?: PublishedMapPoint) => {
+  const previous = store.getWaypoints().find(waypoint => waypoint.id === id);
+  store.updateWaypoint(id, { lat, lon }, point);
+  if (point?.kind === 'airport' && previous?.aipId !== point.aipId) airportActivity.offer(id);
+};
 const frequencyPlanner = new FrequencyPlanner(store);
 const routeShapeController = new RouteShapeController(store);
 const workingRouteStatus = new WorkingRouteStatus(document.querySelector<HTMLElement>('#working-route-status')!, store, routeShapeController);
@@ -208,6 +214,7 @@ if (transferToken) {
   const cleanUrl = new URL(location.href); cleanUrl.searchParams.delete('generatedRoute'); history.replaceState(null, '', cleanUrl);
 }
 const routePanel = new RoutePanel(routeElement, store);
+const airportActivity = new AirportActivityPrompt(store);
 const legEditor = new SequentialLegPanel(document.querySelector<HTMLElement>('#sequential-leg-panel')!, store);
 const embeddedFrequency = new FrequencyPanel(document.querySelector<HTMLElement>('[data-leg-frequency]')!, store, frequencyPlanner, true);
 const visitPanel = new VerticalProfilePanel(document.querySelector<HTMLElement>('[data-waypoint-visit]')!, store, 'waypoint');
@@ -220,7 +227,7 @@ new AipPanel(document.querySelector<HTMLElement>('#aip-panel')!, store, catalog 
   document.querySelector('#aip-map-status')!.textContent = 'Click AIP points to add them. Zoom in for reporting points. Nearby clicks and waypoint drops snap to published coordinates.';
 }, () => {
   document.querySelector('#aip-map-status')!.textContent = 'AIP map points could not be loaded. Check deployed data in Build route; free placement remains available.';
-});
+}, id => airportActivity.offer(id));
 const navigationPanel = new NavigationPanel(navigationElement, store);
 const performancePanel = new PerformancePanel(performanceElement, store, 'fuel');
 const aircraftSettingsPanel = new PerformancePanel(document.querySelector<HTMLElement>('#aircraft-settings-panel')!, store, 'settings');
@@ -228,6 +235,7 @@ const profileSettingsPanel = new VerticalProfilePanel(document.querySelector<HTM
 const weatherPanel = new WeatherPanel(weatherElement, store);
 const verticalProfilePanel = new VerticalProfilePanel(verticalProfileElement, store, 'profile');
 new PlanLibraryPanel(document.querySelector<HTMLElement>('#saved-plans-panel')!, store, routeShapeController, () => {
+  airportActivity.cancel();
   legEditor.onPlanLoaded();
   navigationPanel.render();
   performancePanel.render();
@@ -246,15 +254,18 @@ const mapManager = new MapManager(mapElement, {
       const last = store.getWaypoints().at(-1);
       if (last?.aipId === point.aipId && last.lat === point.lat && last.lon === point.lon) return;
       store.appendAipWaypoints([point]);
+      if (point.kind === 'airport') airportActivity.offer(store.getWaypoints().at(-1)!.id);
     } else store.addWaypoint({ lat, lon });
   },
   onWaypointMoved: moveMapWaypoint,
   onRouteLegShape: (legIndex, lat, lon) => routeShapeController.setLegShape(legIndex, { lat, lon }),
   onWaypointInserted: (fromId, toId, lat, lon, point) => {
-    routeShapeController.insertWaypointIntoLeg(fromId, toId, { lat, lon }, point);
+    const added = routeShapeController.insertWaypointIntoLeg(fromId, toId, { lat, lon }, point);
+    if (added && point?.kind === 'airport') airportActivity.offer(added.id);
   },
   onLegSelected: index => { const leg = store.getLegs()[index]; if (leg) openLegEditor({ fromId: leg.from.id, toId: leg.to.id }); },
   onWaypointSelected: id => {
+    if (store.isAirportWaypoint(id)) { airportActivity.offer(id); return; }
     const leg = store.getLegs().find(l => l.to.id === id) ?? store.getLegs().find(l => l.from.id === id);
     if (leg) openLegEditor({ fromId: leg.from.id, toId: leg.to.id, focus: 'waypoint', waypointId: id });
   },

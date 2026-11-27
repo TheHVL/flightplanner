@@ -1,6 +1,6 @@
 # Flightplanner — Codex project handoff
 
-Updated: **2026-11-05**. This is a repository handoff, not an instruction to implement every proposed item. Read the root [AGENTS.md](../AGENTS.md), then inspect current code, git status and newer commits before starting work. Later explicit user instructions take precedence over this historical checkpoint.
+Updated: **2026-11-27**. This is a repository handoff, not an instruction to implement every proposed item. Read the root [AGENTS.md](../AGENTS.md), then inspect current code, git status and newer commits before starting work. Later explicit user instructions take precedence over this historical checkpoint.
 
 ## 1. Project and checkpoint
 
@@ -14,7 +14,7 @@ Updated: **2026-11-05**. This is a repository handoff, not an instruction to imp
 | Storage | Browser-local working route/settings and named plans, JSON export/import; no server-side plan account |
 | Feature checkpoints | PR [#59](https://github.com/TheHVL/flightplanner/pull/59), merge `1c6d16c5e527b561992dbcd891d4a87e22000f4c`; waypoint editing/readability `77f41e0`; sidebar/map-click fixes `a396403`; sidebar-to-page scrolling follow-up described below |
 | Original handoff snapshot | `f4307bd` on `main`, after two automated AIP refreshes following PR #59; subsequent docs/data commits do not change application behavior |
-| User-requested releases | Distance/editing/readability `77f41e0`, sidebar/map-click fixes `a396403`, scrolling `43b398e`, generator diagnosis/sea correction `ae4a057` and shelving `be46380` were published. November OFP fixes are described below; inspect Git/Actions for current publication status. This work started from data checkpoint `bd49bba` |
+| User-requested releases | Distance/editing/readability `77f41e0`, sidebar/map-click fixes `a396403`, scrolling `43b398e`, generator diagnosis/sea correction `ae4a057` and shelving `be46380` were published. November OFP fixes `d089c0f` and overlap follow-up `874e70a` passed CI/Pages. Airport activity work starts from data checkpoint `f62f156`; inspect Git/Actions for current publication status |
 | Generator backup | Annotated tag `backup/route-generator-2026-10-10` preserves full pre-shelving project at `bf365e3b5ee87e7fb852d7ac57c7a2b2b7469c57`; original entrypoint in `archive/route-generator/`, implementation/tests retained |
 
 Codex can work on this existing repository and existing Pages hosting. No repository ownership migration or AI feature in the planner is necessary. Root `AGENTS.md` is the concise entry point; this file holds detailed context so permanent instructions stay manageable. The user requested this handoff to carry progress, plans and preferences into future development sessions.
@@ -31,6 +31,7 @@ Codex can work on this existing repository and existing Pages hosting. No reposi
 - Keep waypoint-list/sidebar scroll position during editing, including deletion. The list's bottom resize handle supports mouse/touch and keyboard height adjustment, with double-click reset. Remember the height as an optional UI preference, separate from plan data and history.
 - With the pointer over the sidebar, vertical scrolling should continue to the page/OFP once the nested list and sidebar reach their edge. Keep native scrolling while either still has room to scroll.
 - Map-click/marker-drag snapping to airports and reporting points is supported. Do not restore floating snap-point name tags; the user finds them cluttered and reads names on the ICAO map.
+- **Requested 2026-11-27:** adding an airport offers Land / Touch-and-go / Patterns directly, including map placement, insertion, airport-list additions and snapping an existing waypoint onto a different airport. The first airport offers Depart / Patterns before departure. Pattern count and minutes are entered in the prompt. Existing airport markers reopen it with click, Enter or Space; Not now / Escape keeps existing settings. Restores and Undo/Redo must not automatically reopen it.
 - OFP has one selected frequency for each leg. Suggested services and channel choices belong in the sidebar. Make uncertain/overlapping coverage explicit and leave selection to the pilot.
 - Departure time, ETO, ATO and actual fuel are filled in flight. Do not make them required OFP planning inputs. Intended departure **UTC date/time for weather retrieval** is a separate necessary input.
 - Use “pattern”, not “circuits”, in the UI. Patterns are airport-only. Render a separate OFP row after arrival and before the next sector's thick divider. Count × minutes sets intermediate time; include fuel flow, INT fuel, ACC fuel and accumulated time, without wind/distance/TT/VAR/MT/MH/GS fields. Keep the internal `circuits` representation compatible with existing saved plans.
@@ -93,6 +94,8 @@ Climb FF and the descent rate/flow above are now settled; do not ask for them ag
 
 Grouped/ICAO-sorted AIP menus, snapping without floating names, resizable sidebar, sequential leg editing, explicit school preset, vertical modeling, patterns, single selected OFP frequencies and save/load/export/import exist. Legacy generated-transfer import remains compatible, including recovery of the preceding manual plan, but the generator UI no longer stages new transfers.
 
+Airport activity is offered in a native modal beside the map workflow, with keyboard focus management and a narrow-screen layout. Explicit placement actions trigger it; ordinary store updates, reporting points and restore do not. It dismisses stale offers if the airport disappears, moves or a plan is loaded. An optional compatible `airportActivity` field saves Land versus Touch-and-go intent; both retain the existing field-elevation descent/outbound-climb model without ground time. A final touch-and-go needs a following waypoint to model departure. Patterns retain internal `circuits` values, existing OFP time/fuel rows and departure-pattern support.
+
 Undo/Redo buttons and plan shortcuts exist. Ctrl/Cmd+Z outside editable fields undoes a plan action; Ctrl/Cmd+Shift+Z and Ctrl+Y redo. Editable controls keep native text undo and focus. History includes route bends and the relevant MSA/forecast state; a new action clears redo.
 
 Autosave status exposes failures. Corrupt working-route data are retained for download and backed up before replacement; failed backup pauses autosave. Optional preferences tolerate unavailable storage. Fuel edits stay available in memory and exports on storage failure. Named-plan loading requires its persistence step to succeed before replacing the active route. Preserve recovery and existing saved-plan formats.
@@ -138,6 +141,13 @@ User-facing phase labels and future-QNH promises were removed; CSS renamed to pe
 CI now includes source lint, unit tests, TypeScript/build, Chromium smoke tests and axe checks. Production builds inject a CSP meta tag with explicit current provider allowances, Leaflet inline styles and GeoTIFF worker/WASM allowances. A meta CSP cannot enforce `frame-ancestors`; static hosting remains relevant when changing security policy.
 
 ## 5. Verification and open findings
+
+### Airport activity prompt, 2026-11-27
+
+- Added the requested direct airport activity prompt and map-marker reopening, including pattern count/duration, distinct return visits, stale-prompt dismissal and native Escape. Existing sidebar activity buttons show the selected activity. Placement and choice remain separate undoable actions; legacy saved files do not require migration.
+- Regression coverage verifies field elevation, persistence/parser validation, Undo/Redo without reopening, departure patterns, pattern validation, airport-list callbacks, map insertion/snapping, saved-plan loading and ordinary reporting points. Production browser coverage includes map clicks, airport-list placement, real marker dragging, narrow-screen bounds, keyboard reopen/Escape/focus return, pattern OFP time/fuel, reload and axe checks while the modal is open.
+- Fresh local Node **22.23.4** verification: lint, **294 unit tests / 57 files**, TypeScript/Vite build and **19/19 pinned-Chromium browser checks**, no skips/retries. Browser tests used the production preview and two workers. Publication status must be checked in Git/Actions; these checks do not establish aviation source completeness or route suitability.
+- Land and touch-and-go remain labels for shared airport-profile behavior; no taxi/ground allowance or simulated pattern geometry was introduced. Existing TOC/TOD conflicts still withhold affected consumption. The shelved generator and its backup are unchanged.
 
 ### Profile-overlap fuel follow-up, 2026-11-05
 
@@ -217,6 +227,7 @@ Other remaining limitations: partial terminal chart/airport/runway geometry; coa
 | On hold | Expand source-reviewed generator terminal geometry and northern coverage | Requires a new user decision; chart-backed directional geometry/joins/limits with checksum provenance |
 | On hold | Improve dataset-driven automatic route choice | Requires a new user decision and meaningful pilot-reviewed route-quality benchmarks; no reduced terrain reference to force acceptance |
 | Completed 2026-11-05 | Correct OFP display sums/manual-wind activation and align confirmed school fuel/rate settings | Reported headings/time cases, fuel independent of onboard, source-linked descent, saved-plan compatibility and browser regressions; see verification above |
+| Completed 2026-11-27 | Offer airport activities during route placement | Direct Land / Touch-and-go / Patterns prompt, departure patterns, saved choices and map-marker reopening; verification above |
 | Proposed 1 | Independently verify a representative manual OFP against school references | User-selected route/levels and independent navigation/performance worksheet; original POH PDFs required for table-transcription comparison. Preserve explicit presets and school/POH distinction |
 | Proposed 2 | Test first-time-user manual workflow and polish targeted menus/warnings | Observe a short planning task; fix concrete discoverability/overflow/keyboard issues without adding dense panels |
 | Proposed 3 | Incrementally decouple state, effects and DOM rendering | Small modules and behavioral regressions; evaluate a lightweight reactive approach only where it fixes demonstrated desynchronization; avoid a wholesale rewrite |
@@ -235,6 +246,7 @@ These priorities consolidate the discussion; they are not the missing numbered p
 | Plan/history/shape | `src/flightplan/FlightPlanStore.ts`, `RouteShapeController.ts`, `workingRoutePersistence.ts`, `savedPlans.ts`; `src/components/PlanningHistory.ts` |
 | Sidebar/OFP/persistence UX | `src/components/PlanningWorkflow.ts`, `RoutePanel.ts`, `WaypointListResize.ts`, `SequentialLegPanel.ts`, `OFPTable.ts`, `RouteReviewPanel.ts`, `WorkingRouteStatus.ts`, `WorkspaceLayout.ts`, `legEditorEvents.ts`; `src/utils/panelMarkup.ts`, `src/readability.css` |
 | Map route editing/colors | `src/map/MapManager.ts`, `routeSectors.ts`; `tests/routeEditing.test.ts`, `e2e/route-editing.spec.ts` |
+| Airport activity prompt | `src/components/AirportActivityPrompt.ts`, `src/airportActivity.css`, explicit placement callbacks in `src/main.ts` / `AipPanel.ts`; `tests/airportActivityPrompt.test.ts`, `e2e/airport-activity.spec.ts` |
 | Performance/fuel/rounding | `src/performance/schoolPreset.ts`, `cruisePerformance.ts`, `climbPerformance.ts`, `airspeed.ts`; `src/fuel/fuelPlanning.ts`; `src/presentation/planningRounding.ts` |
 | Navigation/profile/MSA | `src/navigation/geodesy.ts`, `verticalProfile.ts`, `verticalConflicts.ts`, `msaCorridor.ts`, `wind.ts`, `magneticVariation.ts` |
 | Weather | `src/weather/openMeteo.ts`, `forecastFreshness.ts`; `src/components/WeatherPanel.ts` |

@@ -46,7 +46,8 @@ describe('AIP browser',()=>{
     vi.stubGlobal('fetch',vi.fn(async(input:RequestInfo | URL)=>({ok:true,json:async()=>String(input).includes('aip-status.json')?{state:'success',attemptedAt:new Date().toISOString(),effectiveDate:catalog.effectiveDate}:catalog})));
     const store=new FlightPlanStore();
     const element=document.createElement('section');document.body.replaceChildren(element);
-    new AipPanel(element,store);
+    const onAirportAdded = vi.fn();
+    new AipPanel(element,store,undefined,undefined,onAirportAdded);
     await vi.waitFor(()=>expect(element.querySelector('[data-aip-status]')!.textContent).toContain('1 aerodromes'));
     const search=element.querySelector<HTMLInputElement>('[data-aip-search]')!;
     search.value='endu';search.dispatchEvent(new Event('input'));
@@ -54,11 +55,13 @@ describe('AIP browser',()=>{
     expect(element.querySelector('[data-aip-details]')!.textContent).toContain('TWR 118.105');
     expect(element.querySelector('[data-aip-details]')!.textContent).toContain('RWY 10');
     element.querySelector<HTMLButtonElement>('[data-aip-add-ad="ENDU"]')!.click();
+    expect(onAirportAdded).toHaveBeenCalledWith(store.getWaypoints()[0].id);
     expect(element.querySelector('[data-aip-route]')).toBeNull();
     element.querySelector<HTMLButtonElement>('[data-aip-choose-point="ENDU:FINNSNES"]')!.click();
     element.querySelector<HTMLButtonElement>('[data-aip-choose-point="ENDU:SØRREISA"]')!.click();
     element.querySelector<HTMLButtonElement>('[data-aip-append-sequence]')!.click();
     expect(store.getWaypoints().map(point=>point.name)).toEqual(['ENDU','FINNSNES','SØRREISA']);
+    expect(onAirportAdded).toHaveBeenCalledTimes(1);
     expect(store.getVerticalProfileSettings().departureElevationFt).toBe(254);
     store.appendAipWaypoints([{name:'Old point',lat:69,lon:18,aipId:'OLD',aipEffectiveDate:'2026-06-11'}]);
     expect(element.querySelector('[data-aip-plan-status]')!.textContent).toContain('older AIP');

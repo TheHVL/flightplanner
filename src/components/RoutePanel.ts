@@ -89,6 +89,10 @@ export class RoutePanel {
     count: number,
   ): string {
     const role = index === 0 ? 'DEP' : index === count - 1 ? 'DEST' : `WP ${index}`;
+    const airport = this.store.isAirportWaypoint(id), activity = this.store.getWaypointVerticalConstraint(id);
+    const visitLabel = !airport ? 'Waypoint settings' : activity.mode === 'circuits' ? `Patterns × ${activity.circuitCount}`
+      : index === 0 ? 'Departure' : activity.mode === 'none' && index < count - 1 ? 'Overfly airport' : activity.airportActivity === 'land' ? 'Land'
+        : activity.airportActivity === 'touch-and-go' ? 'Touch-and-go' : 'Airport / pattern';
     return `
       <article class="waypoint-card" data-id="${this.escape(id)}">
         <button type="button" class="waypoint-index waypoint-drag-handle" data-drag-waypoint title="Drag to reorder; use ↑ / ↓ buttons with the keyboard" aria-label="Drag waypoint ${index + 1}, ${this.escape(name)}, to reorder">${index + 1}<span aria-hidden="true">⠿</span></button>
@@ -98,7 +102,8 @@ export class RoutePanel {
             <input class="waypoint-name" data-field="name" value="${this.escape(name)}" aria-label="Waypoint name" />
           </div>
           <div class="coords">${lat.toFixed(5)}° / ${lon.toFixed(5)}°</div>
-          <div class="waypoint-planning-actions">${index < count - 1 ? `<button type="button" data-action="prepare">Prepare next leg</button>` : ''}<button type="button" data-action="visit" ${count < 2 ? 'disabled title="Add a destination first"' : ''}>${this.store.isAirportWaypoint(id) ? 'Airport / pattern' : 'Waypoint settings'}</button></div>
+          ${index === count - 1 && index > 0 && activity.mode === 'airport' && activity.airportActivity === 'touch-and-go' ? '<p class="hint">Add the next waypoint to plan departure after this touch-and-go.</p>' : ''}
+          <div class="waypoint-planning-actions">${index < count - 1 ? `<button type="button" data-action="prepare">Prepare next leg</button>` : ''}<button type="button" data-action="visit" ${count < 2 ? 'disabled title="Add a destination first"' : ''}>${visitLabel}</button></div>
         </div>
         <div class="waypoint-actions">
           <button class="icon-button" data-action="up" title="Move up" aria-label="Move ${this.escape(name)} up" ${index === 0 ? 'disabled' : ''}>↑</button>

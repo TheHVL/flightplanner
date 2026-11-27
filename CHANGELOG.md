@@ -2,6 +2,12 @@
 
 This file records significant Flightplanner updates, formulas, source assumptions, limitations and implementation decisions. New updates are added at the top.
 
+## 2026-11-27, airport activity prompt on placement
+
+- Adding, inserting or snapping a waypoint onto an airport now asks for Land, Touch-and-go or Patterns without opening the sidebar. The first airport offers Depart or Patterns before departure; pattern count and duration are entered in the prompt.
+- Click an existing airport waypoint on the map to reopen the prompt. Not now or Escape keeps the waypoint and its existing settings. Saved plans and Undo/Redo retain choices without automatically reopening it; reporting points and free waypoints do not trigger it.
+- Airport cards show the selected activity. Land and touch-and-go share the existing field-elevation profile with no added ground time; a following waypoint is needed to model continued departure. Pattern rows retain existing time/fuel accounting and saved-data compatibility.
+
 ## 2026-11-05, localize fuel/time gaps from profile overlaps
 
 - Following the user's diagnosis, corrected a route-wide fuel lock: one TOC/TOD overlap no longer blanks otherwise independent flight-leg INT values. Every leg touched by either conflicting transition remains incomplete, including portions outside the actual overlap slice.
