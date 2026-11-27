@@ -1,5 +1,6 @@
 {
-  "state": "success",
-  "attemptedAt": "2026-11-25T14:17:39.968Z",
-  "effectiveDate": "2026-09-03"
+  "state": "failed",
+  "attemptedAt": "2026-11-27T21:39:15.545Z",
+  "effectiveDate": "2026-11-26",
+  "error": "Previously covered restriction missing: END361. Review its published removal."
 }
