@@ -7,6 +7,7 @@ This file records significant Flightplanner updates, formulas, source assumption
 - Adding, inserting or snapping a waypoint onto an airport now asks for Land, Touch-and-go or Patterns without opening the sidebar. The first airport offers Depart or Patterns before departure; pattern count and duration are entered in the prompt.
 - Click an existing airport waypoint on the map to reopen the prompt. Not now or Escape keeps the waypoint and its existing settings. Saved plans and Undo/Redo retain choices without automatically reopening it; reporting points and free waypoints do not trigger it.
 - Airport cards show the selected activity. Land and touch-and-go share the existing field-elevation profile with no added ground time; a following waypoint is needed to model continued departure. Pattern rows retain existing time/fuel accounting and saved-data compatibility.
+- Made freshness-test scenario dates independent of deployment AIP refreshes, so newer editions do not invalidate the test's historical clock. Application freshness checks remain unchanged.
 
 ## 2026-11-05, localize fuel/time gaps from profile overlaps
 

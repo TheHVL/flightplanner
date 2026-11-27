@@ -13,11 +13,13 @@ describe('AIP freshness and integration', () => {
   });
   it('reports failures, future editions and expired verification without declaring an old snapshot current', () => {
     const now = new Date('2026-10-05T12:00:00Z');
-    expect(aipFreshness({...c,checkedAt:'2026-10-05T11:00:00Z'},null,now).warning).toBe(false);
-    expect(aipFreshness(c,{state:'failed',attemptedAt:'2026-10-05T11:00:00Z',effectiveDate:null},now).warning).toBe(true);
-    expect(aipFreshness({...c,effectiveDate:'2026-10-29'},null,now).warning).toBe(true);
-    expect(aipFreshness({...c,checkedAt:'2026-10-01T11:00:00Z'},null,now).warning).toBe(true);
-    expect(aipFreshness({...c,nextEffectiveDate:'2026-10-01'},null,now).warning).toBe(true);
+    // Scenario dates must stay independent of the deployment's live AIP refresh.
+    const checked = {...c,effectiveDate:'2026-09-03',nextEffectiveDate:'2026-10-29',checkedAt:'2026-10-05T11:00:00Z'};
+    expect(aipFreshness(checked,null,now).warning).toBe(false);
+    expect(aipFreshness(checked,{state:'failed',attemptedAt:'2026-10-05T11:00:00Z',effectiveDate:null},now).warning).toBe(true);
+    expect(aipFreshness({...checked,effectiveDate:'2026-10-29'},null,now).warning).toBe(true);
+    expect(aipFreshness({...checked,checkedAt:'2026-10-01T11:00:00Z'},null,now).warning).toBe(true);
+    expect(aipFreshness({...checked,nextEffectiveDate:'2026-10-01'},null,now).warning).toBe(true);
   });
   it('adds a published sequence as one undoable action and persists provenance', () => {
     const store = new FlightPlanStore();
